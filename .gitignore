@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.venv/
+.env
+*.egg
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+workspace/
+sbom.cdx.json
+!docs/demo-assets/sbom.cdx.json

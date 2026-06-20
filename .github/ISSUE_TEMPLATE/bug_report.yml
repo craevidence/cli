@@ -1,0 +1,36 @@
+name: Bug report
+description: Report a problem with the CRA Evidence CLI
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For security vulnerabilities, do not open an issue. Follow SECURITY.md instead.
+  - type: input
+    id: version
+    attributes:
+      label: CLI version
+      description: Output of `craevidence --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands you ran. Mask any API key before pasting.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, and install method (pip, pipx, brew, or docker).
+    validations:
+      required: false

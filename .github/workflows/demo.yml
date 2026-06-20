@@ -1,0 +1,84 @@
+name: Demo GIF
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+# Regenerating the recording opens a pull request with the refreshed GIF, so
+# the change can be reviewed and the workflow does not need to push to a
+# protected default branch directly.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Install Grype and prime its database
+        env:
+          GRYPE_VERSION: "0.114.0"
+          GRYPE_SHA256: edda0968d8827daab01d32b3cd7de192ae0915005e7bbfcfef9e68e79bc43343
+        run: |
+          TARBALL="grype_${GRYPE_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/${TARBALL}" -o "${TARBALL}"
+          echo "${GRYPE_SHA256}  ${TARBALL}" | sha256sum -c -
+          tar -xzf "${TARBALL}" grype
+          sudo install -m 0755 grype /usr/local/bin/grype
+          grype version
+          grype db update
+
+      - name: Install recording tools (ttyd, ffmpeg, vhs)
+        env:
+          VHS_VERSION: "0.11.0"
+          VHS_SHA256: 99cb634587eaae0473c1ea377db80c3a048c27f99fe0a7febb1a1e8cb7ee5009
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ttyd ffmpeg
+          TARBALL="vhs_${VHS_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL "https://github.com/charmbracelet/vhs/releases/download/v${VHS_VERSION}/${TARBALL}" -o "${TARBALL}"
+          echo "${VHS_SHA256}  ${TARBALL}" | sha256sum -c -
+          tar -xzf "${TARBALL}"
+          sudo install -m 0755 "vhs_${VHS_VERSION}_Linux_x86_64/vhs" /usr/local/bin/vhs
+          vhs --version
+
+      - name: Record the demo
+        run: |
+          export XDG_RUNTIME_DIR="$(mktemp -d)"
+          vhs docs/demo.tape
+
+      - name: Open a PR with the regenerated GIF
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -z "$(git status --porcelain docs/demo.gif)" ]; then
+            echo "docs/demo.gif unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "CRA Evidence Team"
+          git config user.email "team@craevidence.com"
+          BRANCH="chore/demo-gif-${{ github.run_id }}"
+          git checkout -b "$BRANCH"
+          git add docs/demo.gif
+          git commit -m "chore: regenerate demo gif [skip ci]"
+          git push --set-upstream origin "$BRANCH"
+          gh pr create \
+            --base "${{ github.event.repository.default_branch }}" \
+            --head "$BRANCH" \
+            --title "chore: regenerate demo gif" \
+            --body "Automated regeneration of docs/demo.gif from docs/demo.tape."

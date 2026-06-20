@@ -1,0 +1,347 @@
+# GitLab CI Component for CRA Evidence
+# Upload release evidence to CRA Evidence from GitLab CI.
+#
+# Include in your .gitlab-ci.yml:
+#
+#   include:
+#     - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.4.4/gitlab-ci-component.yml'
+#       inputs:
+#         product: my-product
+#         version: $CI_COMMIT_TAG
+#         file: sbom.json
+#         target-markets: DE,FR,ES
+#         sign: true
+#
+# Required project variable:
+#   CRA_EVIDENCE_API_KEY: CRA Evidence API key, masked and protected where appropriate.
+
+spec:
+  inputs:
+    # === Required ===
+    product:
+      description: 'Product name or UUID'
+      type: string
+    version:
+      description: 'Version number (e.g., 1.0.0)'
+      type: string
+    file:
+      description: 'Path to artifact file (SBOM, HBOM, VEX, or document)'
+      type: string
+
+    # === API Configuration ===
+    api-url:
+      description: 'CRA Evidence API URL'
+      type: string
+      default: 'https://api.craevidence.com'
+    cli-package:
+      description: 'pip package spec for the CRA Evidence CLI'
+      type: string
+      default: 'craevidence>=3.4.0,<4'
+
+    # === Artifact Options ===
+    artifact-type:
+      description: 'Type of artifact: sbom, hbom, vex, or document'
+      type: string
+      default: 'sbom'
+    document-type:
+      description: 'Required when artifact-type=document. Use a supported document type such as user_manual, eu_declaration_of_conformity, risk_assessment, conformity_certificate, or technical_documentation.'
+      type: string
+      default: ''
+    tags:
+      description: 'Comma-separated tags for the artifact'
+      type: string
+      default: ''
+
+    # === Auto-Creation Options ===
+    create-product:
+      description: 'Create product if it does not exist. Applies to SBOM, HBOM, and document uploads.'
+      type: boolean
+      default: true
+    create-version:
+      description: 'Create version if it does not exist'
+      type: boolean
+      default: true
+    target-markets:
+      description: 'Comma-separated EU country codes required when create-product auto-creates a new product (e.g., DE,FR,ES)'
+      type: string
+      default: ''
+
+    # === Version Metadata ===
+    environment:
+      description: 'Deployment environment: production, staging, development, testing'
+      type: string
+      default: ''
+    release-notes:
+      description: 'Release notes for this version'
+      type: string
+      default: ''
+    release-date:
+      description: 'Release date in ISO format (YYYY-MM-DD)'
+      type: string
+      default: ''
+    external-url:
+      description: 'External URL (e.g., GitLab release URL)'
+      type: string
+      default: ''
+    release-state:
+      description: 'Release state: draft, pending_review, approved, released, deprecated, end_of_life'
+      type: string
+      default: ''
+
+    # === Scanning Options ===
+    scan:
+      description: 'Trigger vulnerability scan after SBOM upload'
+      type: boolean
+      default: false
+    fail-on:
+      description: 'Fail if vulnerabilities at this severity or higher are found: critical, high, medium, low, or none'
+      type: string
+      default: 'none'
+
+    # === SBOM Signature Options ===
+    sign:
+      description: 'For SBOMs, create a Sigstore bundle with GitLab OIDC before upload, then verify the stored SBOM bytes'
+      type: boolean
+      default: false
+    signature-on:
+      description: 'For SBOMs, verify an existing <SBOM>.sigstore.json bundle after upload'
+      type: boolean
+      default: false
+    signature-bundle:
+      description: 'For SBOMs, path to an existing Sigstore/Cosign bundle to verify after upload'
+      type: string
+      default: ''
+    signature-identity:
+      description: 'Expected signer identity from the Sigstore certificate. Required with fail-untrusted.'
+      type: string
+      default: ''
+    signature-issuer:
+      description: 'Expected OIDC issuer from the Sigstore certificate. Required with fail-untrusted.'
+      type: string
+      default: ''
+    fail-untrusted:
+      description: 'For SBOMs, fail unless signature verification is trusted against the expected identity and issuer'
+      type: boolean
+      default: false
+
+    # === Job Configuration ===
+    stage:
+      description: 'GitLab CI stage to run in'
+      type: string
+      default: 'deploy'
+
+---
+# Reusable job template for CRA Evidence upload.
+# Use with: extends: .cra-evidence-upload
+#
+# Required variables:
+#   CRA_EVIDENCE_API_KEY: API key (set as CI/CD variable, masked)
+#   CRA_PRODUCT: Product name or slug
+#   CRA_VERSION: Version number
+#   CRA_FILE: Path to artifact file
+#
+# Optional variables mirror the component inputs below.
+.cra-evidence-upload:
+  image: python:3.12-slim
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
+  variables:
+    CRA_BASE_URL: 'https://api.craevidence.com'
+    CRA_CLI_PACKAGE: 'craevidence>=3.4.0,<4'
+    CRA_ARTIFACT_TYPE: 'sbom'
+    CRA_CREATE_PRODUCT: 'true'
+    CRA_CREATE_VERSION: 'true'
+    CRA_TARGET_MARKETS: ''
+    CRA_SCAN: 'false'
+    CRA_FAIL_ON: 'none'
+    CRA_SIGN: 'false'
+    CRA_SIGNATURE_ON: 'false'
+    CRA_SIGNATURE_BUNDLE: ''
+    CRA_SIGNATURE_IDENTITY: ''
+    CRA_SIGNATURE_ISSUER: ''
+    CRA_FAIL_UNTRUSTED: 'false'
+  script:
+    - |
+      set -eu
+
+      : "${CRA_PRODUCT:?CRA_PRODUCT is required}"
+      : "${CRA_VERSION:?CRA_VERSION is required}"
+      : "${CRA_FILE:?CRA_FILE is required}"
+
+      API_KEY="${CRA_EVIDENCE_API_KEY:-}"
+      if [ -z "${API_KEY}" ]; then
+        echo "ERROR: CRA_EVIDENCE_API_KEY is required"
+        exit 1
+      fi
+
+      python -m pip install --upgrade pip
+      python -m pip install "${CRA_CLI_PACKAGE}"
+
+      export CRA_EVIDENCE_API_KEY="${API_KEY}"
+      export CRA_EVIDENCE_URL="${CRA_BASE_URL}"
+      export CRA_EVIDENCE_SIGNATURE_IDENTITY="${CRA_SIGNATURE_IDENTITY:-}"
+      export CRA_EVIDENCE_SIGNATURE_ISSUER="${CRA_SIGNATURE_ISSUER:-}"
+
+      EXTERNAL_URL="${CRA_EXTERNAL_URL:-}"
+      if [ -z "${EXTERNAL_URL}" ] && [ -n "${CI_PROJECT_URL:-}" ]; then
+        EXTERNAL_URL="${CI_PROJECT_URL}/-/releases/${CRA_VERSION}"
+      fi
+
+      SIGNING_REQUESTED=false
+      if [ "${CRA_SIGN}" = "true" ] || [ "${CRA_SIGNATURE_ON}" = "true" ] || [ -n "${CRA_SIGNATURE_BUNDLE}" ] || [ "${CRA_FAIL_UNTRUSTED}" = "true" ]; then
+        SIGNING_REQUESTED=true
+      fi
+      if [ "${CRA_ARTIFACT_TYPE}" != "sbom" ] && [ "${SIGNING_REQUESTED}" = "true" ]; then
+        echo "ERROR: SBOM signature options are only valid when CRA_ARTIFACT_TYPE=sbom"
+        exit 1
+      fi
+      if [ "${CRA_CREATE_PRODUCT}" = "true" ] && [ -z "${CRA_TARGET_MARKETS:-}" ]; then
+        echo "NOTICE: CRA_CREATE_PRODUCT=true without CRA_TARGET_MARKETS is only safe when the product already exists. New products require target markets such as DE,FR,ES."
+      fi
+
+      case "${CRA_ARTIFACT_TYPE}" in
+        sbom)
+          set -- --output json upload-sbom --product "${CRA_PRODUCT}" --version "${CRA_VERSION}" --file "${CRA_FILE}"
+          if [ "${CRA_CREATE_PRODUCT}" = "true" ]; then set -- "$@" --create-product; else set -- "$@" --no-create-product; fi
+          if [ "${CRA_CREATE_VERSION}" = "true" ]; then set -- "$@" --create-version; else set -- "$@" --no-create-version; fi
+          [ -n "${CRA_TARGET_MARKETS:-}" ] && set -- "$@" --target-markets "${CRA_TARGET_MARKETS}"
+          if [ "${CRA_SCAN}" = "true" ]; then
+            set -- "$@" --scan
+            if [ "${CRA_FAIL_ON}" != "none" ]; then set -- "$@" --fail-on "${CRA_FAIL_ON}"; fi
+          fi
+          if [ "${CRA_SIGN}" = "true" ]; then set -- "$@" --sign; fi
+          if [ "${CRA_SIGNATURE_ON}" = "true" ]; then set -- "$@" --signature-on; fi
+          if [ -n "${CRA_SIGNATURE_BUNDLE}" ]; then set -- "$@" --signature-bundle "${CRA_SIGNATURE_BUNDLE}"; fi
+          if [ -n "${CRA_SIGNATURE_IDENTITY}" ]; then set -- "$@" --signature-identity "${CRA_SIGNATURE_IDENTITY}"; fi
+          if [ -n "${CRA_SIGNATURE_ISSUER}" ]; then set -- "$@" --signature-issuer "${CRA_SIGNATURE_ISSUER}"; fi
+          if [ "${CRA_FAIL_UNTRUSTED}" = "true" ]; then set -- "$@" --fail-untrusted; fi
+          [ -n "${CRA_RELEASE_NOTES:-}" ] && set -- "$@" --release-notes "${CRA_RELEASE_NOTES}"
+          [ -n "${CRA_RELEASE_DATE:-}" ] && set -- "$@" --release-date "${CRA_RELEASE_DATE}"
+          [ -n "${EXTERNAL_URL}" ] && set -- "$@" --external-url "${EXTERNAL_URL}"
+          [ -n "${CRA_RELEASE_STATE:-}" ] && set -- "$@" --release-state "${CRA_RELEASE_STATE}"
+          ;;
+        hbom)
+          set -- --output json upload-hbom --product "${CRA_PRODUCT}" --version "${CRA_VERSION}" --file "${CRA_FILE}"
+          if [ "${CRA_CREATE_PRODUCT}" = "true" ]; then set -- "$@" --create-product; else set -- "$@" --no-create-product; fi
+          if [ "${CRA_CREATE_VERSION}" = "true" ]; then set -- "$@" --create-version; else set -- "$@" --no-create-version; fi
+          [ -n "${CRA_TARGET_MARKETS:-}" ] && set -- "$@" --target-markets "${CRA_TARGET_MARKETS}"
+          [ -n "${CRA_RELEASE_NOTES:-}" ] && set -- "$@" --release-notes "${CRA_RELEASE_NOTES}"
+          [ -n "${CRA_RELEASE_DATE:-}" ] && set -- "$@" --release-date "${CRA_RELEASE_DATE}"
+          [ -n "${EXTERNAL_URL}" ] && set -- "$@" --external-url "${EXTERNAL_URL}"
+          [ -n "${CRA_RELEASE_STATE:-}" ] && set -- "$@" --release-state "${CRA_RELEASE_STATE}"
+          ;;
+        vex)
+          set -- --output json upload-vex --product "${CRA_PRODUCT}" --version "${CRA_VERSION}" --file "${CRA_FILE}"
+          ;;
+        document)
+          if [ -z "${CRA_DOCUMENT_TYPE:-}" ]; then
+            echo "ERROR: CRA_DOCUMENT_TYPE is required when CRA_ARTIFACT_TYPE=document"
+            exit 1
+          fi
+          set -- --output json upload-document --product "${CRA_PRODUCT}" --version "${CRA_VERSION}" --file "${CRA_FILE}" --type "${CRA_DOCUMENT_TYPE}"
+          if [ "${CRA_CREATE_PRODUCT}" = "true" ]; then set -- "$@" --create-product; else set -- "$@" --no-create-product; fi
+          if [ "${CRA_CREATE_VERSION}" = "true" ]; then set -- "$@" --create-version; else set -- "$@" --no-create-version; fi
+          [ -n "${CRA_TARGET_MARKETS:-}" ] && set -- "$@" --target-markets "${CRA_TARGET_MARKETS}"
+          [ -n "${CRA_RELEASE_NOTES:-}" ] && set -- "$@" --release-notes "${CRA_RELEASE_NOTES}"
+          [ -n "${CRA_RELEASE_DATE:-}" ] && set -- "$@" --release-date "${CRA_RELEASE_DATE}"
+          [ -n "${EXTERNAL_URL}" ] && set -- "$@" --external-url "${EXTERNAL_URL}"
+          [ -n "${CRA_RELEASE_STATE:-}" ] && set -- "$@" --release-state "${CRA_RELEASE_STATE}"
+          ;;
+        *)
+          echo "ERROR: unsupported CRA_ARTIFACT_TYPE '${CRA_ARTIFACT_TYPE}'. Expected sbom, hbom, vex, or document."
+          exit 1
+          ;;
+      esac
+
+      [ -n "${CRA_ENVIRONMENT:-}" ] && set -- "$@" --environment "${CRA_ENVIRONMENT}"
+      [ -n "${CRA_TAGS:-}" ] && set -- "$@" --tags "${CRA_TAGS}"
+      [ -n "${CI_PIPELINE_ID:-}" ] && set -- "$@" --pipeline-id "${CI_PIPELINE_ID}"
+      [ -n "${CI_COMMIT_SHA:-}" ] && set -- "$@" --commit "${CI_COMMIT_SHA}"
+      [ -n "${CI_COMMIT_REF_NAME:-}" ] && set -- "$@" --branch "${CI_COMMIT_REF_NAME}"
+      [ -n "${CI_PROJECT_PATH:-}" ] && set -- "$@" --repository "${CI_PROJECT_PATH}"
+
+      echo "Uploading ${CRA_ARTIFACT_TYPE} to CRA Evidence with the CRA Evidence CLI..."
+      craevidence "$@"
+
+---
+# Component job for the GitLab CI Components catalog.
+cra-evidence-upload:
+  extends: .cra-evidence-upload
+  stage: $[[ inputs.stage ]]
+  variables:
+    CRA_PRODUCT: $[[ inputs.product ]]
+    CRA_VERSION: $[[ inputs.version ]]
+    CRA_FILE: $[[ inputs.file ]]
+    CRA_BASE_URL: $[[ inputs.api-url ]]
+    CRA_CLI_PACKAGE: $[[ inputs.cli-package ]]
+    CRA_ARTIFACT_TYPE: $[[ inputs.artifact-type ]]
+    CRA_DOCUMENT_TYPE: $[[ inputs.document-type ]]
+    CRA_TAGS: $[[ inputs.tags ]]
+    CRA_CREATE_PRODUCT: $[[ inputs.create-product ]]
+    CRA_CREATE_VERSION: $[[ inputs.create-version ]]
+    CRA_TARGET_MARKETS: $[[ inputs.target-markets ]]
+    CRA_ENVIRONMENT: $[[ inputs.environment ]]
+    CRA_RELEASE_NOTES: $[[ inputs.release-notes ]]
+    CRA_RELEASE_DATE: $[[ inputs.release-date ]]
+    CRA_EXTERNAL_URL: $[[ inputs.external-url ]]
+    CRA_RELEASE_STATE: $[[ inputs.release-state ]]
+    CRA_SCAN: $[[ inputs.scan ]]
+    CRA_FAIL_ON: $[[ inputs.fail-on ]]
+    CRA_SIGN: $[[ inputs.sign ]]
+    CRA_SIGNATURE_ON: $[[ inputs.signature-on ]]
+    CRA_SIGNATURE_BUNDLE: $[[ inputs.signature-bundle ]]
+    CRA_SIGNATURE_IDENTITY: $[[ inputs.signature-identity ]]
+    CRA_SIGNATURE_ISSUER: $[[ inputs.signature-issuer ]]
+    CRA_FAIL_UNTRUSTED: $[[ inputs.fail-untrusted ]]
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: always
+    - when: manual
+      allow_failure: true
+
+# Reusable job template for the no-key local security check.
+# Use with:  extends: .cra-evidence-check   (no API key, no account, no upload)
+#
+# Optional CI/CD variables:
+#   CRA_CHECK_PATH:    directory to scan (generates an SBOM with Syft). Default '.'
+#   CRA_CHECK_SBOM:    path to a pre-built SBOM to score instead of scanning
+#   CRA_CHECK_IMAGE:   container image to scan instead of a directory
+#   CRA_CHECK_FAIL_ON: critical | high | medium | known-exploited (default none)
+#   CRA_CHECK_SARIF:   SARIF output path (default craevidence.sarif)
+.cra-evidence-check:
+  image: python:3.12-slim
+  variables:
+    CRA_CLI_PACKAGE: 'craevidence>=3.4.0,<4'
+    CRA_CHECK_PATH: '.'
+    CRA_CHECK_SBOM: ''
+    CRA_CHECK_IMAGE: ''
+    CRA_CHECK_FAIL_ON: 'none'
+    CRA_CHECK_SARIF: 'craevidence.sarif'
+  script:
+    - |
+      set -eu
+      # No data is uploaded to CRA Evidence. By default uses the network for vulnerability data: Grype DB when installed, OSV.dev as fallback, plus CISA KEV and FIRST EPSS enrichment.
+      python -m pip install --upgrade pip
+      python -m pip install "${CRA_CLI_PACKAGE}"
+      set -- check
+      if [ -n "${CRA_CHECK_SBOM}" ]; then
+        set -- "$@" --sbom "${CRA_CHECK_SBOM}"
+      elif [ -n "${CRA_CHECK_IMAGE}" ]; then
+        set -- "$@" --image "${CRA_CHECK_IMAGE}"
+      else
+        set -- "$@" "${CRA_CHECK_PATH:-.}"
+      fi
+      if [ -n "${CRA_CHECK_SARIF}" ]; then
+        set -- "$@" --output-file "${CRA_CHECK_SARIF}"
+      fi
+      if [ -n "${CRA_CHECK_FAIL_ON}" ] && [ "${CRA_CHECK_FAIL_ON}" != "none" ]; then
+        set -- "$@" --fail-on "${CRA_CHECK_FAIL_ON}"
+      fi
+      craevidence --output sarif "$@"
+  artifacts:
+    when: always
+    paths:
+      - "${CRA_CHECK_SARIF}"
+  rules:
+    - when: always

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/craevidence/cli/security/advisories/new
+    about: Report security issues privately. Do not open a public issue.
+  - name: Documentation
+    url: https://docs.craevidence.com/cli
+    about: CLI usage and command reference.
+  - name: Product support
+    url: mailto:support@craevidence.com
+    about: Questions about CRA Evidence.

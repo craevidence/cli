@@ -1,0 +1,247 @@
+name: CI - Build, Test, SBOM, Publish
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "*.md"
+      - "LICENSE"
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Run tests
+  # ---------------------------------------------------------------------------
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build Docker image, generate SBOM, upload to CRA Evidence
+  # ---------------------------------------------------------------------------
+  build-and-sbom:
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: read
+      packages: write
+      id-token: write  # keyless cosign signing via Sigstore OIDC
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Get version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+
+      - name: Build CLI Docker image
+        run: |
+          docker build -t craevidence:${{ steps.version.outputs.version }} .
+
+      # Security gate: fail the build if HIGH/CRITICAL vulnerabilities found in the Docker image.
+      # Only fixed vulnerabilities are flagged to avoid false positives (e.g. glibc in base image).
+      - name: Scan image for vulnerabilities (Grype)
+        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
+        with:
+          image: craevidence:${{ steps.version.outputs.version }}
+          severity-cutoff: high
+          fail-build: true
+          only-fixed: true
+
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # v0
+
+      - name: Generate SBOM (CycloneDX)
+        run: |
+          syft craevidence:${{ steps.version.outputs.version }} \
+            -o cyclonedx-json=sbom.cdx.json
+
+      - name: Upload SBOM to CRA Evidence
+        if: github.event_name == 'release'
+        continue-on-error: true
+        env:
+          CRA_EVIDENCE_API_KEY: ${{ secrets.CRA_EVIDENCE_API_KEY }}
+          CRA_EVIDENCE_URL: https://api.craevidence.com
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -e CRA_EVIDENCE_API_KEY \
+            -e CRA_EVIDENCE_URL \
+            craevidence:${{ steps.version.outputs.version }} \
+            upload-sbom \
+              --product cra-evidence-cli \
+              --version ${{ steps.version.outputs.version }} \
+              --file /workspace/sbom.cdx.json \
+              --no-create-product \
+              --create-version \
+              --scan
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+
+      # Docker Hub push (on release only)
+      - name: Login to Docker Hub
+        if: github.event_name == 'release'
+        id: dockerhub-login
+        continue-on-error: true
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        with:
+          username: craevidence
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Tag and push to Docker Hub
+        if: github.event_name == 'release' && steps.dockerhub-login.outcome == 'success'
+        run: |
+          IMAGE=${{ vars.DOCKERHUB_IMAGE }}
+          docker tag craevidence:${{ steps.version.outputs.version }} \
+            ${IMAGE}:${{ steps.version.outputs.version }}
+          docker tag craevidence:${{ steps.version.outputs.version }} \
+            ${IMAGE}:latest
+          docker push ${IMAGE}:${{ steps.version.outputs.version }}
+          docker push ${IMAGE}:latest
+
+      # GHCR push (on release only)
+      - name: Login to GHCR
+        if: github.event_name == 'release'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push to GHCR
+        if: github.event_name == 'release'
+        run: |
+          IMAGE=ghcr.io/${{ github.repository_owner }}/craevidence
+          docker tag craevidence:${{ steps.version.outputs.version }} \
+            ${IMAGE}:${{ steps.version.outputs.version }}
+          docker tag craevidence:${{ steps.version.outputs.version }} \
+            ${IMAGE}:latest
+          docker push ${IMAGE}:${{ steps.version.outputs.version }}
+          docker push ${IMAGE}:latest
+
+      # Quay.io push (on release only)
+      - name: Login to Quay.io
+        if: github.event_name == 'release'
+        id: quay-login
+        continue-on-error: true
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        with:
+          registry: quay.io
+          username: craevidence+all
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Tag and push to Quay.io
+        if: github.event_name == 'release' && steps.quay-login.outcome == 'success'
+        continue-on-error: true
+        run: |
+          IMAGE=quay.io/craevidence/cli
+          docker tag craevidence:${{ steps.version.outputs.version }} \
+            ${IMAGE}:${{ steps.version.outputs.version }}
+          docker tag craevidence:${{ steps.version.outputs.version }} \
+            ${IMAGE}:latest
+          docker push ${IMAGE}:${{ steps.version.outputs.version }}
+          docker push ${IMAGE}:latest
+
+      # Keyless signing of the pushed images (Sigstore OIDC, no long-lived keys).
+      # The manifest digest is identical across registries for identical content,
+      # so it is resolved once and each pushed reference is signed by digest.
+      - name: Install cosign
+        if: github.event_name == 'release'
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
+
+      - name: Sign Docker Hub image
+        if: github.event_name == 'release' && steps.dockerhub-login.outcome == 'success'
+        env:
+          COSIGN_YES: "true"
+        run: |
+          DIGEST=$(docker inspect --format='{{ index .RepoDigests 0 }}' \
+            craevidence:${{ steps.version.outputs.version }} | sed 's/.*@//')
+          cosign sign --yes "${{ vars.DOCKERHUB_IMAGE }}@${DIGEST}"
+
+      - name: Sign GHCR image
+        if: github.event_name == 'release'
+        env:
+          COSIGN_YES: "true"
+        run: |
+          DIGEST=$(docker inspect --format='{{ index .RepoDigests 0 }}' \
+            craevidence:${{ steps.version.outputs.version }} | sed 's/.*@//')
+          cosign sign --yes "ghcr.io/${{ github.repository_owner }}/craevidence@${DIGEST}"
+
+      - name: Sign Quay.io image
+        if: github.event_name == 'release' && steps.quay-login.outcome == 'success'
+        continue-on-error: true
+        env:
+          COSIGN_YES: "true"
+        run: |
+          DIGEST=$(docker inspect --format='{{ index .RepoDigests 0 }}' \
+            craevidence:${{ steps.version.outputs.version }} | sed 's/.*@//')
+          cosign sign --yes "quay.io/craevidence/cli@${DIGEST}"
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Publish to PyPI (on release)
+  # ---------------------------------------------------------------------------
+  # Publishes the sdist and wheel to PyPI via Trusted Publishing (OIDC, no API
+  # token) and attaches PEP 740 Sigstore attestations to each artifact.
+  #
+  # Prerequisites (one-time, configured outside this file):
+  #   - Register the `craevidence` project on PyPI.
+  #   - Add this repository + the `pypi` environment as a Trusted Publisher in
+  #     the PyPI project settings.
+  # ---------------------------------------------------------------------------
+  publish-pypi:
+    runs-on: ubuntu-latest
+    needs: [test, build-and-sbom]
+    if: github.event_name == 'release'
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write  # OIDC for Trusted Publishing + PEP 740 attestations
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+        with:
+          attestations: true
