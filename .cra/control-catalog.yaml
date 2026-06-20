@@ -1,0 +1,96 @@
+# CRA Evidence CLI - Control Catalog (CRA Annex I)
+# Validate: cue vet -c -d '#ControlCatalog' github.com/gemaraproj/gemara@v1.0.0 .cra/control-catalog.yaml
+#
+# Assessment requirement ids use stable `cra:` references so reviewers can trace
+# controls to the corresponding product security attestations.
+
+title: "CRA Evidence CLI - Control Catalog"
+metadata:
+  id: "cra-evidence-cli-control-catalog"
+  type: ControlCatalog
+  gemara-version: "1.0.0"
+  description: "Security controls implemented by the CRA Evidence CLI product, mapped to CRA Annex I Part I."
+  version: "1.0.0"
+  author:
+    id: cra-evidence-security
+    name: "CRA Evidence Security"
+    type: Human
+  applicability-groups:
+    - id: "all-releases"
+      title: "All releases"
+      description: "Applies to every release line of the CLI that is still within its support period."
+
+groups:
+  - id: "secure-by-default"
+    title: "Secure by default"
+    description: "Controls ensuring the CLI ships with a secure default configuration."
+  - id: "vulnerability-mgmt"
+    title: "Vulnerability management"
+    description: "Controls covering vulnerability discovery, triage, and fixing."
+  - id: "access-control"
+    title: "Access control"
+    description: "Controls protecting access to the upload API and user credentials."
+
+controls:
+  - id: "C01"
+    title: "Ship secure by default"
+    objective: "The CLI runs with the least privilege it needs; no API keys or secrets are embedded in the image."
+    group: "secure-by-default"
+    state: Active
+    assessment-requirements:
+      - id: "cra:secure_by_default_confirmed"
+        text: "The CLI Docker image contains no hard-coded credentials or debug endpoints; the default command prints help and requires an API key via environment variable to do anything else."
+        applicability: ["all-releases"]
+        state: Active
+
+  - id: "C02"
+    title: "No known exploitable vulnerabilities at release"
+    objective: "Every CLI build is scanned by Grype; builds with fixable High/Critical CVEs are blocked."
+    group: "vulnerability-mgmt"
+    state: Active
+    assessment-requirements:
+      - id: "cra:no_known_vulns_confirmed"
+        text: "CI runs Grype against the final image on every build; the pipeline fails closed on High or Critical findings that have a fix available (severity-cutoff high, fail-build, only-fixed)."
+        applicability: ["all-releases"]
+        state: Active
+      - id: "cra:security_updates_ensured"
+        text: "Security patches are published within the SLA defined in vulnerability-policy.yaml for every supported release line."
+        applicability: ["all-releases"]
+        state: Active
+
+  - id: "C03"
+    title: "Credential protection"
+    objective: "The CLI never logs the API key; the mask_api_key helper redacts all surfaces."
+    group: "access-control"
+    state: Active
+    assessment-requirements:
+      - id: "cra:credential_protection_confirmed"
+        text: "`client.py:mask_api_key` is used everywhere the key could be printed (auth error paths, verbose mode, CI logs)."
+        applicability: ["all-releases"]
+        state: Active
+      - id: "cra:access_control_confirmed"
+        text: "All upload endpoints require a valid API key scoped to `document:write` or above; no anonymous uploads are accepted."
+        applicability: ["all-releases"]
+        state: Active
+
+  - id: "C04"
+    title: "Secure updates of the CLI itself"
+    objective: "Customers can verify the integrity of each CLI release before installing it."
+    group: "secure-by-default"
+    state: Active
+    assessment-requirements:
+      - id: "cra:secure_updates_confirmed"
+        text: "Docker images are signed with cosign (keyless / Sigstore) and PyPI wheels carry PEP 740 Sigstore attestations; every published artifact is addressable by an immutable digest."
+        applicability: ["all-releases"]
+        state: Active
+
+  - id: "C05"
+    title: "Vulnerability information sharing"
+    objective: "Security researchers can report issues via a well-documented CVD policy."
+    group: "vulnerability-mgmt"
+    state: Active
+    assessment-requirements:
+      - id: "cra:vulnerability_info_sharing_confirmed"
+        text: "The CVD policy published in cvd-policy.yaml defines the disclosure channel, acknowledgement SLA, and embargo policy."
+        applicability: ["all-releases"]
+        state: Active

@@ -1,0 +1,18 @@
+name: Feature request
+description: Suggest an improvement to the CRA Evidence CLI
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do that the CLI does not support today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe what you would like the CLI to do.
+    validations:
+      required: false

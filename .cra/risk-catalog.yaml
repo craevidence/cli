@@ -1,0 +1,75 @@
+# CRA Evidence CLI - Risk Catalog (CRA Art. 13(2))
+# Validate: cue vet -c -d '#RiskCatalog' github.com/gemaraproj/gemara@v1.0.0 .cra/risk-catalog.yaml
+
+title: "CRA Evidence CLI - Risk Catalog"
+metadata:
+  id: "cra-evidence-cli-risk-catalog"
+  type: RiskCatalog
+  gemara-version: "1.0.0"
+  description: "Risks for the CRA Evidence CLI - a CI/CD tool that uploads SBOMs, HBOMs, VEX and compliance documents to the CRA Evidence platform."
+  version: "1.0.0"
+  author:
+    id: cra-evidence-security
+    name: "CRA Evidence Security"
+    type: Human
+
+groups:
+  - id: "credential-handling"
+    title: "Credential Handling"
+    description: "Risks arising from the CLI handling CRA_EVIDENCE_API_KEY inside CI/CD environments."
+    appetite: "Minimal"
+    max-severity: "Critical"
+
+  - id: "artifact-integrity"
+    title: "Artifact Integrity"
+    description: "Risks from the CLI transmitting, generating, or modifying SBOM/HBOM/VEX artifacts."
+    appetite: "Low"
+    max-severity: "High"
+
+  - id: "supply-chain"
+    title: "Supply Chain"
+    description: "Risks from the CLI's own dependencies and the Syft/Grype binaries it invokes."
+    appetite: "Low"
+    max-severity: "Critical"
+
+risks:
+  - id: "R01"
+    title: "API key leaked into CI logs"
+    description: "CRA_EVIDENCE_API_KEY printed to stdout/stderr by the CLI or the CI runner, ending up in persistent build logs accessible to unauthorised users."
+    group: "credential-handling"
+    severity: "High"
+    impact: "Account takeover; unauthorised uploads against the victim organisation; audit-log pollution."
+    owner:
+      responsible: [{name: "CLI Maintainer"}]
+      accountable: [{name: "Head of Engineering"}]
+
+  - id: "R02"
+    title: "SBOM generation subprocess compromise"
+    description: "Syft or Grype binary tampered with between download and invocation (e.g. mutable Docker tag, malicious mirror)."
+    group: "supply-chain"
+    severity: "Critical"
+    impact: "Fabricated SBOMs uploaded as compliance evidence; CRA Art. 13(16) breach."
+
+  - id: "R03"
+    title: "Unvalidated compliance-as-code YAML uploaded as compliance artifact"
+    description: "User bypasses `compliance-as-code validate` and uploads a malformed YAML; CRA Evidence rejects, customer pipeline breaks at the wrong stage."
+    group: "artifact-integrity"
+    severity: "Medium"
+    impact: "Release blocked; wasted CI cycles; reduced trust in the tooling."
+
+  - id: "R04"
+    title: "Docker image supply-chain attack on craevidence/cli"
+    description: "Published `craevidence/cli` image compromised at the registry or during push; customers pull a backdoored CLI."
+    group: "supply-chain"
+    severity: "Critical"
+    impact: "API keys exfiltrated from thousands of customer CI pipelines; cross-tenant damage."
+    owner:
+      responsible: [{name: "CLI Maintainer"}]
+      accountable: [{name: "CTO"}]
+
+  - id: "R05"
+    title: "CI metadata (repo URL, branch, commit) leaked across tenants"
+    description: "A defect attaches CI metadata from one organisation's upload to another."
+    group: "artifact-integrity"
+    severity: "High"
+    impact: "Competitive intelligence leak; GDPR scope depending on context; trust loss."

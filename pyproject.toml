@@ -1,0 +1,93 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "craevidence"
+version = "3.4.4"
+description = "CLI tool for CI/CD integration with CRA Evidence"
+readme = "README.md"
+requires-python = ">=3.12"
+authors = [
+    {name = "CRA Evidence", email = "support@craevidence.com"},
+]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Build Tools",
+]
+keywords = ["sbom", "cra", "cybersecurity", "compliance", "cicd"]
+
+dependencies = [
+    "click>=8.1.0",
+    "httpx>=0.27.0",
+    "pyyaml>=6.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "sigstore>=4.0.0,<5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+    "types-PyYAML",
+    # Test-only: validates emitted CSAF documents against the official CSAF 2.0
+    # schema. The [format] extra enables the uri/date-time format checks.
+    "jsonschema[format]>=4.18",
+]
+
+[project.urls]
+Homepage = "https://craevidence.com"
+Documentation = "https://docs.craevidence.com/cli"
+Repository = "https://github.com/craevidence/cli"
+Issues = "https://github.com/craevidence/cli/issues"
+
+[project.scripts]
+craevidence = "cra_evidence_cli.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["cra_evidence_cli*"]
+
+[tool.black]
+line-length = 100
+target-version = ['py312']
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "S", "B", "A", "C4", "DTZ", "T10", "EM", "ISC", "ICN", "PT"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests legitimately use bare assert (S101) as their primary assertion form.
+"tests/**" = ["S101"]
+# Domain exceptions intentionally name gate/condition outcomes without an Error
+# suffix (each carries a stable exit code) and reuse the FileNotFoundError name.
+"cra_evidence_cli/exceptions.py" = ["N818", "A001"]
+"tests/test_exceptions.py" = ["A004"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+asyncio_mode = "auto"

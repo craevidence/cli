@@ -1,0 +1,516 @@
+# GitHub Action for CRA Evidence
+# Upload SBOMs to CRA Evidence from your CI/CD pipeline
+#
+# Usage:
+#   - name: Upload SBOM to CRA Evidence
+#     uses: craevidence/cli@v3
+#     with:
+#       api-key: ${{ secrets.CRA_EVIDENCE_API_KEY }}
+#       product: my-product
+#       version: ${{ github.ref_name }}
+#       file: sbom.json
+#       artifact-type: sbom
+#       target-markets: DE,FR,ES
+#       scan: true
+#       fail-on: high
+#       sign: true
+#
+# For keyless signing with sign: true, the caller workflow or job must grant:
+#   permissions:
+#     id-token: write
+
+name: 'CRA Evidence Upload'
+description: 'Upload SBOMs, HBOMs, and VEX documents to craevidence.com for evidence tracking'
+author: 'CRA Evidence'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  # === Mode ===
+  command:
+    description: 'What to run: "upload" (default, requires api-key) or "check" (no-key local security check; no CRA Evidence account or API key, and no data sent to CRA Evidence. By default uses the network for vulnerability data: Grype DB when installed, OSV.dev as fallback, plus CISA KEV and FIRST EPSS enrichment)'
+    required: false
+    default: 'upload'
+
+  # === Required for command=upload ===
+  api-key:
+    description: 'CRA Evidence API key. Required for command=upload; ignored for command=check.'
+    required: false
+    default: ''
+
+  product:
+    description: 'Product name or UUID. Required for command=upload.'
+    required: false
+    default: ''
+
+  version:
+    description: 'Version number (e.g., 1.0.0, v2.1.3). Required for command=upload.'
+    required: false
+    default: ''
+
+  file:
+    description: 'Path to artifact file. Required for command=upload (SBOM, HBOM, or VEX); for command=check it is an optional pre-built SBOM to score.'
+    required: false
+    default: ''
+
+  # === command=check (no-key) options ===
+  path:
+    description: 'command=check: directory to scan (generates an SBOM with Syft). Defaults to the repo root.'
+    required: false
+    default: '.'
+
+  image:
+    description: 'command=check: container image reference to scan instead of a directory.'
+    required: false
+    default: ''
+
+  sarif-file:
+    description: 'command=check: path to write the SARIF report to (for GitHub code scanning).'
+    required: false
+    default: 'craevidence.sarif'
+
+  # === API Configuration ===
+  api-url:
+    description: 'CRA Evidence API URL'
+    required: false
+    default: 'https://api.craevidence.com'
+    # Note: api.craevidence.com is the canonical endpoint
+
+  # === Artifact Options ===
+  artifact-type:
+    description: 'Type of artifact: sbom, hbom, vex, or document'
+    required: false
+    default: 'sbom'
+
+  document-type:
+    description: 'Required when artifact-type=document. Use a supported document type such as user_manual, eu_declaration_of_conformity, risk_assessment, conformity_certificate, or technical_documentation.'
+    required: false
+    default: ''
+
+  tags:
+    description: 'Comma-separated tags for the artifact (e.g., ci,main,nightly)'
+    required: false
+    default: ''
+
+  # === Auto-Creation Options ===
+  create-product:
+    description: 'Create product if it does not exist. Applies to SBOM, HBOM, and document uploads.'
+    required: false
+    default: 'true'
+
+  create-version:
+    description: 'Create version if it does not exist'
+    required: false
+    default: 'true'
+
+  target-markets:
+    description: 'Comma-separated EU country codes required when create-product auto-creates a new product (e.g., DE,FR,ES)'
+    required: false
+    default: ''
+
+  # === Version Metadata ===
+  environment:
+    description: 'Deployment environment: production, staging, development, testing'
+    required: false
+    default: ''
+
+  release-notes:
+    description: 'Release notes for this version'
+    required: false
+    default: ''
+
+  release-date:
+    description: 'Release date in ISO format (YYYY-MM-DD)'
+    required: false
+    default: ''
+
+  external-url:
+    description: 'External URL (e.g., GitHub release URL). Auto-set if not provided.'
+    required: false
+    default: ''
+
+  # === Release State ===
+  release-state:
+    description: 'Release state: draft, pending_review, approved, released, deprecated, end_of_life'
+    required: false
+    default: ''
+
+  # === Scanning Options ===
+  scan:
+    description: 'Trigger vulnerability scan after upload'
+    required: false
+    default: 'false'
+
+  fail-on:
+    description: 'Fail if vulnerabilities at this severity or higher are found (critical, high, medium, low, none)'
+    required: false
+    default: 'none'
+
+  # === SBOM Signature Options ===
+  sign:
+    description: 'For SBOMs, create a Sigstore bundle with the CI OIDC identity before upload, then verify the stored SBOM bytes'
+    required: false
+    default: 'false'
+
+  signature-on:
+    description: 'For SBOMs, verify an existing <SBOM>.sigstore.json bundle after upload'
+    required: false
+    default: 'false'
+
+  signature-bundle:
+    description: 'For SBOMs, path to an existing Sigstore/Cosign bundle to verify after upload'
+    required: false
+    default: ''
+
+  signature-identity:
+    description: 'Expected signer identity from the Sigstore certificate. Required with fail-untrusted.'
+    required: false
+    default: ''
+
+  signature-issuer:
+    description: 'Expected OIDC issuer from the Sigstore certificate. Required with fail-untrusted.'
+    required: false
+    default: ''
+
+  fail-untrusted:
+    description: 'For SBOMs, fail unless signature verification is trusted against the expected identity and issuer'
+    required: false
+    default: 'false'
+
+outputs:
+  artifact-id:
+    description: 'ID of the uploaded artifact'
+    value: ${{ steps.upload.outputs.artifact_id }}
+
+  quality-score:
+    description: 'Quality score of the artifact (0-100)'
+    value: ${{ steps.upload.outputs.quality_score }}
+
+  component-count:
+    description: 'Number of components in the artifact'
+    value: ${{ steps.upload.outputs.component_count }}
+
+  vulnerability-count:
+    description: 'Number of vulnerabilities found (if scan enabled)'
+    value: ${{ steps.upload.outputs.vulnerability_count }}
+
+  cra-status:
+    description: 'CRA status of the version'
+    value: ${{ steps.upload.outputs.cra_status }}
+
+  environment:
+    description: 'Deployment environment of the version'
+    value: ${{ steps.upload.outputs.environment }}
+
+  release-state:
+    description: 'Release state of the version'
+    value: ${{ steps.upload.outputs.release_state }}
+
+  product-created:
+    description: 'Whether a new product was created'
+    value: ${{ steps.upload.outputs.product_created }}
+
+  version-created:
+    description: 'Whether a new version was created'
+    value: ${{ steps.upload.outputs.version_created }}
+
+  signature-trust-status:
+    description: 'SBOM signature trust status when signature verification was requested'
+    value: ${{ steps.upload.outputs.signature_trust_status }}
+
+  response:
+    description: 'Full JSON response from the CRA Evidence CLI upload command'
+    value: ${{ steps.upload.outputs.response }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+      with:
+        python-version: '3.12'
+
+    - name: Install CRA Evidence CLI
+      shell: bash
+      run: |
+        set -euo pipefail
+        python -m pip install --upgrade pip
+        python -m pip install "$GITHUB_ACTION_PATH"
+
+    - name: CRA Evidence local check (no account)
+      if: ${{ inputs.command == 'check' }}
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FILE: ${{ inputs.file }}
+        INPUT_IMAGE: ${{ inputs.image }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+      run: |
+        set -euo pipefail
+        # No CRA Evidence account or API key, and no data sent to CRA Evidence. By default uses the network for vulnerability data: Grype DB when installed, OSV.dev as fallback, plus CISA KEV and FIRST EPSS enrichment.
+        ARGS=(check)
+        if [ -n "${INPUT_FILE}" ]; then
+          ARGS+=(--sbom "${INPUT_FILE}")
+        elif [ -n "${INPUT_IMAGE}" ]; then
+          ARGS+=(--image "${INPUT_IMAGE}")
+        else
+          ARGS+=("${INPUT_PATH:-.}")
+        fi
+        if [ -n "${INPUT_SARIF_FILE}" ]; then
+          ARGS+=(--output-file "${INPUT_SARIF_FILE}")
+        fi
+        if [ -n "${INPUT_FAIL_ON}" ] && [ "${INPUT_FAIL_ON}" != "none" ]; then
+          ARGS+=(--fail-on "${INPUT_FAIL_ON}")
+        fi
+        echo "Running no-key local CRA check (no API key used)..."
+        set +e
+        craevidence --output sarif "${ARGS[@]}"
+        CHECK_EXIT=$?
+        set -e
+        if [ -n "${INPUT_SARIF_FILE}" ] && [ -f "${INPUT_SARIF_FILE}" ]; then
+          echo "SARIF written to ${INPUT_SARIF_FILE} (upload with github/codeql-action/upload-sarif)."
+        fi
+        exit ${CHECK_EXIT}
+
+    - name: Upload artifact to CRA Evidence
+      id: upload
+      if: ${{ inputs.command != 'check' }}
+      shell: bash
+      env:
+        CRA_EVIDENCE_API_KEY: ${{ inputs.api-key }}
+        CRA_EVIDENCE_URL: ${{ inputs.api-url }}
+        CRA_EVIDENCE_SIGNATURE_IDENTITY: ${{ inputs.signature-identity }}
+        CRA_EVIDENCE_SIGNATURE_ISSUER: ${{ inputs.signature-issuer }}
+        INPUT_PRODUCT: ${{ inputs.product }}
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_FILE: ${{ inputs.file }}
+        INPUT_ARTIFACT_TYPE: ${{ inputs.artifact-type }}
+        INPUT_DOCUMENT_TYPE: ${{ inputs.document-type }}
+        INPUT_TAGS: ${{ inputs.tags }}
+        INPUT_CREATE_PRODUCT: ${{ inputs.create-product }}
+        INPUT_CREATE_VERSION: ${{ inputs.create-version }}
+        INPUT_TARGET_MARKETS: ${{ inputs.target-markets }}
+        INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        INPUT_RELEASE_NOTES: ${{ inputs.release-notes }}
+        INPUT_RELEASE_DATE: ${{ inputs.release-date }}
+        INPUT_EXTERNAL_URL: ${{ inputs.external-url }}
+        INPUT_RELEASE_STATE: ${{ inputs.release-state }}
+        INPUT_SCAN: ${{ inputs.scan }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_SIGN: ${{ inputs.sign }}
+        INPUT_SIGNATURE_ON: ${{ inputs.signature-on }}
+        INPUT_SIGNATURE_BUNDLE: ${{ inputs.signature-bundle }}
+        INPUT_FAIL_UNTRUSTED: ${{ inputs.fail-untrusted }}
+        GITHUB_RUN_ID_VAL: ${{ github.run_id }}
+        GITHUB_SHA_VAL: ${{ github.sha }}
+        GITHUB_REF_NAME_VAL: ${{ github.ref_name }}
+        GITHUB_REF_TYPE_VAL: ${{ github.ref_type }}
+        GITHUB_REPOSITORY_VAL: ${{ github.repository }}
+      run: |
+        set -euo pipefail
+
+        add_optional() {
+          if [ -n "$1" ]; then
+            CLI_ARGS+=("$2" "$1")
+          fi
+        }
+
+        add_creation_flags() {
+          if [ "${INPUT_CREATE_PRODUCT}" = "true" ]; then
+            CLI_ARGS+=(--create-product)
+          else
+            CLI_ARGS+=(--no-create-product)
+          fi
+          if [ "${INPUT_CREATE_VERSION}" = "true" ]; then
+            CLI_ARGS+=(--create-version)
+          else
+            CLI_ARGS+=(--no-create-version)
+          fi
+        }
+
+        EXTERNAL_URL="${INPUT_EXTERNAL_URL}"
+        if [ -z "$EXTERNAL_URL" ] && [ "${GITHUB_REF_TYPE_VAL:-}" = "tag" ] && [ -n "${GITHUB_SERVER_URL:-}" ]; then
+          EXTERNAL_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY_VAL}/releases/tag/${GITHUB_REF_NAME_VAL}"
+        fi
+
+        SIGNING_REQUESTED="false"
+        if [ "${INPUT_SIGN}" = "true" ] || [ "${INPUT_SIGNATURE_ON}" = "true" ] || [ -n "${INPUT_SIGNATURE_BUNDLE}" ] || [ "${INPUT_FAIL_UNTRUSTED}" = "true" ]; then
+          SIGNING_REQUESTED="true"
+        fi
+        if [ "${INPUT_ARTIFACT_TYPE}" != "sbom" ] && [ "${SIGNING_REQUESTED}" = "true" ]; then
+          echo "::error::SBOM signature options are only valid when artifact-type=sbom"
+          exit 1
+        fi
+        if [ "${INPUT_SIGN}" = "true" ] && [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::error::sign=true requires the caller workflow or job to set permissions: id-token: write"
+          exit 23
+        fi
+        if [ "${INPUT_CREATE_PRODUCT}" = "true" ] && [ -z "${INPUT_TARGET_MARKETS}" ]; then
+          echo "::notice::create-product=true without target-markets is only safe when the product already exists. New products require target-markets such as DE,FR,ES."
+        fi
+
+        case "${INPUT_ARTIFACT_TYPE}" in
+          sbom)
+            CLI_ARGS=(upload-sbom --product "${INPUT_PRODUCT}" --version "${INPUT_VERSION}" --file "${INPUT_FILE}")
+            add_creation_flags
+            add_optional "${INPUT_TARGET_MARKETS}" --target-markets
+            if [ "${INPUT_SCAN}" = "true" ]; then
+              CLI_ARGS+=(--scan)
+              if [ "${INPUT_FAIL_ON}" != "none" ]; then
+                CLI_ARGS+=(--fail-on "${INPUT_FAIL_ON}")
+              fi
+            fi
+            if [ "${INPUT_SIGN}" = "true" ]; then
+              CLI_ARGS+=(--sign)
+            fi
+            if [ "${INPUT_SIGNATURE_ON}" = "true" ]; then
+              CLI_ARGS+=(--signature-on)
+            fi
+            add_optional "${INPUT_SIGNATURE_BUNDLE}" --signature-bundle
+            add_optional "${CRA_EVIDENCE_SIGNATURE_IDENTITY}" --signature-identity
+            add_optional "${CRA_EVIDENCE_SIGNATURE_ISSUER}" --signature-issuer
+            if [ "${INPUT_FAIL_UNTRUSTED}" = "true" ]; then
+              CLI_ARGS+=(--fail-untrusted)
+            fi
+            add_optional "${INPUT_RELEASE_NOTES}" --release-notes
+            add_optional "${INPUT_RELEASE_DATE}" --release-date
+            add_optional "${EXTERNAL_URL}" --external-url
+            add_optional "${INPUT_RELEASE_STATE}" --release-state
+            ;;
+          hbom)
+            CLI_ARGS=(upload-hbom --product "${INPUT_PRODUCT}" --version "${INPUT_VERSION}" --file "${INPUT_FILE}")
+            add_creation_flags
+            add_optional "${INPUT_TARGET_MARKETS}" --target-markets
+            add_optional "${INPUT_RELEASE_NOTES}" --release-notes
+            add_optional "${INPUT_RELEASE_DATE}" --release-date
+            add_optional "${EXTERNAL_URL}" --external-url
+            add_optional "${INPUT_RELEASE_STATE}" --release-state
+            ;;
+          vex)
+            CLI_ARGS=(upload-vex --product "${INPUT_PRODUCT}" --version "${INPUT_VERSION}" --file "${INPUT_FILE}")
+            ;;
+          document)
+            if [ -z "${INPUT_DOCUMENT_TYPE}" ]; then
+              echo "::error::document-type is required when artifact-type=document"
+              exit 1
+            fi
+            CLI_ARGS=(upload-document --product "${INPUT_PRODUCT}" --version "${INPUT_VERSION}" --file "${INPUT_FILE}" --type "${INPUT_DOCUMENT_TYPE}")
+            add_creation_flags
+            add_optional "${INPUT_TARGET_MARKETS}" --target-markets
+            add_optional "${INPUT_RELEASE_NOTES}" --release-notes
+            add_optional "${INPUT_RELEASE_DATE}" --release-date
+            add_optional "${EXTERNAL_URL}" --external-url
+            add_optional "${INPUT_RELEASE_STATE}" --release-state
+            ;;
+          *)
+            echo "::error::Unsupported artifact-type '${INPUT_ARTIFACT_TYPE}'. Expected sbom, hbom, vex, or document."
+            exit 1
+            ;;
+        esac
+
+        add_optional "${INPUT_ENVIRONMENT}" --environment
+        add_optional "${INPUT_TAGS}" --tags
+        add_optional "${GITHUB_RUN_ID_VAL}" --pipeline-id
+        add_optional "${GITHUB_SHA_VAL}" --commit
+        add_optional "${GITHUB_REF_NAME_VAL}" --branch
+        add_optional "${GITHUB_REPOSITORY_VAL}" --repository
+
+        echo "Uploading ${INPUT_ARTIFACT_TYPE} to CRA Evidence with the CRA Evidence CLI..."
+        RESPONSE_FILE="$(mktemp)"
+        set +e
+        craevidence --output json "${CLI_ARGS[@]}" > "${RESPONSE_FILE}"
+        CLI_EXIT=$?
+        set -e
+        if [ "${CLI_EXIT}" -ne 0 ]; then
+          echo "::error::CRA Evidence CLI upload failed with exit code ${CLI_EXIT}"
+          if [ "${INPUT_CREATE_PRODUCT}" = "true" ] && [ -z "${INPUT_TARGET_MARKETS}" ]; then
+            echo "::notice::If this run is creating a product, add target-markets: \"DE,FR,ES\" or create the product in CRA Evidence first."
+          fi
+          cat "${RESPONSE_FILE}" || true
+          exit "${CLI_EXIT}"
+        fi
+
+        cat "${RESPONSE_FILE}"
+
+        python - "${RESPONSE_FILE}" "${GITHUB_OUTPUT}" <<'PY'
+        import json
+        import secrets
+        import sys
+
+        response_path, output_path = sys.argv[1], sys.argv[2]
+        with open(response_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+
+        version = data.get("version") or {}
+        product = data.get("product") or {}
+        scan_results = data.get("scan_results") or {}
+        signature = data.get("signature_verification") or {}
+        signature_verification = signature.get("verification") or signature
+
+        values = {
+            "artifact_id": data.get("artifact_id"),
+            "quality_score": data.get("quality_score"),
+            "component_count": data.get("component_count"),
+            "vulnerability_count": data.get("vulnerability_count"),
+            "cra_status": version.get("cra_status"),
+            "environment": version.get("environment", "production"),
+            "release_state": version.get("release_state", "draft"),
+            "product_created": product.get("created", False),
+            "version_created": version.get("created", False),
+            "signature_trust_status": signature.get("trust_status") or signature_verification.get("trust_status"),
+        }
+
+        with open(output_path, "a", encoding="utf-8") as out:
+            for key, value in values.items():
+                if isinstance(value, bool):
+                    value = "true" if value else "false"
+                out.write(f"{key}={'' if value is None else value}\n")
+
+            delimiter = "EOF_" + secrets.token_hex(16)
+            out.write(f"response<<{delimiter}\n")
+            out.write(json.dumps(data, separators=(",", ":")))
+            out.write(f"\n{delimiter}\n")
+
+        for warning in data.get("warnings") or []:
+            print(f"::warning::{warning}")
+
+        status = scan_results.get("status")
+        if status in {"pending", "running"}:
+            print("::warning::Scan is still running. Use 'craevidence status --fail-on <severity>' in a later stage to gate on final scan results.")
+        PY
+
+        echo "Upload complete"
+
+    - name: Display results
+      if: ${{ inputs.command != 'check' }}
+      shell: bash
+      env:
+        OUT_ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}
+        OUT_QUALITY_SCORE: ${{ steps.upload.outputs.quality_score }}
+        OUT_COMPONENT_COUNT: ${{ steps.upload.outputs.component_count }}
+        OUT_CRA_STATUS: ${{ steps.upload.outputs.cra_status }}
+        OUT_ENVIRONMENT: ${{ steps.upload.outputs.environment }}
+        OUT_RELEASE_STATE: ${{ steps.upload.outputs.release_state }}
+        OUT_PRODUCT_CREATED: ${{ steps.upload.outputs.product_created }}
+        OUT_VERSION_CREATED: ${{ steps.upload.outputs.version_created }}
+        OUT_SIGNATURE_TRUST_STATUS: ${{ steps.upload.outputs.signature_trust_status }}
+      run: |
+        echo "=== CRA Evidence Upload Complete ==="
+        echo "Artifact ID: ${OUT_ARTIFACT_ID}"
+        echo "Quality Score: ${OUT_QUALITY_SCORE}"
+        echo "Components: ${OUT_COMPONENT_COUNT}"
+        echo "CRA Status: ${OUT_CRA_STATUS}"
+        echo "Environment: ${OUT_ENVIRONMENT}"
+        echo "Release State: ${OUT_RELEASE_STATE}"
+        if [ -n "${OUT_SIGNATURE_TRUST_STATUS}" ]; then
+          echo "Signature Trust: ${OUT_SIGNATURE_TRUST_STATUS}"
+        fi
+        if [ "${OUT_PRODUCT_CREATED}" = "true" ]; then
+          echo "::notice::New product was created"
+        fi
+        if [ "${OUT_VERSION_CREATED}" = "true" ]; then
+          echo "::notice::New version was created"
+        fi
