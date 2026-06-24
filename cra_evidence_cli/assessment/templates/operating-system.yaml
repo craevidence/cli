@@ -1,0 +1,122 @@
+id: operating-system
+title: "General-purpose operating system"
+description: >-
+  A general-purpose operating system or distribution image for desktop, server,
+  or embedded use, bundling a kernel, system services, package manager and a
+  broad set of userspace components.
+
+detect:
+  files:
+    - "etc/os-release"
+    - "usr/lib/os-release"
+    - "debian/control"
+    - "PKGBUILD"
+    - "buildroot/.config"
+    - "yocto/conf/local.conf"
+  manifests:
+    - "Makefile"
+    - "Dockerfile"
+
+# A general-purpose operating system exercises every Annex I Part I(2)
+# requirement: the kernel, system services, package manager and broad userspace
+# combine into a large attack surface. None are pre-marked not-applicable;
+# confirm applicability per build. Part I(1) and all Part II duties are mandatory
+# and never not-applicable.
+applicability:
+  not_applicable: {}
+  how_applied:
+    part_i_2_a: "[List the package set and base image, and state how releases are screened against known exploitable vulnerabilities before publication]"
+    part_i_2_b: "[Describe the hardened default configuration, which services are disabled by default, and how an administrator returns the system to its original state]"
+    part_i_2_c: "[Describe the package update channel, signature verification, optional automatic security updates, opt-out, and how users are notified of available updates]"
+    part_i_2_d: "[Describe user accounts, privilege separation, the default authentication policy, and how unauthorised access attempts are recorded and surfaced]"
+    part_i_2_e: "[Describe disk and credential encryption options and the transport encryption used by bundled network services]"
+    part_i_2_f: "[Describe signed packages, verified boot or secure boot, and how tampering with system files or configuration is detected and reported]"
+    part_i_2_j: "[List the services and network ports enabled by default and explain how the installed attack surface is kept to the minimum needed]"
+    part_i_2_k: "[Describe the exploitation mitigations enabled by default, such as memory protections, mandatory access control and service sandboxing]"
+    part_i_2_l: "[Describe the audit and system logging that records access to and modification of data, services and accounts, and the user opt-out]"
+    part_ii_1: "[Describe how the SBOM is produced for each image and kept current as packages change]"
+    part_ii_2: "[Describe how upstream vulnerabilities are tracked and how security updates reach installed systems separately from feature updates]"
+    part_ii_7: "[Describe how updates are signed and distributed so that installed systems receive fixes in a timely and verifiable manner]"
+
+risks:
+  - id: R01
+    title: "Unpatched kernel or userspace vulnerabilities in the image"
+    group: "vulnerability-management"
+    severity: "Critical"
+    description: "The kernel or bundled packages ship with known, fixable vulnerabilities at release time."
+    impact: "Remote or local exploitation via a published CVE on every installed system until the next update."
+    recommended: true
+  - id: R02
+    title: "Insecure default configuration and exposed services"
+    group: "attack-surface"
+    severity: "High"
+    description: "The image enables network services, open ports, or permissive defaults that are not needed for the intended role."
+    impact: "Larger attack surface, unauthenticated reachable endpoints, and avoidable compromise out of the box."
+    recommended: true
+  - id: R03
+    title: "Unsigned or unverified package and update sources"
+    group: "update-integrity"
+    severity: "High"
+    description: "Packages or system updates are installed without verifying a trusted signature."
+    impact: "An attacker who controls a mirror or the network can inject malicious code into every system that updates."
+    recommended: true
+  - id: R04
+    title: "Weak account and privilege separation"
+    group: "access-control"
+    severity: "High"
+    description: "Default accounts, blank or shared passwords, or broad privileges let a low-privilege user reach root."
+    impact: "Account takeover and privilege escalation to full control of the system."
+    recommended: true
+  - id: R05
+    title: "Sensitive data stored or transmitted without protection"
+    group: "data-protection"
+    severity: "Medium"
+    description: "Credentials, keys, or user data are written in cleartext on disk or sent over unencrypted channels by bundled services."
+    impact: "Disclosure of credentials and personal data if the disk is recovered or traffic is intercepted."
+    recommended: true
+  - id: R06
+    title: "Insufficient logging and audit coverage"
+    group: "logging-monitoring"
+    severity: "Medium"
+    description: "Access to and modification of data, services, and accounts is not recorded, leaving incidents undetectable."
+    impact: "Intrusions and tampering go unnoticed and cannot be investigated after the fact."
+    recommended: true
+  - id: R07
+    title: "Disabled exploitation mitigations in the build"
+    group: "hardening"
+    severity: "Medium"
+    description: "The image ships with memory protections, mandatory access control, or service sandboxing turned off or misconfigured."
+    impact: "A single component flaw escalates into full system compromise with no defence in depth."
+    recommended: true
+
+controls:
+  - id: C01
+    title: "Screen releases against known vulnerabilities"
+    objective: "Each image is scanned against the package set before publication and known fixable vulnerabilities are resolved or documented."
+    group: "vulnerability-management"
+    recommended: true
+  - id: C02
+    title: "Minimal hardened default configuration"
+    objective: "The default install enables only the services needed for its role and ships with hardened settings the administrator can review."
+    group: "attack-surface"
+    recommended: true
+  - id: C03
+    title: "Signature-verified packages and updates"
+    objective: "Package installation and system updates verify a trusted signature and refuse unsigned or tampered sources."
+    group: "update-integrity"
+    recommended: true
+  - id: C04
+    title: "Least-privilege accounts and authentication"
+    objective: "No default or shared credentials ship, privileges are separated, and elevation requires authentication."
+    group: "access-control"
+    recommended: true
+  - id: C05
+    title: "Audit logging of security-relevant events"
+    objective: "Access to and modification of data, services, and accounts is logged, with a documented user opt-out."
+    group: "logging-monitoring"
+    recommended: true
+  - id: C06
+    title: "Default exploitation mitigations and sandboxing"
+    objective: "Memory protections, mandatory access control, and service isolation are enabled by default across the image."
+    group: "hardening"
+    recommended: true

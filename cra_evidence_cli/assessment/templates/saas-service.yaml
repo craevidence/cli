@@ -1,0 +1,122 @@
+id: saas-service
+title: "Hosted SaaS or web service"
+description: >-
+  A multi-tenant hosted service with a backend and API, operated and patched
+  centrally by the provider rather than through user-installed updates.
+
+detect:
+  files:
+    - "Dockerfile"
+    - "docker-compose.yml"
+    - "Procfile"
+    - "helm/Chart.yaml"
+    - "k8s/deployment.yaml"
+    - "serverless.yml"
+  manifests:
+    - "requirements.txt"
+    - "package.json"
+    - "go.mod"
+    - "pom.xml"
+
+# A centrally-operated service is patched by the provider, so the user-installed
+# update mechanism in Part I(2)(c) does not apply. The duty to remediate
+# vulnerabilities and distribute fixes still applies through Part II, which is
+# mandatory. Confirm every applicability decision against the actual service.
+applicability:
+  not_applicable:
+    part_i_2_c: "[Justify: this service is patched centrally by the provider, with no user-installed update that the user enables, opts out of, postpones or is notified about, so the user-facing update mechanism in (c) does not apply; remediation and secure distribution are handled under Part II]"
+  how_applied:
+    part_i_2_b: "[Describe the secure default tenant configuration, hardened service defaults, and how a tenant can be returned to a known good baseline]"
+    part_i_2_d: "[Describe authentication, tenant isolation, identity and access management, and how unauthorised access attempts are detected and reported]"
+    part_i_2_e: "[Describe encryption of data in transit and at rest and how tenant data confidentiality is enforced]"
+    part_i_2_f: "[Describe how data and configuration integrity is protected and how corruption or unauthorised modification is detected]"
+    part_i_2_h: "[Describe availability measures for essential functions, including denial-of-service resilience and recovery after an incident]"
+    part_i_2_j: "[Describe how the API and external interfaces limit attack surface and how unused endpoints are removed or restricted]"
+    part_i_2_l: "[Describe security logging and monitoring of access to and modification of tenant data, services and functions]"
+    part_i_2_m: "[Describe how a user can permanently remove account data and settings and securely export data on request]"
+    part_ii_1: "[Describe how the SBOM is produced and kept current for each deployed release]"
+    part_ii_2: "[Describe how vulnerabilities are remediated without delay across the running service]"
+    part_ii_7: "[Describe how fixes are deployed to the running service so tenants receive them in a timely manner]"
+
+risks:
+  - id: R01
+    title: "Cross-tenant data access"
+    group: "tenant-isolation"
+    severity: "Critical"
+    description: "A flaw in authorisation or query scoping lets one tenant read or modify another tenant's data."
+    impact: "Disclosure or corruption of other customers' data; loss of trust; obligation to notify affected users."
+    recommended: true
+  - id: R02
+    title: "Broken authentication or session handling"
+    group: "access-control"
+    severity: "High"
+    description: "Weak credential handling, token validation, or session management lets an attacker assume another account."
+    impact: "Account takeover; access to tenant data and administrative functions."
+    recommended: true
+  - id: R03
+    title: "Unauthenticated or over-permissive API endpoints"
+    group: "attack-surface"
+    severity: "High"
+    description: "API routes lack authentication, authorisation, or input validation, or expose more data than the caller is entitled to."
+    impact: "Data extraction; privilege escalation; abuse of backend functions."
+    recommended: true
+  - id: R04
+    title: "Vulnerable third-party dependencies in the running service"
+    group: "supply-chain"
+    severity: "High"
+    description: "Libraries, base images, or runtime components carry known, fixable vulnerabilities in production."
+    impact: "Remote exploitation via a published CVE; obligation to remediate without delay."
+    recommended: true
+  - id: R05
+    title: "Exposed secrets and configuration"
+    group: "data-protection"
+    severity: "High"
+    description: "Credentials, API keys, or connection strings are committed to source, baked into images, or readable from the environment."
+    impact: "Compromise of databases and downstream services; lateral movement across the platform."
+    recommended: true
+  - id: R06
+    title: "Insufficient logging of access to tenant data"
+    group: "monitoring"
+    severity: "Medium"
+    description: "Access to and modification of tenant data, services, and functions is not recorded in a way that supports detection and investigation."
+    impact: "Undetected intrusion; inability to scope or investigate an incident."
+    recommended: true
+  - id: R07
+    title: "Service unavailability under load or attack"
+    group: "availability"
+    severity: "Medium"
+    description: "Essential functions lack rate limiting, capacity headroom, or denial-of-service mitigation."
+    impact: "Outage of customer-facing functions; failure to meet availability commitments."
+    recommended: true
+
+controls:
+  - id: C01
+    title: "Enforce tenant isolation on every data path"
+    objective: "Every query and API call that touches tenant data is scoped to the caller's tenant and verified by automated tests."
+    group: "tenant-isolation"
+    recommended: true
+  - id: C02
+    title: "Authenticate and authorise every request"
+    objective: "All API and backend routes require authentication and check authorisation against the caller's role and tenant before acting."
+    group: "access-control"
+    recommended: true
+  - id: C03
+    title: "Track and remediate dependency vulnerabilities"
+    objective: "Dependencies and base images are scanned continuously and known vulnerabilities are patched in the running service without delay."
+    group: "supply-chain"
+    recommended: true
+  - id: C04
+    title: "Manage secrets outside source and images"
+    objective: "Credentials and keys are held in a secrets manager or injected at runtime, never committed to source or baked into images."
+    group: "data-protection"
+    recommended: true
+  - id: C05
+    title: "Log and monitor access to tenant data"
+    objective: "Access to and modification of tenant data, services, and functions is logged and monitored to support detection and investigation."
+    group: "monitoring"
+    recommended: true
+  - id: C06
+    title: "Protect availability of essential functions"
+    objective: "Essential functions apply rate limiting, capacity planning, and denial-of-service mitigation, with a tested recovery path."
+    group: "availability"
+    recommended: true

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "craevidence"
-version = "3.4.4"
+version = "3.5.0"
 description = "CLI tool for CI/CD integration with CRA Evidence"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -59,6 +59,9 @@ craevidence = "cra_evidence_cli.cli:main"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["cra_evidence_cli*"]
+
+[tool.setuptools.package-data]
+cra_evidence_cli = ["assessment/templates/*.yaml"]
 
 [tool.black]
 line-length = 100

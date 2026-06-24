@@ -1,0 +1,126 @@
+id: library-sdk
+title: "Software library or SDK"
+description: >-
+  A reusable software library, package or SDK consumed by other software rather
+  than run as a standalone product, distributed through a package registry and
+  integrated into a customer's application.
+
+detect:
+  files:
+    - "setup.cfg"
+    - "rollup.config.js"
+    - "tsup.config.ts"
+    - ".npmignore"
+    - "publish.yml"
+  manifests:
+    - "pyproject.toml"
+    - "package.json"
+    - "Cargo.toml"
+    - "go.mod"
+    - "pom.xml"
+
+# A library has no standalone runtime, no end-user configuration and stores no
+# data of its own. The four Part I(2) letters below are pre-marked not-applicable
+# for that reason; confirm each against your actual product and replace the
+# bracketed prompts with a clear justification. Every other Part I(2) letter is
+# left applicable. Part I(1) and all Part II duties are mandatory and are never
+# not-applicable.
+applicability:
+  not_applicable:
+    part_i_2_b: "[Justify: this library has no standalone runtime, exposes no end-user configuration and holds no product state, so a secure-by-default configuration and a user-initiated reset to original state apply to the integrating application rather than to the library]"
+    part_i_2_h: "[Justify: this library provides no standalone running service, so availability of essential functions and denial-of-service resilience are properties of the integrating application; confirm the library exposes no long-running service of its own]"
+    part_i_2_l: "[Justify: this library owns no runtime that records or monitors activity, so security logging and monitoring with a user opt-out are provided by the integrating application; confirm the library performs no logging of its own]"
+    part_i_2_m: "[Justify: this library stores no end-user data or settings of its own, so there is nothing for a user to remove; confirm the library persists no data outside the integrating application]"
+  how_applied:
+    part_i_2_a: "[Describe how each published version is scanned and released free of known exploitable vulnerabilities in its own code and its dependencies]"
+    part_i_2_c: "[Describe how fixes are shipped as new versions through the package registry and how integrators are notified of security releases]"
+    part_i_2_d: "[Describe authentication or access controls on any privileged or remote interface the library exposes, and how callers are told to use them safely]"
+    part_i_2_e: "[Describe how data the library processes is protected in transit and at rest, and which encryption the library uses or requires from the caller]"
+    part_i_2_f: "[Describe how the library protects the integrity of the data, commands and configuration it processes and reports detected corruption to the caller]"
+    part_i_2_j: "[Describe how the public API surface is kept minimal, how unsafe defaults are avoided and how internal interfaces are not exposed to callers]"
+    part_i_2_k: "[Describe the exploitation mitigation techniques applied, such as bounds checks, safe parsing and avoidance of unsafe deserialisation]"
+    part_ii_1: "[Describe how the SBOM is generated for each release and kept current with the library's dependencies]"
+    part_ii_5: "[Describe the coordinated vulnerability disclosure policy and the reporting contact published with the library]"
+
+risks:
+  - id: R01
+    title: "Vulnerable transitive dependencies pulled in by consumers"
+    group: "supply-chain"
+    severity: "High"
+    description: "The library pins or permits dependency versions with known, fixable vulnerabilities that every consuming application then inherits."
+    impact: "A single library vulnerability propagates to many downstream products and forces each consumer to remediate without delay."
+    recommended: true
+  - id: R02
+    title: "Unsafe parsing or deserialisation of caller-supplied input"
+    group: "input-handling"
+    severity: "High"
+    description: "The library parses untrusted input with unsafe deserialisation, recursion or buffer handling that the caller cannot fully constrain."
+    impact: "Remote code execution, memory corruption or denial of service inside any application that passes attacker-influenced data to the library."
+    recommended: true
+  - id: R03
+    title: "Insecure defaults in the public API"
+    group: "secure-defaults"
+    severity: "High"
+    description: "The library defaults to weak behaviour such as disabled certificate verification, permissive parsing or a weak algorithm, requiring callers to opt in to safety."
+    impact: "Consumers ship insecure behaviour unknowingly because the safe path is not the default one offered by the library."
+    recommended: true
+  - id: R04
+    title: "Published package or release pipeline compromise"
+    group: "supply-chain"
+    severity: "Critical"
+    description: "An attacker publishes a malicious version, hijacks an abandoned name or injects code through an unprotected release pipeline."
+    impact: "Malicious code is delivered to every application that installs or updates the library, with broad and immediate blast radius."
+    recommended: true
+  - id: R05
+    title: "Leaked secrets or sensitive data through logs and errors"
+    group: "data-protection"
+    severity: "Medium"
+    description: "The library writes caller secrets, tokens or personal data into log output, exception messages or telemetry passed back to the caller."
+    impact: "Disclosure of credentials and personal data in the logs and crash reports of every consuming application."
+    recommended: true
+  - id: R06
+    title: "Wide attack surface from over-broad public exports"
+    group: "attack-surface"
+    severity: "Medium"
+    description: "Internal helpers, debug hooks or experimental entry points are exported publicly and become part of the supported, reachable interface."
+    impact: "Callers reach unstable or unsafe internals, enlarging the attack surface and making safe use harder to guarantee."
+    recommended: true
+  - id: R07
+    title: "Use of an unmaintained or end-of-life dependency"
+    group: "supply-chain"
+    severity: "Medium"
+    description: "A core dependency is no longer maintained, so newly found vulnerabilities in it cannot be fixed upstream during the support period."
+    impact: "The library cannot remediate inherited vulnerabilities without a costly replacement, leaving consumers exposed."
+    recommended: true
+
+controls:
+  - id: C01
+    title: "Dependency scanning and pinning per release"
+    objective: "Generate an SBOM and scan direct and transitive dependencies for each release, pin to fixed versions and block releases that ship known vulnerabilities."
+    group: "supply-chain"
+    recommended: true
+  - id: C02
+    title: "Safe input handling at the API boundary"
+    objective: "Validate and bound all caller-supplied input, avoid unsafe deserialisation and limit recursion and allocation so untrusted data cannot corrupt state."
+    group: "input-handling"
+    recommended: true
+  - id: C03
+    title: "Secure-by-default public API"
+    objective: "Make the safe behaviour the default for every exported entry point, including verification, parsing limits and algorithm choice, and require an explicit opt-in to weaken it."
+    group: "secure-defaults"
+    recommended: true
+  - id: C04
+    title: "Signed releases from a protected pipeline"
+    objective: "Publish from a hardened release pipeline that signs artifacts and enforces reviewed, audited changes so consumers can verify provenance."
+    group: "supply-chain"
+    recommended: true
+  - id: C05
+    title: "Minimal public surface and secret-safe output"
+    objective: "Export only the supported API, keep internals private and ensure logs, errors and telemetry never carry caller secrets or personal data."
+    group: "attack-surface"
+    recommended: true
+  - id: C06
+    title: "Coordinated vulnerability disclosure and security releases"
+    objective: "Publish a reporting contact and disclosure policy and ship fixes as clearly marked security versions through the package registry during the support period."
+    group: "vulnerability-handling"
+    recommended: true

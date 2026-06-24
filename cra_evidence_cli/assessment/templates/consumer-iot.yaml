@@ -1,0 +1,95 @@
+id: consumer-iot
+title: "Consumer IoT device"
+description: >-
+  Internet-connected consumer device such as a camera, sensor, smart-home hub or
+  wearable, with embedded firmware and a companion app or cloud service.
+
+detect:
+  files:
+    - "platformio.ini"
+    - "sdkconfig"
+    - "partitions.csv"
+    - "zephyr/prj.conf"
+  manifests: []
+
+# Consumer IoT exercises most Annex I Part I(2) requirements. None are
+# pre-marked not-applicable: confirm applicability per product. Part I(1) and all
+# Part II duties are mandatory and never not-applicable.
+applicability:
+  not_applicable: {}
+  how_applied:
+    part_i_2_b: "[Describe the secure default configuration and the user-initiated factory reset to original state]"
+    part_i_2_c: "[Describe the update mechanism, default-on automatic updates, opt-out, and update notifications]"
+    part_i_2_d: "[Describe authentication, per-device credentials, and how unauthorised access is reported]"
+    part_ii_1: "[Describe how the SBOM is produced and kept current for each firmware release]"
+
+risks:
+  - id: R01
+    title: "Default or shared device credentials"
+    group: "access-control"
+    severity: "High"
+    description: "Devices ship with a common default password or key, letting an attacker take over any unit at scale."
+    impact: "Mass device takeover; botnet enrolment; lateral movement into the user's home network."
+    recommended: true
+  - id: R02
+    title: "Unauthenticated or unencrypted local and cloud interfaces"
+    group: "network-exposure"
+    severity: "High"
+    description: "Device and companion-app traffic is exposed without authentication or transport encryption."
+    impact: "Eavesdropping on personal data; command injection; impersonation of the device or service."
+    recommended: true
+  - id: R03
+    title: "Insecure or absent firmware update path"
+    group: "update-mechanism"
+    severity: "High"
+    description: "Firmware updates are unsigned, unverified, or cannot be delivered to fielded devices."
+    impact: "Persistent compromise; inability to remediate vulnerabilities during the support period."
+    recommended: true
+  - id: R04
+    title: "Exposed debug and management interfaces"
+    group: "attack-surface"
+    severity: "Medium"
+    description: "Production firmware leaves UART, JTAG, ADB, or hidden web endpoints reachable."
+    impact: "Local extraction of secrets; bypass of access controls; firmware tampering."
+    recommended: true
+  - id: R05
+    title: "Sensitive data at rest without protection"
+    group: "data-protection"
+    severity: "Medium"
+    description: "Credentials, tokens, or personal data are stored in cleartext on the device or in the app."
+    impact: "Disclosure of personal data and account credentials if the device or phone is recovered."
+    recommended: true
+  - id: R06
+    title: "Vulnerable third-party components in firmware"
+    group: "supply-chain"
+    severity: "High"
+    description: "Bundled libraries and the RTOS or Linux base carry known, fixable vulnerabilities."
+    impact: "Remote exploitation via a published CVE; obligation to remediate without delay."
+    recommended: true
+
+controls:
+  - id: C01
+    title: "Unique per-device credentials"
+    objective: "Every unit ships with a unique credential or requires credential setup before first use."
+    group: "access-control"
+    recommended: true
+  - id: C02
+    title: "Encrypted, authenticated interfaces"
+    objective: "All local and remote interfaces authenticate peers and encrypt data in transit with current algorithms."
+    group: "network-exposure"
+    recommended: true
+  - id: C03
+    title: "Signed firmware updates with rollback protection"
+    objective: "The device verifies a signature before applying any update and refuses downgrades to vulnerable versions."
+    group: "update-mechanism"
+    recommended: true
+  - id: C04
+    title: "Disable debug interfaces in production"
+    objective: "Production builds disable or lock JTAG, UART, ADB and any hidden management endpoints."
+    group: "attack-surface"
+    recommended: true
+  - id: C05
+    title: "Encrypted storage of secrets and personal data"
+    objective: "Secrets and personal data at rest are protected using device-backed key storage where available."
+    group: "data-protection"
+    recommended: true

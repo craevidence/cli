@@ -1,0 +1,118 @@
+id: vpn
+title: "VPN client, server or secure tunnel"
+description: >-
+  A VPN client, VPN server, or secure tunnel product that carries user traffic over
+  an untrusted network, protecting the confidentiality and integrity of transported
+  data, authenticating peers, and resisting traffic analysis.
+
+detect:
+  files:
+    - "wg0.conf"
+    - "wireguard.conf"
+    - "openvpn.conf"
+    - "server.ovpn"
+    - "client.ovpn"
+    - "ipsec.conf"
+    - "strongswan.conf"
+  manifests: []
+
+# A secure tunnel exercises almost every Annex I Part I(2) requirement: peer
+# authentication, transport confidentiality and integrity, and attack-surface
+# limits are all core. Only part_i_2_m is pre-marked not-applicable, and only for
+# a build that genuinely keeps no user data or persistent settings; confirm this
+# against the actual product before relying on it. Part I(1) and all Part II
+# duties are mandatory and never not-applicable.
+applicability:
+  not_applicable:
+    part_i_2_m: "[Justify: this product stores no user data and no persistent user settings on the running host, so there is nothing for the user to securely remove; if the product retains a key, profile, connection history or any setting, remove this entry and treat the requirement as applicable]"
+  how_applied:
+    part_i_2_d: "[Describe how peers are authenticated before a tunnel is established, including key or certificate handling, and how failed or unauthorised connection attempts are reported]"
+    part_i_2_e: "[Describe the cipher suites and key-exchange used to encrypt transported data in transit, and how algorithm choices are kept current]"
+    part_i_2_f: "[Describe how the integrity of transported data is protected, including authenticated encryption or message authentication, and how tampering or replay is detected and reported]"
+    part_i_2_g: "[State what data the product processes, including whether any connection metadata or logs are retained, and justify each item against the intended purpose; if the product keeps no personal data, record that and how it is enforced]"
+    part_i_2_j: "[Describe how the listening and management surface is limited, including which ports and interfaces are exposed and how the control or management plane is separated from the data plane]"
+    part_i_2_l: "[Describe what internal activity is recorded for security purposes, how the volume is minimised to avoid retaining traffic content, and the opt-out available to the user]"
+    part_ii_1: "[Describe how the SBOM is produced and kept current for each release, including the crypto library and tunnel stack]"
+
+risks:
+  - id: R01
+    title: "Weak or downgraded tunnel cryptography"
+    group: "transport-security"
+    severity: "Critical"
+    description: "The tunnel negotiates outdated cipher suites or key-exchange, or permits a downgrade to a weak algorithm."
+    impact: "Decryption of transported traffic; disclosure of user data carried over the tunnel; loss of the product's core security promise."
+    recommended: true
+  - id: R02
+    title: "Missing or weak peer authentication"
+    group: "authentication"
+    severity: "Critical"
+    description: "Clients or servers are not mutually authenticated, or accept self-signed or unverified credentials by default."
+    impact: "Man-in-the-middle interception; rogue server impersonation; unauthorised clients joining the tunnel."
+    recommended: true
+  - id: R03
+    title: "Traffic leaks outside the tunnel"
+    group: "traffic-protection"
+    severity: "High"
+    description: "DNS queries, IPv6 traffic, or connections during reconnect bypass the tunnel and travel in the clear."
+    impact: "Exposure of destinations and content the user expected to be protected; deanonymisation through observable side traffic."
+    recommended: true
+  - id: R04
+    title: "Retained connection logs and metadata"
+    group: "data-minimisation"
+    severity: "High"
+    description: "The product records source addresses, timestamps, or session metadata beyond what the intended purpose requires."
+    impact: "Disclosure of user activity if the host is compromised or compelled; failure to limit processed data to what is necessary."
+    recommended: true
+  - id: R05
+    title: "Exposed management and control interface"
+    group: "attack-surface"
+    severity: "High"
+    description: "The configuration, status, or key-management interface is reachable from the tunnel or the public network without strong access control."
+    impact: "Remote takeover of the tunnel endpoint; extraction of keys; reconfiguration of routing to an attacker."
+    recommended: true
+  - id: R06
+    title: "Vulnerable crypto or tunnel-stack dependency"
+    group: "supply-chain"
+    severity: "High"
+    description: "The bundled crypto library or tunnel implementation carries a known, fixable vulnerability."
+    impact: "Remote exploitation via a published CVE in a security-critical component; obligation to remediate without delay."
+    recommended: true
+  - id: R07
+    title: "Predictable patterns enabling traffic analysis"
+    group: "traffic-protection"
+    severity: "Medium"
+    description: "Packet sizes, timing, or handshake fingerprints reveal usage even when payloads are encrypted."
+    impact: "An on-path observer can infer activity, identify the protocol, or correlate sessions despite encryption."
+    recommended: true
+
+controls:
+  - id: C01
+    title: "Current authenticated encryption only"
+    objective: "The tunnel offers only current authenticated-encryption suites and forward-secret key exchange, and refuses downgrades to weak algorithms."
+    group: "transport-security"
+    recommended: true
+  - id: C02
+    title: "Mutual peer authentication"
+    objective: "Both ends authenticate each other with verified keys or certificates before any traffic is carried, and unauthorised attempts are rejected and reported."
+    group: "authentication"
+    recommended: true
+  - id: C03
+    title: "Leak prevention and fail-closed routing"
+    objective: "DNS, IPv6, and traffic during reconnect are forced through the tunnel or blocked, so nothing the user expects protected travels in the clear."
+    group: "traffic-protection"
+    recommended: true
+  - id: C04
+    title: "Minimal logging by default"
+    objective: "The product records only what is needed for security and operation, retains no traffic content, and gives the user a clear opt-out."
+    group: "data-minimisation"
+    recommended: true
+  - id: C05
+    title: "Restricted management interface"
+    objective: "The configuration and key-management interface is bound to a trusted scope, requires strong authentication, and is kept off the data path."
+    group: "attack-surface"
+    recommended: true
+  - id: C06
+    title: "Tracked and updated crypto dependencies"
+    objective: "The crypto library and tunnel stack are inventoried in the SBOM, monitored for vulnerabilities, and updated through a verified release path."
+    group: "supply-chain"
+    recommended: true
