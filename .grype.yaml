@@ -1,13 +1,17 @@
 # Grype vulnerability scan configuration for the CRA Evidence CLI Docker image.
 #
-# All entries below are HIGH (or above) CVEs that come from UPSTREAM components
-# we cannot patch ourselves:
-#   - libc6 in the DHI base image (`dhi.io/python:3.14`)
-#   - Go stdlib statically linked into the bundled `syft` binary
-#   - Go modules statically linked into the bundled `syft` binary
+# All entries below are HIGH (or above) findings that come from the Go modules
+# statically linked into the bundled `syft` binary, which we ship at the latest
+# released version (v1.45.1, built with go1.26.3). We cannot rebuild syft with
+# newer Go modules ourselves; each fix depends on an upstream Anchore release.
 #
-# We will re-evaluate every suppression on 2026-07-01. Before that date, drop
-# any entry whose upstream fix has shipped (see "Re-evaluate when" notes).
+# The DHI base image (`dhi.io/python:3.14`) is pinned to a digest that already
+# carries the patched openssl (3.5.6-1~deb13u2) and libc6, so no base-OS
+# suppressions are needed.
+#
+# We re-evaluate every suppression on 2026-07-24. Before that date, drop any
+# entry whose upstream fix has shipped (see "Re-evaluate when" notes) and bump
+# SYFT_VERSION in the Dockerfile to the release that contains it.
 #
 # Suppressions follow a simple analysis: the vulnerable code is not in the
 # execute path of `craevidence` CLI normal operation. Syft is invoked only
@@ -18,51 +22,34 @@
 
 ignore:
   # ---------------------------------------------------------------------------
-  # libc6 - DHI base image (Debian 13)
+  # Go stdlib - statically linked into Syft v1.45.1 (built with go1.26.3)
   # ---------------------------------------------------------------------------
-  # Re-evaluate when: dhi.io/python:3.14 ships libc6 >= 2.41-12+deb13u3.
-  # Verify with: docker pull dhi.io/python:3.14 && grype dhi.io/python:3.14 --only-fixed
-  - vulnerability: CVE-2026-0861
-    reason: "glibc integer overflow in memalign. Fix not yet published in dhi.io/python:3.14 base image. Re-evaluate 2026-07-01."
-  - vulnerability: CVE-2026-4437
-    reason: "glibc HIGH in DHI base image. Fix in 2.41-12+deb13u3 not yet shipped by dhi.io/python:3.14 (currently 2.41-12+deb13u2). Re-evaluate 2026-07-01."
-  - vulnerability: CVE-2026-4046
-    reason: "glibc HIGH in DHI base image. Fix in 2.41-12+deb13u3 not yet shipped by dhi.io/python:3.14 (currently 2.41-12+deb13u2). Re-evaluate 2026-07-01."
+  # Re-evaluate when: Anchore ships a Syft release built with go1.26.4+
+  # (or go1.25.11+). Verify with: syft version  (look for the GoVersion line).
+  - vulnerability: CVE-2026-42504
+    reason: "Go stdlib HIGH in Syft binary (go1.26.3). Fixed in go1.26.4 / go1.25.11. Latest Syft release (v1.45.1) still ships go1.26.3. Re-evaluate 2026-07-24."
+  - vulnerability: GO-2026-5038
+    reason: "Go stdlib HIGH in Syft binary (go1.26.3). Fixed in go1.26.4 / go1.25.11. Latest Syft release (v1.45.1) still ships go1.26.3. Re-evaluate 2026-07-24."
 
   # ---------------------------------------------------------------------------
-  # Go stdlib - statically linked into Syft v1.44.0 binary (built with go1.26.2)
+  # containerd module - statically linked into Syft v1.45.1 binary
   # ---------------------------------------------------------------------------
-  # Re-evaluate when: Anchore ships a Syft release built with go1.26.3+
-  # (or go1.25.10+). Latest Syft release as of 2026-05-17 is v1.44.0 (2026-05-01).
-  # Verify with: syft version  (look for the Go version line)
-  - vulnerability: CVE-2026-39820
-    reason: "Go stdlib HIGH in Syft binary (go1.26.2). Fixed in go1.26.3 / go1.25.10. Awaiting upstream Syft release. Re-evaluate 2026-07-01."
-  - vulnerability: CVE-2026-42499
-    reason: "Go stdlib HIGH in Syft binary (go1.26.2). Fixed in go1.26.3 / go1.25.10. Awaiting upstream Syft release. Re-evaluate 2026-07-01."
-  - vulnerability: CVE-2026-39836
-    reason: "Go stdlib HIGH in Syft binary (go1.26.2). Fixed in go1.26.3 / go1.25.10. Awaiting upstream Syft release. Re-evaluate 2026-07-01."
-  - vulnerability: CVE-2026-33814
-    reason: "Go stdlib HIGH in Syft binary (go1.26.2). Fixed in go1.26.3 / go1.25.10. Awaiting upstream Syft release. Re-evaluate 2026-07-01."
-  - vulnerability: CVE-2026-33811
-    reason: "Go stdlib HIGH in Syft binary (go1.26.2). Fixed in go1.26.3 / go1.25.10. Awaiting upstream Syft release. Re-evaluate 2026-07-01."
-  - vulnerability: CVE-2026-42501
-    reason: "Go stdlib HIGH in Syft binary (go1.26.2). Fixed in go1.26.3 / go1.25.10. Awaiting upstream Syft release. Re-evaluate 2026-07-01."
-
-  # ---------------------------------------------------------------------------
-  # go-git modules - statically linked into Syft v1.44.0 binary
-  # ---------------------------------------------------------------------------
-  # Re-evaluate when: Anchore ships a Syft release with go-git/v5 >= 5.19.0
-  # and go-billy/v5 >= 5.9.0.
-  # Verify with: syft <image> -o cyclonedx-json | jq '.components[]|select(.name=="github.com/go-git/go-git/v5")'
-  - vulnerability: GHSA-qw64-3x98-g7q2
-    reason: "go-billy HIGH (5.8.0 < 5.9.0) embedded in Syft binary. Triggered only by malicious git repos; CLI does not invoke Syft against untrusted git inputs. Awaiting Syft dep bump. Re-evaluate 2026-07-01."
-  - vulnerability: GHSA-389r-gv7p-r3rp
-    reason: "go-git HIGH (5.18.0 < 5.19.0) embedded in Syft binary. Triggered only by malicious git repos; CLI does not invoke Syft against untrusted git inputs. Awaiting Syft dep bump. Re-evaluate 2026-07-01."
-
-  # ---------------------------------------------------------------------------
-  # containerd module - statically linked into Syft v1.44.0 binary
-  # ---------------------------------------------------------------------------
-  # Re-evaluate when: Anchore ships a Syft release with containerd/v2 >= 2.2.4.
+  # Re-evaluate when: Anchore ships a Syft release with containerd/v2 >= 2.3.2.
   # Verify with: syft <image> -o cyclonedx-json | jq '.components[]|select(.name=="github.com/containerd/containerd/v2")'
-  - vulnerability: GHSA-fqw6-gf59-qr4w
-    reason: "containerd HIGH (v2.2.2 < 2.2.4) embedded in Syft binary. runAsNonRoot runtime bypass; Syft uses containerd only to read image content, never runs containers, so the vulnerable path is unreachable. Latest Syft release (v1.44.0) still ships v2.2.2. Awaiting Syft dep bump. Re-evaluate 2026-07-01."
+  - vulnerability: GHSA-33vj-92qq-66hc
+    reason: "containerd HIGH (v2.3.1 < 2.3.2) embedded in Syft binary. Syft uses containerd only to read image content, never runs containers, so the vulnerable runtime path is unreachable. Awaiting Syft dep bump. Re-evaluate 2026-07-24."
+  - vulnerability: GHSA-rgh6-rfwx-v388
+    reason: "containerd HIGH (v2.3.1 < 2.3.2) embedded in Syft binary. Syft uses containerd only to read image content, never runs containers, so the vulnerable runtime path is unreachable. Awaiting Syft dep bump. Re-evaluate 2026-07-24."
+  - vulnerability: GHSA-xhf5-7wjv-pqxp
+    reason: "containerd HIGH (v2.3.1 < 2.3.2) embedded in Syft binary. Syft uses containerd only to read image content, never runs containers, so the vulnerable runtime path is unreachable. Awaiting Syft dep bump. Re-evaluate 2026-07-24."
+
+  # ---------------------------------------------------------------------------
+  # docker/cli module - statically linked into Syft v1.45.1 binary
+  # ---------------------------------------------------------------------------
+  # The installed version (v29.4.3+incompatible) is already newer than the
+  # advisory's fixed version (29.2.0+incompatible); Grype mismatches because of
+  # +incompatible pseudo-version ordering. No action available on our side.
+  # Re-evaluate when: Grype corrects the match or Syft pins a docker/cli the
+  # matcher recognizes as fixed.
+  - vulnerability: GO-2026-4610
+    reason: "docker/cli HIGH embedded in Syft binary. Installed v29.4.3+incompatible is already newer than the advisory fixed version 29.2.0+incompatible; this is a Grype +incompatible version-ordering false positive. Re-evaluate 2026-07-24."
