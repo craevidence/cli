@@ -1,0 +1,115 @@
+id: router-gateway
+title: "Router, gateway or access point"
+description: >-
+  A home or small-office router, gateway or access point that routes and firewalls
+  traffic, runs embedded Linux or an RTOS, and exposes a web admin interface.
+
+detect:
+  files:
+    - "openwrt/.config"
+    - "feeds.conf"
+    - "feeds.conf.default"
+    - "etc/config/network"
+    - "etc/config/firewall"
+    - "buildroot/.config"
+  manifests: []
+
+# A router or gateway sits on the network boundary and exercises every Annex I
+# Part I(2) requirement: it authenticates admins, routes and firewalls traffic,
+# stores credentials and configuration, must stay available under denial-of-service
+# load, and must avoid harming other networks. No letter is pre-marked
+# not-applicable; confirm applicability per product. Part I(1) and all Part II
+# duties are mandatory and never not-applicable.
+applicability:
+  not_applicable: {}
+  how_applied:
+    part_i_2_b: "[Describe the secure default settings for the admin interface, WiFi and remote management, and the factory reset that returns the device to its original state]"
+    part_i_2_d: "[Describe admin authentication, per-device admin credentials, lockout on repeated failures, and how unauthorised access attempts are reported]"
+    part_i_2_h: "[Describe how routing, firewalling and DHCP stay available after an incident, including resilience and mitigation against denial-of-service traffic]"
+    part_i_2_i: "[Describe how the device limits the load it places on upstream links and other networks, for example rate limiting, source address filtering and amplification protection]"
+    part_i_2_j: "[Describe which external interfaces and services are exposed by default, which are disabled, and how the WAN-side attack surface is kept minimal]"
+    part_ii_1: "[Describe how the SBOM is produced and kept current for the embedded base system and bundled services in each firmware release]"
+    part_ii_7: "[Describe how firmware updates are distributed securely to fielded devices, including automatic security updates where applicable]"
+
+risks:
+  - id: R01
+    title: "Exposed remote management on the WAN interface"
+    group: "remote-management"
+    severity: "Critical"
+    description: "The web admin UI, SSH or a vendor management service is reachable from the internet side, often enabled by default."
+    impact: "Remote takeover of the device, redirection of all routed traffic, and a foothold into every host behind the router."
+    recommended: true
+  - id: R02
+    title: "Default or shared admin credentials"
+    group: "access-control"
+    severity: "High"
+    description: "Units ship with a common admin password or WiFi key that the user is not forced to change before use."
+    impact: "Mass takeover of identical units, botnet enrolment, and unauthorised changes to firewall and DNS settings."
+    recommended: true
+  - id: R03
+    title: "Denial-of-service exhausts routing and firewall capacity"
+    group: "availability"
+    severity: "High"
+    description: "Flood or malformed-packet traffic exhausts connection tables, CPU or memory and the device stops routing."
+    impact: "Loss of connectivity for the whole site and failure of essential functions during an attack."
+    recommended: true
+  - id: R04
+    title: "Device amplifies or relays attacks against other networks"
+    group: "network-impact"
+    severity: "High"
+    description: "Open DNS, NTP or UPnP services and missing source-address filtering let the device be used in reflection or relay attacks."
+    impact: "The product contributes to attacks on other networks and may be blocked or rate-limited by upstream providers."
+    recommended: true
+  - id: R05
+    title: "Vulnerable embedded base system and network services"
+    group: "supply-chain"
+    severity: "High"
+    description: "The embedded Linux or RTOS base, the web server, and bundled daemons carry known, fixable vulnerabilities."
+    impact: "Remote exploitation via a published CVE on a device that sits at the network boundary."
+    recommended: true
+  - id: R06
+    title: "Unsigned or undeliverable firmware updates"
+    group: "update-mechanism"
+    severity: "High"
+    description: "Firmware images are not signature-verified before flashing, or updates cannot reach fielded devices."
+    impact: "Persistent compromise through tampered images and an inability to remediate vulnerabilities during the support period."
+    recommended: true
+  - id: R07
+    title: "Stored secrets and configuration without protection"
+    group: "data-protection"
+    severity: "Medium"
+    description: "WiFi keys, VPN credentials, ISP logins and routing configuration are held in cleartext in flash or in config backups."
+    impact: "Disclosure of network credentials if the device, a backup file, or a returned unit is recovered."
+    recommended: true
+
+controls:
+  - id: C01
+    title: "Remote management off by default and scoped"
+    objective: "WAN-side administration is disabled by default; when enabled it is restricted to authenticated, encrypted access from defined sources."
+    group: "remote-management"
+    recommended: true
+  - id: C02
+    title: "Forced unique admin credentials"
+    objective: "The device requires the admin password and any pre-set WiFi key to be unique per unit or changed before first use."
+    group: "access-control"
+    recommended: true
+  - id: C03
+    title: "Resilience against denial-of-service traffic"
+    objective: "Routing and firewall functions apply rate limiting and resource limits so essential functions stay available under flood conditions."
+    group: "availability"
+    recommended: true
+  - id: C04
+    title: "Egress and reflection-abuse protection"
+    objective: "Source-address filtering is applied and reflection-prone services are closed or restricted so the device cannot be used against other networks."
+    group: "network-impact"
+    recommended: true
+  - id: C05
+    title: "Signed firmware updates with secure distribution"
+    objective: "The device verifies an image signature before flashing and updates are distributed over an authenticated, encrypted channel."
+    group: "update-mechanism"
+    recommended: true
+  - id: C06
+    title: "Minimised default attack surface"
+    objective: "Only required services listen by default, WAN-side ports are closed, and debug and management interfaces are disabled in production builds."
+    group: "attack-surface"
+    recommended: true

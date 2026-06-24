@@ -105,6 +105,7 @@ Full flags, output, and CRA citations for each are in [docs/local-commands.md](d
 | [`config-check`](docs/local-commands.md#config-check) | Audit Dockerfile / Terraform / Kubernetes config for insecure defaults. |
 | [`draft`](docs/local-commands.md#draft) | Scaffold VEX, security.txt, advisory, risk-assessment, and threat-model drafts for manual completion. |
 | [`compliance-as-code template --offline`](docs/local-commands.md#compliance-as-code-template---offline) | Build a starter compliance YAML (risk/threat/policy) locally from an SBOM. |
+| [`assessment`](docs/local-commands.md#assessment) | Scaffold a CRA Annex I applicability matrix from a product-type template and gate CI on unaddressed Part II duties or unjustified waivers. |
 | [`db update`](docs/local-commands.md#db-update) / [`db status`](docs/local-commands.md#db-status) | Manage and inspect the local Grype vulnerability database cache. |
 | [`version`](docs/local-commands.md#version) | Show CLI version information. |
 
@@ -236,6 +237,8 @@ timeout: 60
 | 22 | SBOM signature trust required but verification was not trusted |
 | 23 | SBOM signing failed or no Sigstore OIDC identity was available |
 | 24 | CRA legal floor is met but the organisation's release policy is not (`--fail-on` set) |
+| 25 | Mandatory Annex I requirement (Part I(1) or a Part II duty) is not addressed (`assessment check`) |
+| 26 | Annex I Part I(2) requirement marked not-applicable without a justification (`assessment check`) |
 
 ## Documentation
 

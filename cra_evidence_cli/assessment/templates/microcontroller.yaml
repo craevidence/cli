@@ -1,0 +1,124 @@
+id: microcontroller
+title: "Microcontroller firmware target"
+description: >-
+  Bare-metal or RTOS firmware for a resource-constrained microcontroller such as
+  a Cortex-M part or an ESP32, with secure boot, signed updates over constrained
+  links, limited on-device logging and a small external attack surface.
+
+detect:
+  files:
+    - "platformio.ini"
+    - "sdkconfig"
+    - "Kconfig"
+    - "prj.conf"
+    - "zephyr/prj.conf"
+    - "CMakeLists.txt"
+    - "Makefile"
+    - "linker.ld"
+  manifests:
+    - "west.yml"
+    - "idf_component.yml"
+
+# A deeply embedded microcontroller exercises most Annex I Part I(2) requirements.
+# Two letters are pre-marked not-applicable as candidates for a headless target
+# that stores no user data or settings and cannot record activity; confirm and
+# justify each against the actual product. Part I(1) and every Part II duty are
+# mandatory and never not-applicable.
+applicability:
+  not_applicable:
+    part_i_2_l: "[Justify: this target is headless, has no persistent storage and no channel to record or surface activity, so security logging and monitoring does not apply. If any log channel exists, mark this applicable instead]"
+    part_i_2_m: "[Justify: this target stores no user data or user-configurable settings, so the secure removal of data and settings does not apply. If the device retains provisioning data, credentials or settings, mark this applicable instead]"
+  how_applied:
+    part_i_2_a: "[Describe how the firmware and bundled components are screened for known exploitable vulnerabilities before release]"
+    part_i_2_b: "[Describe the secure default configuration, disabled-by-default debug paths, and the documented reset to the original firmware state]"
+    part_i_2_c: "[Describe the update mechanism over the constrained link, how updates are signaled, and the timeframe for applying security fixes]"
+    part_i_2_d: "[Describe authentication for any control or provisioning interface and per-device key material]"
+    part_i_2_f: "[Describe secure boot, the signature chain, and how firmware and configuration integrity are verified at boot and update time]"
+    part_i_2_g: "[Confirm whether personal data is processed; if none is processed, record that and describe the limited operational data the firmware handles]"
+    part_i_2_j: "[Describe the external interfaces exposed in production and how unused peripherals, ports and debug paths are removed or locked]"
+    part_i_2_k: "[Describe exploitation mitigations available on the part, such as the MPU configuration, stack protection and read-out protection]"
+    part_ii_1: "[Describe how the SBOM is produced and kept current for each firmware build, including the toolchain and RTOS components]"
+    part_ii_7: "[Describe how signed updates are distributed to fielded devices over the constrained link]"
+
+risks:
+  - id: R01
+    title: "Unverified firmware boot or update"
+    group: "boot-integrity"
+    severity: "Critical"
+    description: "The bootloader runs firmware without verifying a signature, or applies updates without checking authenticity and version."
+    impact: "Attacker-supplied firmware runs with full hardware privilege and persists across reboots and updates."
+    recommended: true
+  - id: R02
+    title: "Exposed debug and programming interfaces"
+    group: "attack-surface"
+    severity: "High"
+    description: "Production parts ship with SWD, JTAG or UART bootloader access enabled and read-out protection disabled."
+    impact: "Local extraction of firmware and secrets, bypass of secure boot, and re-flashing with modified firmware."
+    recommended: true
+  - id: R03
+    title: "Secrets and keys recoverable from flash"
+    group: "key-protection"
+    severity: "High"
+    description: "Signing keys, device credentials or transport keys are held in plain on-chip or external flash without protection."
+    impact: "Recovery of a single key enables impersonation or counterfeit firmware across many units."
+    recommended: true
+  - id: R04
+    title: "Memory-safety defects in C or C++ firmware"
+    group: "exploitation"
+    severity: "High"
+    description: "Buffer overruns or unchecked input in firmware parsing routines are reachable from an external interface."
+    impact: "Remote code execution or denial of service on the device, with no operating-system isolation to contain it."
+    recommended: true
+  - id: R05
+    title: "Vulnerable RTOS or third-party components"
+    group: "supply-chain"
+    severity: "High"
+    description: "The bundled RTOS, network stack or vendor SDK carries known, fixable vulnerabilities."
+    impact: "Exploitation through a published CVE and an obligation to remediate fielded devices without delay."
+    recommended: true
+  - id: R06
+    title: "No update path for fielded devices"
+    group: "update-mechanism"
+    severity: "Medium"
+    description: "The constrained link or storage budget leaves no reliable way to deliver firmware updates after deployment."
+    impact: "Known vulnerabilities cannot be remediated during the support period, leaving devices exposed."
+    recommended: true
+  - id: R07
+    title: "Weak entropy for keys and nonces"
+    group: "cryptography"
+    severity: "Medium"
+    description: "Key generation and protocol nonces rely on a predictable seed because the part lacks a vetted entropy source."
+    impact: "Predictable keys and nonces weaken transport security and device authentication."
+    recommended: true
+
+controls:
+  - id: C01
+    title: "Verified secure boot with rollback protection"
+    objective: "The boot chain verifies a signature before running firmware and refuses downgrades to vulnerable versions."
+    group: "boot-integrity"
+    recommended: true
+  - id: C02
+    title: "Lock debug and programming interfaces in production"
+    objective: "Production provisioning disables or locks SWD, JTAG and serial bootloaders and enables read-out protection."
+    group: "attack-surface"
+    recommended: true
+  - id: C03
+    title: "Hardware-backed key storage"
+    objective: "Keys are held in protected storage or a security peripheral and are not readable from application firmware or flash."
+    group: "key-protection"
+    recommended: true
+  - id: C04
+    title: "Memory protection and exploitation mitigations"
+    objective: "The build enables the memory protection unit, stack protection and compiler hardening available on the part."
+    group: "exploitation"
+    recommended: true
+  - id: C05
+    title: "Pinned and screened dependencies with an SBOM"
+    objective: "RTOS and third-party components are pinned, screened against known vulnerabilities, and recorded in a per-build SBOM."
+    group: "supply-chain"
+    recommended: true
+  - id: C06
+    title: "Signed updates over the field link"
+    objective: "Firmware updates are signed, delivered to fielded devices, and verified before they are applied."
+    group: "update-mechanism"
+    recommended: true

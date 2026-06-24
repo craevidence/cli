@@ -515,6 +515,7 @@ def _emit_scaffold(
     product: str | None,
     org: str | None,
     output_file: Path | None,
+    template_id: str | None = None,
 ) -> None:
     from cra_evidence_cli.commands.gemara import TEMPLATE_BUILDERS
 
@@ -538,6 +539,17 @@ def _emit_scaffold(
         )
     product_obj = {"name": product or "<product>", "slug": product or "product"}
     doc = TEMPLATE_BUILDERS[gemara_type](product_obj, org or "", comp_dicts)
+    if template_id and gemara_type == "RiskCatalog":
+        from cra_evidence_cli.assessment.templates import (
+            TemplateError,
+            load_template,
+            merge_template_risks,
+        )
+
+        try:
+            doc = merge_template_risks(doc, load_template(template_id))
+        except TemplateError as exc:
+            raise click.UsageError(str(exc)) from exc
     _dump_and_emit(doc, output_file, f"{gemara_type} scaffold")
 
 
@@ -764,6 +776,13 @@ def _threat_catalog_from_diagram(
 @click.option("--product", default=None, help="Product name to embed (placeholder if omitted).")
 @click.option("--org", default=None, help="Organisation name to embed.")
 @click.option(
+    "--template",
+    "template_id",
+    default=None,
+    help="Product-type template to also seed product-type risks from "
+    "(see 'assessment templates').",
+)
+@click.option(
     "-o",
     "--output-file",
     "output_file",
@@ -777,6 +796,7 @@ def risk_assessment(
     sbom_file: Path | None,
     product: str | None,
     org: str | None,
+    template_id: str | None,
     output_file: Path | None,
 ) -> None:
     """Scaffold a RiskCatalog seeded from your SBOM components.
@@ -785,10 +805,13 @@ def risk_assessment(
     seeds risk entries from real component names and from a local vulnerability
     scan, so you can fill in impacts and judgements. The scan uses the same
     engine as 'check' and by default uses the network for vulnerability data; it
-    needs no API key and never contacts CRA Evidence. It produces the same
-    format as 'compliance-as-code template --type risk-catalog'.
+    needs no API key and never contacts CRA Evidence. Pass --template to also
+    prepend a product-type starter set of risks. It produces the same format as
+    'compliance-as-code template --type risk-catalog'.
     """
-    _emit_scaffold("RiskCatalog", ctx, path, sbom_file, product, org, output_file)
+    _emit_scaffold(
+        "RiskCatalog", ctx, path, sbom_file, product, org, output_file, template_id=template_id
+    )
 
 
 @draft.command("threat-model")

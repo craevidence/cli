@@ -359,6 +359,60 @@ no network. Add `--sbom <sbom.json>` with `--offline` to seed RiskCatalog or
 ThreatCatalog subjects from local components; without `--sbom`, offline output
 uses placeholders you must replace. Install `cue` for local validation.
 
+## `assessment`
+
+Scaffold and gate a local CRA Annex I applicability assessment. No account or API
+key, no network. The matrix and catalogs are starters you complete; the gate
+checks structured gaps only, so it is **not an audit and exit 0 does not prove
+compliance**.
+
+```
+# List the bundled product-type templates
+craevidence assessment templates
+
+# Scaffold from a template (multi-select runs in a terminal; recommended items pre-checked)
+craevidence assessment new --template consumer-iot --product "My Camera"
+
+# Lint the matrix and gate CI
+craevidence assessment check
+```
+
+`assessment new` writes three files into `.cra/` (configurable with
+`--output-dir`) and never overwrites an existing file:
+
+- `assessment.yaml` - the applicability matrix: one row per canonical Annex I
+  requirement (Part I(1), the thirteen Part I(2) letters, the eight Part II
+  duties), with its applicability, implementation status, and any justification.
+- `risk-catalog.yaml` and `control-catalog.yaml` - Gemara starters seeded from the
+  risks and controls you select, in the same shape as `compliance-as-code template`.
+
+Pass `--non-interactive` (or run in CI) to keep the recommended items without a
+prompt. With no `--template`, the product type is auto-detected from build and
+manifest files in the path; it only suggests, and asks you to pass `--template`
+when the signal is unclear.
+
+`assessment check` lints the matrix and exits non-zero on:
+
+- **exit 25** - a mandatory requirement (Part I(1) or any Part II duty) is absent,
+  marked not-applicable, or applicable with no implementation recorded.
+- **exit 26** - a Part I(2) requirement is marked not-applicable with no
+  justification (CRA Article 13(4) requires a clear justification).
+
+Two optional committed files tune the gate, both auto-discovered in `.cra/`:
+
+- `assessment-gate.yaml` - `fail_on` selects which conditions block
+  (`missing_mandatory`, `unjustified_waiver`); others are reported but advisory.
+  It can also set the `matrix` and `exceptions` paths.
+- `assessment-exceptions.yaml` - per-requirement justifications. An entry can
+  justify a Part I(2) not-applicable decision, or record that a mandatory duty is
+  `addressed_elsewhere`, without editing the generated matrix. A mandatory
+  requirement can never be marked not-applicable, in the matrix or here.
+
+`--template`, `--matrix`, `--config`, and `--exceptions` override the defaults.
+You can also seed a product-type risk set into the existing scaffold with
+`craevidence draft risk-assessment --template <id>` or
+`craevidence compliance-as-code template --type risk-catalog --template <id>`.
+
 ## `version`
 
 Show the CLI version.

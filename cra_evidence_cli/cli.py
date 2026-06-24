@@ -9,6 +9,7 @@ from rich.console import Console
 
 from cra_evidence_cli import __version__
 from cra_evidence_cli.commands import (
+    assessment,
     check,
     compare,
     components,
@@ -98,6 +99,7 @@ def cli(
         # routes to a fully local checker for its ``check`` subcommand; its
         # keyed subcommands still validate later, so including it here is safe.
         if ctx.invoked_subcommand in (
+            "assessment",
             "check",
             "db",
             "draft",
@@ -169,6 +171,8 @@ cli.add_command(validate.validate_sbom_command)
 cli.add_command(verify.verify)
 
 cli.add_command(gemara.gemara)
+
+cli.add_command(assessment.assessment)
 
 
 def main() -> None:

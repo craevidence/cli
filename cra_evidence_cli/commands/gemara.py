@@ -535,6 +535,9 @@ def _components_from_sbom(sbom_path: Path) -> list[dict]:
 @click.option("--sbom", "sbom_file",
               type=click.Path(exists=True, dir_okay=False, path_type=Path),
               help="With --offline, seed RiskCatalog or ThreatCatalog subjects from a local SBOM.")
+@click.option("--template", "starter_template_id", default=None,
+              help="Product-type template to also seed risks from, for --type risk-catalog "
+                   "(see 'assessment templates').")
 @click.pass_context
 def template(
     ctx: click.Context,
@@ -545,6 +548,7 @@ def template(
     org_name_opt: str | None,
     offline: bool,
     sbom_file: Path | None,
+    starter_template_id: str | None,
 ) -> None:
     """
     Generate a starter compliance YAML file for a product.
@@ -558,6 +562,27 @@ def template(
     """
     config = ctx.obj["config"]
     gemara_type = TEMPLATE_TYPES[template_type.lower()]
+
+    if starter_template_id and gemara_type != "RiskCatalog":
+        msg = (
+            "--template applies to --type risk-catalog; use 'assessment new' for the "
+            "full product-type starter."
+        )
+        raise click.UsageError(msg)
+
+    def _apply_starter(doc: dict) -> dict:
+        if not starter_template_id:
+            return doc
+        from cra_evidence_cli.assessment.templates import (
+            TemplateError,
+            load_template,
+            merge_template_risks,
+        )
+
+        try:
+            return merge_template_risks(doc, load_template(starter_template_id))
+        except TemplateError as exc:
+            raise click.UsageError(str(exc)) from exc
 
     if sbom_file is not None and not offline:
         msg = "--sbom is supported with --offline template generation."
@@ -578,6 +603,7 @@ def template(
             else []
         )
         doc = TEMPLATE_BUILDERS[gemara_type](product_obj, org_name_opt or "", components)
+        doc = _apply_starter(doc)
         _write_gemara_template(output_path, doc)
         console.print(
             "[dim]Generated offline with a placeholder product identity. "
@@ -607,6 +633,7 @@ def template(
             return builder(product_obj, org_name, components)
 
         doc = asyncio.run(_run())
+        doc = _apply_starter(doc)
         _write_gemara_template(output_path, doc)
 
     except httpx.HTTPError as e:
