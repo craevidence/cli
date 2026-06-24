@@ -37,7 +37,7 @@
 #   docker pull dhi.io/python:3.14-dev
 #   docker inspect dhi.io/python:3.14-dev --format='{{index .RepoDigests 0}}'
 # -----------------------------------------------------------------------------
-FROM dhi.io/python:3.14-dev@sha256:6fb2fbaf1cbfedeac9b035bdc5538b237385164803254c8d47d784fc7395fe94 AS builder
+FROM dhi.io/python:3.14-dev@sha256:278a2051e1ccb1f349d1d9f86da9a5a3cb8e52c122ee6a9da278993ecbc1090b AS builder
 
 # Build-time environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -56,19 +56,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install Syft CLI for SBOM generation via direct binary download with SHA256 verification
 # Uses a checksum-verified direct download instead of curl|sh to reduce supply chain risk
-ARG SYFT_VERSION=1.44.0
+ARG SYFT_VERSION=1.45.1
 ARG TARGETARCH
-# Known SHA256 checksums for syft v1.44.0 linux tarballs (from official release page)
-# amd64: 0e91737aee2b5baf1d255b959630194a302335d848ff97bb07921eb6205b5f5a
-# arm64: 6f6cdcdc695721d91ce756e3b5bc3e3416599c464101f5e32e9c3f33054ee6d9
+# Known SHA256 checksums for syft v1.45.1 linux tarballs (from official release page)
+# amd64: 20c84195e24927f50a3b2269946be51f4c4abc9d2f145fee7388b4199149f716
+# arm64: 7df9f45cba1f6358ecfc7fac349d43b4605137001f9646b41267abe15a7c6cd7
 RUN set -eux; \
     ARCH="${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')}"; \
     TARBALL="syft_${SYFT_VERSION}_linux_${ARCH}.tar.gz"; \
     curl -fsSL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${TARBALL}" \
         -o "/tmp/${TARBALL}"; \
     case "${ARCH}" in \
-        amd64) EXPECTED="0e91737aee2b5baf1d255b959630194a302335d848ff97bb07921eb6205b5f5a" ;; \
-        arm64) EXPECTED="6f6cdcdc695721d91ce756e3b5bc3e3416599c464101f5e32e9c3f33054ee6d9" ;; \
+        amd64) EXPECTED="20c84195e24927f50a3b2269946be51f4c4abc9d2f145fee7388b4199149f716" ;; \
+        arm64) EXPECTED="7df9f45cba1f6358ecfc7fac349d43b4605137001f9646b41267abe15a7c6cd7" ;; \
         *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
     esac; \
     echo "${EXPECTED}  /tmp/${TARBALL}" | sha256sum -c -; \
@@ -114,7 +114,7 @@ RUN chown -R 1001:1001 /opt/venv /build/ssl
 #   docker pull dhi.io/python:3.14
 #   docker inspect dhi.io/python:3.14 --format='{{index .RepoDigests 0}}'
 # -----------------------------------------------------------------------------
-FROM dhi.io/python:3.14@sha256:06affe7f9b2dbca52f8ccdaeb2aef7d0e9096f52121d25a9a97d186fdbbd0827
+FROM dhi.io/python:3.14@sha256:f0e074dca2de2f27be6e3536b13fb8cd9e44764b22daac237b9cbf2c9982be59
 
 # OCI Image Labels for CRA compliance and traceability
 LABEL org.opencontainers.image.title="CRA Evidence CLI" \
