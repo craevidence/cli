@@ -19,6 +19,12 @@ from cra_evidence_cli.exceptions import ConfigurationError
 
 _TRUSTED_URL_SUFFIX = ".craevidence.com"
 
+# Per-repository identity env vars (consumed by repo_config.resolve_identity).
+# These override .cra/evidence.yaml but lose to explicit CLI flags.
+ENV_PRODUCT = "CRA_EVIDENCE_PRODUCT"
+ENV_VERSION = "CRA_EVIDENCE_VERSION"
+ENV_COMPONENT = "CRA_EVIDENCE_COMPONENT"
+
 
 class CRAEvidenceConfig(BaseModel):
     """Configuration for CRA Evidence CLI."""

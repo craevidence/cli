@@ -188,6 +188,9 @@ Container registries, building from source, and SBOM generation from Docker imag
 | `CRA_EVIDENCE_URL` | CRA Evidence base URL | `https://api.craevidence.com` |
 | `CRA_EVIDENCE_ORG` | Default organization slug | (optional) |
 | `CRA_EVIDENCE_TIMEOUT` | Request timeout in seconds | `60` |
+| `CRA_EVIDENCE_PRODUCT` | Product slug for upload commands | (optional) |
+| `CRA_EVIDENCE_VERSION` | Version for upload commands | (optional) |
+| `CRA_EVIDENCE_COMPONENT` | Component slug for upload commands | (optional) |
 
 ### Config File
 
@@ -209,6 +212,27 @@ timeout: 60
 ```
 
 > **Security note:** `chmod 600 ~/.cra-evidence/config.yaml` so no other user on the system can read your API key.
+
+### Repository identity (`.cra/evidence.yaml`)
+
+Commit a `.cra/evidence.yaml` so upload commands know which product, component, and version a repository belongs to, without repeating `--product` and `--version` on every command.
+
+```yaml
+# .cra/evidence.yaml
+schema_version: 1
+product: my-platform        # product slug this repository contributes to
+component: firmware         # this repository's component (omit for a single-repo product)
+component_kind: firmware    # frontend | service | datastore | firmware | library | other
+version_from: git-tag       # git-tag | file:VERSION | pyproject | package.json | env:VAR
+```
+
+The file is discovered from the current directory first, then from the repository root. Precedence is explicit flag, then `CRA_EVIDENCE_PRODUCT` / `CRA_EVIDENCE_VERSION` / `CRA_EVIDENCE_COMPONENT`, then this file. For a monorepo, place one file per sub-project directory and run the command from that directory. The free `check` and `assessment` commands do not read or require it.
+
+With the file in place, a release step is just:
+
+```bash
+craevidence upload-sbom --file sbom.cdx.json
+```
 
 ## Exit Codes
 

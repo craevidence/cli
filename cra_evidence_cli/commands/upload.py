@@ -25,6 +25,7 @@ from cra_evidence_cli.exceptions import (
     StructuredEvidenceMappingRequired,
     VulnerabilityThresholdExceeded,
 )
+from cra_evidence_cli.repo_config import resolve_identity
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
     generate_sbom_from_directory,
@@ -765,13 +766,13 @@ def _resolve_signature_inputs(
 @click.command("upload-sbom")
 @click.option(
     "--product",
-    required=True,
+    default=None,
     help="Product slug or ID",
 )
 @click.option(
     "--version",
     "version_number",
-    required=True,
+    default=None,
     help="Version number",
 )
 @click.option(
@@ -1029,8 +1030,8 @@ def _resolve_signature_inputs(
 @click.pass_context
 def upload_sbom(
     ctx: click.Context,
-    product: str,
-    version_number: str,
+    product: str | None,
+    version_number: str | None,
     file_path: Path | None,
     signature_bundle_path: Path | None,
     signature_on: bool,
@@ -1091,6 +1092,15 @@ def upload_sbom(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
+
+    try:
+        product, version_number, component_slug = resolve_identity(
+            product, version_number, component_slug
+        )
+    except CRAEvidenceError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(e.exit_code)
+
     generated_sbom_path: Path | None = None
     generated_signature_bundle_path: Path | None = None
     _tmp_kernel_config: Path | None = None
@@ -1442,13 +1452,13 @@ def upload_sbom(
 @click.command("upload-hbom")
 @click.option(
     "--product",
-    required=True,
+    default=None,
     help="Product slug or ID",
 )
 @click.option(
     "--version",
     "version_number",
-    required=True,
+    default=None,
     help="Version number",
 )
 @click.option(
@@ -1591,8 +1601,8 @@ def upload_sbom(
 @click.pass_context
 def upload_hbom(
     ctx: click.Context,
-    product: str,
-    version_number: str,
+    product: str | None,
+    version_number: str | None,
     file_path: Path | None,
     csv_path: Path | None,
     create_product: bool,
@@ -1632,6 +1642,12 @@ def upload_hbom(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
+
+    try:
+        product, version_number, _ = resolve_identity(product, version_number, None)
+    except CRAEvidenceError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(e.exit_code)
 
     # Exactly one of --file / --csv is required (mirrors upload-sbom exclusivity).
     if bool(file_path) == bool(csv_path):
@@ -1708,13 +1724,13 @@ def upload_hbom(
 @click.command("upload-vex")
 @click.option(
     "--product",
-    required=True,
+    default=None,
     help="Product slug or ID",
 )
 @click.option(
     "--version",
     "version_number",
-    required=True,
+    default=None,
     help="Version number",
 )
 @click.option(
@@ -1800,8 +1816,8 @@ def upload_hbom(
 @click.pass_context
 def upload_vex(
     ctx: click.Context,
-    product: str,
-    version_number: str,
+    product: str | None,
+    version_number: str | None,
     file_path: Path,
     # CRA classification
     category: str | None,
@@ -1830,6 +1846,12 @@ def upload_vex(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
+
+    try:
+        product, version_number, _ = resolve_identity(product, version_number, None)
+    except CRAEvidenceError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(e.exit_code)
 
     # Validate CRA classification consistency
     category, subcategory = validate_classification(category, subcategory)
@@ -1887,13 +1909,13 @@ def upload_vex(
 @click.command("upload-sarif")
 @click.option(
     "--product",
-    required=True,
+    default=None,
     help="Product slug or ID",
 )
 @click.option(
     "--version",
     "version_number",
-    required=True,
+    default=None,
     help="Version number",
 )
 @click.option(
@@ -1979,8 +2001,8 @@ def upload_vex(
 @click.pass_context
 def upload_sarif(
     ctx: click.Context,
-    product: str,
-    version_number: str,
+    product: str | None,
+    version_number: str | None,
     file_path: Path,
     # CRA classification
     category: str | None,
@@ -2012,6 +2034,12 @@ def upload_sarif(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
+
+    try:
+        product, version_number, _ = resolve_identity(product, version_number, None)
+    except CRAEvidenceError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(e.exit_code)
 
     # Validate CRA classification consistency
     category, subcategory = validate_classification(category, subcategory)
@@ -2069,13 +2097,13 @@ def upload_sarif(
 @click.command("upload-attestation")
 @click.option(
     "--product",
-    required=True,
+    default=None,
     help="Product slug or ID",
 )
 @click.option(
     "--version",
     "version_number",
-    required=True,
+    default=None,
     help="Existing version number",
 )
 @click.option(
@@ -2088,8 +2116,8 @@ def upload_sarif(
 @click.pass_context
 def upload_attestation(
     ctx: click.Context,
-    product: str,
-    version_number: str,
+    product: str | None,
+    version_number: str | None,
     file_path: Path,
 ) -> None:
     """
@@ -2103,6 +2131,12 @@ def upload_attestation(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
+
+    try:
+        product, version_number, _ = resolve_identity(product, version_number, None)
+    except CRAEvidenceError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(e.exit_code)
 
     try:
         validate_config(config)
@@ -2133,13 +2167,13 @@ def upload_attestation(
 @click.command("upload-document")
 @click.option(
     "--product",
-    required=True,
+    default=None,
     help="Product slug or ID",
 )
 @click.option(
     "--version",
     "version_number",
-    required=True,
+    default=None,
     help="Version number",
 )
 @click.option(
@@ -2286,8 +2320,8 @@ def upload_attestation(
 @click.pass_context
 def upload_document(
     ctx: click.Context,
-    product: str,
-    version_number: str,
+    product: str | None,
+    version_number: str | None,
     file_path: Path,
     document_type: str,
     create_product: bool,
@@ -2323,6 +2357,12 @@ def upload_document(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
+
+    try:
+        product, version_number, _ = resolve_identity(product, version_number, None)
+    except CRAEvidenceError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(e.exit_code)
 
     # Validate CRA classification consistency
     category, subcategory = validate_classification(category, subcategory)
