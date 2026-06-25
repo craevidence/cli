@@ -13,6 +13,7 @@ from rich.table import Table
 from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import CRAEvidenceError, VulnerabilityThresholdExceeded
+from cra_evidence_cli.repo_config import resolve_identity
 
 console = Console()
 err_console = Console(stderr=True)
@@ -104,13 +105,13 @@ def check_vulnerability_threshold(
 @click.command("scan")
 @click.option(
     "--product",
-    required=True,
+    default=None,
     help="Product slug or ID",
 )
 @click.option(
     "--version",
     "version_number",
-    required=True,
+    default=None,
     help="Version number",
 )
 @click.option(
@@ -130,8 +131,8 @@ def check_vulnerability_threshold(
 @click.pass_context
 def scan(
     ctx: click.Context,
-    product: str,
-    version_number: str,
+    product: str | None,
+    version_number: str | None,
     component: str | None,
     fail_on: str | None,
 ) -> None:
@@ -150,6 +151,12 @@ def scan(
     """
     config = ctx.obj["config"]
     output_format = config.output_format
+
+    try:
+        product, version_number, component = resolve_identity(product, version_number, component)
+    except CRAEvidenceError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        sys.exit(e.exit_code)
 
     try:
         validate_config(config)

@@ -86,6 +86,11 @@ def cli(
     Upload SBOMs, HBOMs, and VEX documents to CRA Evidence from CI/CD
     pipelines. Use --api-key or CRA_EVIDENCE_API_KEY for API-key
     authentication. In GitHub Actions, --oidc uses the workflow OIDC identity.
+
+    Commit a .cra/evidence.yaml to set the product, component, and version
+    source for a repository so upload commands do not need --product or
+    --version. Explicit flags and CRA_EVIDENCE_PRODUCT / CRA_EVIDENCE_VERSION /
+    CRA_EVIDENCE_COMPONENT override the file.
     """
     ctx.ensure_object(dict)
 
