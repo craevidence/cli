@@ -142,7 +142,11 @@ class GrypeLocalScanner:
 
 
 def parse_grype_output(raw: str) -> list[Finding]:
-    data = json.loads(raw)
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        message = "scanner returned output that could not be parsed"
+        raise ScanEngineUnavailable(message) from exc
     findings: list[Finding] = []
     for match in data.get("matches", []):
         vulnerability = match.get("vulnerability") or {}

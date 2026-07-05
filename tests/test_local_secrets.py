@@ -173,3 +173,40 @@ def test_git_history_detection(tmp_path):
     assert gh, "github token not recovered from history"
     assert gh[0].commit is not None
     assert GH not in gh[0].redacted
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git binary not available")
+def test_git_history_scan_is_limited_to_target_path(tmp_path):
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_COMMITTER_EMAIL": "t@t",
+    }
+
+    def git(*args):
+        subprocess.run(  # noqa: S603
+            ["git", "-C", str(tmp_path), *args],  # noqa: S607
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+    git("init", "-q")
+    _write(tmp_path, "inside/leak.txt", f"token={GH}\n")
+    _write(tmp_path, "outside/leak.txt", f"KEY = \"{AWS}\"\n")
+    git("add", "-A")
+    git("commit", "-qm", "add leaks")
+    (tmp_path / "inside/leak.txt").unlink()
+    (tmp_path / "outside/leak.txt").unlink()
+    git("add", "-A")
+    git("commit", "-qm", "remove leaks")
+
+    report = sec.evaluate(tmp_path / "inside", scan_history=True)
+
+    assert report.history_scanned is True
+    assert report.history_hits == 1
+    assert report.hits[0].location == "inside/leak.txt"
+    assert report.hits[0].detector == "github-token"
