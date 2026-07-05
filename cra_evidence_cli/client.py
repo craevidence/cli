@@ -718,11 +718,16 @@ class CRAEvidenceClient:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/json")}
 
-                response = await client.post(
-                    f"{self.base_url}/api/v1/sboms/validate",
-                    headers=self._get_headers(),
-                    files=files,
-                )
+                endpoint = f"{self.base_url}/api/v1/sboms/validate"
+                try:
+                    response = await client.post(
+                        endpoint,
+                        headers=self._get_headers(),
+                        files=files,
+                    )
+                except httpx.RequestError as exc:
+                    message = f"Network error contacting {endpoint}: {exc}"
+                    raise APIError(message=message) from exc
 
                 return self._handle_response(response)
 
@@ -812,11 +817,16 @@ class CRAEvidenceClient:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/json")}
 
-                response = await client.post(
-                    f"{self.base_url}/api/v1/versions/{version_id}/sarif",
-                    headers=self._get_headers(),
-                    files=files,
-                )
+                endpoint = f"{self.base_url}/api/v1/versions/{version_id}/sarif"
+                try:
+                    response = await client.post(
+                        endpoint,
+                        headers=self._get_headers(),
+                        files=files,
+                    )
+                except httpx.RequestError as exc:
+                    message = f"Network error contacting {endpoint}: {exc}"
+                    raise APIError(message=message) from exc
 
                 return self._handle_response(response)
 
@@ -874,12 +884,17 @@ class CRAEvidenceClient:
                 files = {"file": (file_path.name, f, "application/json")}
                 data = {"version_id": version_id}
 
-                response = await client.post(
-                    f"{self.base_url}/api/v1/attestations/upload",
-                    headers=self._get_headers(),
-                    files=files,
-                    data=data,
-                )
+                endpoint = f"{self.base_url}/api/v1/attestations/upload"
+                try:
+                    response = await client.post(
+                        endpoint,
+                        headers=self._get_headers(),
+                        files=files,
+                        data=data,
+                    )
+                except httpx.RequestError as exc:
+                    message = f"Network error contacting {endpoint}: {exc}"
+                    raise APIError(message=message) from exc
 
                 return self._handle_response(response)
 
@@ -916,12 +931,17 @@ class CRAEvidenceClient:
                     "expected_issuer": expected_issuer,
                 }
 
-                response = await client.post(
-                    f"{self.base_url}/api/v1/signatures/sboms/{sbom_id}/verify",
-                    headers=self._get_headers(),
-                    files=files,
-                    data=data,
-                )
+                endpoint = f"{self.base_url}/api/v1/signatures/sboms/{sbom_id}/verify"
+                try:
+                    response = await client.post(
+                        endpoint,
+                        headers=self._get_headers(),
+                        files=files,
+                        data=data,
+                    )
+                except httpx.RequestError as exc:
+                    message = f"Network error contacting {endpoint}: {exc}"
+                    raise APIError(message=message) from exc
 
                 return self._handle_response(response)
 
@@ -1116,12 +1136,17 @@ class CRAEvidenceClient:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/x-yaml")}
                 data = {"doc_type": document_type}
-                response = await client.post(
-                    f"{self.base_url}/api/v1/products/{product_id}/documents",
-                    headers=self._get_headers(),
-                    files=files,
-                    data=data,
-                )
+                endpoint = f"{self.base_url}/api/v1/products/{product_id}/documents"
+                try:
+                    response = await client.post(
+                        endpoint,
+                        headers=self._get_headers(),
+                        files=files,
+                        data=data,
+                    )
+                except httpx.RequestError as exc:
+                    message = f"Network error contacting {endpoint}: {exc}"
+                    raise APIError(message=message) from exc
                 return self._handle_response(response)
 
     async def get_version_status(
@@ -1172,11 +1197,16 @@ class CRAEvidenceClient:
             if superseded_by:
                 form_data["superseded_by"] = superseded_by
 
-            response = await client.post(
-                f"{self.base_url}/api/v1/ci/release-state",
-                headers=self._get_headers(),
-                data=form_data,
-            )
+            try:
+                response = await client.post(
+                    f"{self.base_url}/api/v1/ci/release-state",
+                    headers=self._get_headers(),
+                    data=form_data,
+                )
+            except httpx.RequestError as exc:
+                endpoint = f"{self.base_url}/api/v1/ci/release-state"
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
 
             return self._handle_response(response)
 
@@ -1491,11 +1521,16 @@ class CRAEvidenceClient:
             if product_identifier:
                 payload["external_product_identifier"] = product_identifier
 
-            response = await client.post(
-                f"{self.base_url}/api/v1/distributor/verifications",
-                headers=self._get_headers(),
-                json=payload,
-            )
+            try:
+                response = await client.post(
+                    f"{self.base_url}/api/v1/distributor/verifications",
+                    headers=self._get_headers(),
+                    json=payload,
+                )
+            except httpx.RequestError as exc:
+                endpoint = f"{self.base_url}/api/v1/distributor/verifications"
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
 
             return self._handle_response(response)
 
@@ -1518,11 +1553,18 @@ class CRAEvidenceClient:
 
         # PATCH uses a JSON body.
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.patch(
-                f"{self.base_url}/api/v1/distributor/verifications/{verification_id}",
-                headers=self._get_headers(),
-                json=update_data,
+            endpoint = (
+                f"{self.base_url}/api/v1/distributor/verifications/{verification_id}"
             )
+            try:
+                response = await client.patch(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json=update_data,
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
 
             return self._handle_response(response)
 
@@ -1542,10 +1584,18 @@ class CRAEvidenceClient:
         await self._ensure_access_token()
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/api/v1/distributor/verifications/{verification_id}/complete",
-                headers=self._get_headers(),
+            endpoint = (
+                f"{self.base_url}/api/v1/distributor/verifications/"
+                f"{verification_id}/complete"
             )
+            try:
+                response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
 
             return self._handle_response(response)
 
@@ -1567,11 +1617,19 @@ class CRAEvidenceClient:
         await self._ensure_access_token()
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/api/v1/distributor/verifications/{verification_id}/stop-ship",
-                headers=self._get_headers(),
-                json={"reason": reason},
+            endpoint = (
+                f"{self.base_url}/api/v1/distributor/verifications/"
+                f"{verification_id}/stop-ship"
             )
+            try:
+                response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json={"reason": reason},
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
 
             return self._handle_response(response)
 
@@ -1743,11 +1801,16 @@ class CRAEvidenceClient:
         await self._ensure_access_token()
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.put(
-                f"{self.base_url}/api/v1/products/{product_id}/cra-profile",
-                headers=self._get_headers(),
-                json=profile,
-            )
+            endpoint = f"{self.base_url}/api/v1/products/{product_id}/cra-profile"
+            try:
+                response = await client.put(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json=profile,
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
             return self._handle_response(response)
 
     async def get_version_cra_settings(self, product: str, version: str) -> dict[str, Any]:

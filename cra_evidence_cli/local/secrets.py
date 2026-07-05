@@ -248,28 +248,47 @@ def scan_working_tree(root: Path) -> tuple[list[SecretHit], int, bool]:
     return hits, files_scanned, capped
 
 
-def _is_git_repo(root: Path) -> bool:
-    """Return True if *root* is inside a git work tree."""
+def _git_history_target(root: Path) -> tuple[Path, str | None] | None:
+    """Return the git top-level dir and optional pathspec for *root*."""
     try:
-        result = subprocess.run(  # noqa: S603
+        inside = subprocess.run(  # noqa: S603
             ["git", "-C", str(root), "rev-parse", "--is-inside-work-tree"],  # noqa: S607
             capture_output=True,
             text=True,
             timeout=10,
         )
+        top_level = subprocess.run(  # noqa: S603
+            ["git", "-C", str(root), "rev-parse", "--show-toplevel"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
     except (OSError, subprocess.SubprocessError):
-        return False
-    return result.returncode == 0 and result.stdout.strip() == "true"
+        return None
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        return None
+    if top_level.returncode != 0:
+        return None
+
+    repo_root = Path(top_level.stdout.strip())
+    try:
+        pathspec = root.resolve().relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        pathspec = None
+    if pathspec in ("", "."):
+        pathspec = None
+    return repo_root, pathspec
 
 
 def scan_git_history(
-    root: Path, max_bytes: int = _MAX_HISTORY_BYTES
+    root: Path, pathspec: str | None = None, max_bytes: int = _MAX_HISTORY_BYTES
 ) -> tuple[list[SecretHit], bool]:
     """Scan added lines across git history for candidate secrets.
 
     Streams ``git log -p`` and inspects added (``+``) lines, attributing each
-    hit to its commit and file. Bounded by *max_bytes* and the global hit cap;
-    returns (hits, capped).
+    hit to its commit and file. When *pathspec* is supplied, only changes under
+    that path are scanned. Bounded by *max_bytes* and the global hit cap; returns
+    (hits, capped).
     """
     hits: list[SecretHit] = []
     seen: set[tuple[str, str | None, str]] = set()
@@ -279,8 +298,11 @@ def scan_git_history(
     seen_bytes = 0
 
     try:
+        command = ["git", "-C", str(root), "log", "-p", "--no-color", "--no-textconv"]
+        if pathspec:
+            command.extend(["--", pathspec])
         proc = subprocess.Popen(  # noqa: S603
-            ["git", "-C", str(root), "log", "-p", "--no-color", "--no-textconv"],  # noqa: S607
+            command,  # noqa: S607
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
@@ -325,16 +347,20 @@ def evaluate(target: Path, scan_history: bool) -> SecretsReport:
     """Scan *target* (a directory or file) and return an advisory report.
 
     When *target* is a directory inside a git repository and *scan_history* is
-    True, the commit history is scanned in addition to the working tree.
+    True, commit history for the requested target is scanned in addition to the
+    working tree.
     """
     wt_hits, files_scanned, wt_capped = scan_working_tree(target)
 
     history_hits: list[SecretHit] = []
     history_scanned = False
     history_capped = False
-    if scan_history and target.is_dir() and _is_git_repo(target):
-        history_hits, history_capped = scan_git_history(target)
-        history_scanned = True
+    if scan_history and target.is_dir():
+        history_target = _git_history_target(target)
+        if history_target is not None:
+            repo_root, pathspec = history_target
+            history_hits, history_capped = scan_git_history(repo_root, pathspec)
+            history_scanned = True
 
     return SecretsReport(
         hits=wt_hits + history_hits,
