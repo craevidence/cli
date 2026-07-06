@@ -1,0 +1,11 @@
+# Enable once with: pre-commit install
+# Run manually with: pre-commit run --all-files
+repos:
+  - repo: local
+    hooks:
+      - id: dhi-base-digest
+        name: Verify DHI base image digests resolve
+        entry: scripts/check-dhi-base.sh
+        language: script
+        files: ^Dockerfile$
+        pass_filenames: false

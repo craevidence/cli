@@ -41,10 +41,10 @@
 # and allow anyone without DHI access to build using public images:
 #   docker build --build-arg BASE_IMAGE_BUILDER=python:3.14 \
 #                --build-arg BASE_IMAGE=python:3.14-slim .
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:a0f83babf95ae5c0936254c6dfd55c621a6a46f5a23bb85c7db2973c385b51b6
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:6319d1cd1627611ed192368d2e05c467ca6e6e9b339682a4a5e7f0076b8d6190
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:700be1a5996abb46d16a1fca6868c7f3bd7b87c4f7c09477d74312caea035305
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:c27c6f9902521b7ab0ce8e453fef348e82dd4203da9816e8f3c582125baadc1c
 FROM ${BASE_IMAGE_BUILDER} AS builder
 
 # Build-time environment variables
