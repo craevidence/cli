@@ -17,7 +17,7 @@ from cra_evidence_cli.local import secrets as sec
 
 # Format-valid sample credentials (not real, never live).
 AWS = "AKIAIOSFODNN7EXAMPLE"
-GH = "ghp_1234567890abcdefghij1234567890abcdef"
+GH = "ghp_1234567890abcdefghij1234567890abcdef"  # gitleaks:allow
 ENT = "x7Kp2mQ9vL4nR8sT1wZ3"
 PRIV = "-----BEGIN RSA PRIVATE KEY-----"
 
