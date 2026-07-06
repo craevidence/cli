@@ -258,8 +258,8 @@ jobs:
     if: github.event_name == 'release'
     environment: pypi
     permissions:
-      contents: read
-      id-token: write  # OIDC for Trusted Publishing + PEP 740 attestations
+      contents: write  # upload signed artifacts to the GitHub release
+      id-token: write  # OIDC for Trusted Publishing, PEP 740 attestations, Sigstore signing
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
@@ -291,3 +291,17 @@ jobs:
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
         with:
           attestations: true
+
+      # Sign the exact artifacts published to PyPI and attach both the
+      # artifacts and their Sigstore bundles to the GitHub release, so the
+      # release page carries verifiable signatures for every distribution.
+      - name: Sign artifacts with Sigstore
+        run: |
+          python -m pip install sigstore
+          python -m sigstore sign dist/*.tar.gz dist/*.whl
+
+      - name: Upload signed artifacts to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "${RELEASE_TAG}" dist/*
