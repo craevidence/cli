@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.6.1] - 2026-07-06
+
+### Changed
+
+- Build the published container image on the Docker Hardened Images base.
+
 ## [3.6.0] - 2026-07-06
 
 ### Added
@@ -29,5 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _Releases before 3.6.0 are not itemized in this file; see the Git tags for
 earlier history._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v3.6.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v3.6.1...HEAD
+[3.6.1]: https://github.com/craevidence/cli/compare/v3.6.0...v3.6.1
 [3.6.0]: https://github.com/craevidence/cli/compare/v3.5.0...v3.6.0
