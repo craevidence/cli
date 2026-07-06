@@ -64,6 +64,10 @@ def set_release_state(
     - end_of_life: No longer supported
 
     """
+    if superseded_by and state.lower() not in ("deprecated", "end_of_life"):
+        msg = "--superseded-by is only valid with --state deprecated or --state end_of_life."
+        raise click.UsageError(msg)
+
     config = ctx.obj["config"]
     output_format = config.output_format
 
@@ -97,9 +101,14 @@ def set_release_state(
                 f"State: [bold]{state}[/bold]\n"
             )
             if superseded_by:
-                console.print(
-                    f"[cyan]Superseded by:[/cyan] {superseded_by} (version archived)\n"
-                )
+                if state.lower() == "deprecated":
+                    console.print(
+                        f"[cyan]Superseded by:[/cyan] {superseded_by} (version archived)\n"
+                    )
+                else:
+                    console.print(
+                        f"[cyan]Superseded by:[/cyan] {superseded_by}\n"
+                    )
 
     except CRAEvidenceError as e:
         console.print(f"[red]Error:[/red] {e}")

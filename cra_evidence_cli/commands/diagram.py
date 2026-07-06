@@ -1,7 +1,9 @@
 """
 `craevidence upload-diagram`: upload a Mermaid architecture diagram.
 
-CRA Annex II §1 and the technical file require an architecture description.
+CRA Annex VII, point 2(a) requires a description of the system architecture
+explaining how software components build on or feed into each other and
+integrate into the overall processing as part of the technical documentation.
 Customers maintain a Mermaid `.mmd` file in their repository; this command
 either renders it to PNG via `mmdc` (mermaid-cli) and uploads the PNG, or
 falls back to uploading the raw `.mmd` source when `mmdc` is not on PATH
@@ -32,6 +34,7 @@ from cra_evidence_cli.commands.upload import (
 )
 from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import CRAEvidenceError
+from cra_evidence_cli.repo_config import resolve_identity
 
 console = Console()
 
@@ -68,9 +71,9 @@ def _render_mermaid_to_png(source: Path) -> Path:
 
 
 @click.command("upload-diagram")
-@click.option("--product", required=True, help="Product slug or ID")
+@click.option("--product", default=None, help="Product slug or ID")
 @click.option(
-    "--version", "version_number", required=True, help="Version number",
+    "--version", "version_number", default=None, help="Version number",
 )
 @click.option(
     "--file", "file_path", required=True,
@@ -123,6 +126,12 @@ def upload_diagram(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
+
+    try:
+        product, version_number, _ = resolve_identity(product, version_number, None)
+    except CRAEvidenceError as exc:
+        console.print(f"[red]Error:[/red] {exc}")
+        sys.exit(exc.exit_code)
 
     if file_path.suffix.lower() not in {".mmd", ".mermaid"}:
         console.print(

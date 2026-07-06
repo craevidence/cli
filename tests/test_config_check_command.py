@@ -113,3 +113,14 @@ def test_command_runs_without_api_key(runner, tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "API key is required" not in result.output
     assert "Secure-by-default configuration audit" in result.output
+
+
+def test_unsupported_format_emits_notice(runner, tmp_path):
+    """An unsupported output format triggers a stderr notice and falls back to text."""
+    (tmp_path / "Dockerfile").write_text("FROM alpine\nUSER app\n", encoding="utf-8")
+    result = runner.invoke(config_check, [str(tmp_path)], obj=_make_obj("markdown"))
+    assert result.exit_code == 0, result.output
+    combined = result.output
+    assert "markdown" in combined
+    assert "not supported" in combined
+    assert "Secure-by-default configuration audit" in combined

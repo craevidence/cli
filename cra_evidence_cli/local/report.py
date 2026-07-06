@@ -20,12 +20,42 @@ from cra_evidence_cli.styles import (
 )
 
 
-def render(result: LocalCheckResult, output_format: str, verbose: bool = False) -> str:
-    data = result.to_dict()
+def _is_temp_path(path_str: str) -> bool:
+    """Return True if the path looks like an OS temp-directory path."""
+    return path_str.startswith("/tmp") or path_str.startswith("/var/tmp")  # noqa: S108
+
+
+def _resolve_sarif_sbom_uri(result: LocalCheckResult) -> str:
+    """Resolve the SBOM URI for SARIF physicalLocation entries.
+
+    Returns the user-supplied SBOM path when the run scored an existing SBOM,
+    the --sbom-output path when recorded in provenance, or 'sbom.json' as a
+    safe fallback. Never returns an absolute temp-directory path.
+    """
+    if result.sbom_path is not None:
+        path_str = str(result.sbom_path)
+        if not _is_temp_path(path_str):
+            return path_str
+    sbom_output = result.provenance.get("sbom_output")
+    if sbom_output:
+        s = str(sbom_output)
+        if not _is_temp_path(s):
+            return s
+    return "sbom.json"
+
+
+def render(
+    result: LocalCheckResult,
+    output_format: str,
+    verbose: bool = False,
+    exit_code: int = 0,
+) -> str:
+    data = result.to_dict(exit_code=exit_code)
     if output_format == "json":
         return json.dumps(data, indent=2, sort_keys=True)
     if output_format == "sarif":
-        return json.dumps(_sarif(data), indent=2, sort_keys=True)
+        sbom_uri = _resolve_sarif_sbom_uri(result)
+        return json.dumps(_sarif(data, sbom_uri=sbom_uri), indent=2, sort_keys=True)
     if output_format == "markdown":
         return _markdown(data, verbose)
     return _text(data, verbose)
@@ -35,8 +65,9 @@ def print_text_report(
     console: Console,
     result: LocalCheckResult,
     verbose: bool = False,
+    exit_code: int = 0,
 ) -> None:
-    data = result.to_dict()
+    data = result.to_dict(exit_code=exit_code)
     summary = data["summary"]
 
     console.print(Text("Local SBOM Check", style=STYLE_TITLE))
@@ -72,7 +103,7 @@ def print_text_report(
         for item in data["cra_readiness_signal"]["cannot_tell_you"]:
             console.print(f"- {item}")
         console.print()
-        console.print("Data provenance and source credits: see --output json and the README.")
+        console.print("Data provenance: run with --output json for the full machine report.")
     else:
         console.print()
         console.print(
@@ -142,15 +173,15 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
         )
     if verbose:
         # Verbose adds review detail. The per-dimension
-        # citation ids, scan-source provenance, and attribution stay in the JSON and
-        # SARIF output (and are credited in the README), never in this text.
+        # citation ids, scan-source provenance, and attribution stay in JSON and
+        # SARIF output, never in this text.
         lines.extend(["", "Reviewed dimensions"])
         for item in data["cra_readiness_signal"]["dimensions"]:
             lines.append(f"- {item['result']}: {item['title']}")
             lines.append(f"  {item['message']}")
         lines.extend(["", "What this local snapshot cannot tell you"])
         lines.extend(f"- {item}" for item in data["cra_readiness_signal"]["cannot_tell_you"])
-        lines.extend(["", "Data provenance and source credits: see --output json and the README."])
+        lines.extend(["", "Data provenance: run with --output json for the full machine report."])
     else:
         lines.extend(
             [
@@ -165,7 +196,7 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
 
 def _markdown(data: dict[str, Any], verbose: bool = False) -> str:
     text = _text(data, verbose)
-    return "# " + text.replace("\n\n", "\n\n## ", 1)
+    return "# " + text.replace("\n\n", "\n\n## ")
 
 
 def _summary_text(component_count: int, summary: dict[str, int]) -> Text:
@@ -195,15 +226,15 @@ def _count_style(severity: str, count: int) -> str:
 
 def _top_action_records(data: dict[str, Any]) -> list[dict[str, Any]]:
     findings = data["findings"]
-    fixed = [item for item in findings if item["fixed_versions"]]
     if not findings:
         return []
     return sorted(
-        fixed or findings,
+        findings,
         key=lambda item: (
             item["known_exploited"] is True,
             item.get("epss_probability") or 0.0,
             {"critical": 4, "high": 3, "medium": 2, "low": 1}.get(item["severity"], 0),
+            bool(item["fixed_versions"]),
         ),
         reverse=True,
     )[:3]
@@ -287,7 +318,7 @@ def _print_baseline(console: Console, data: dict[str, Any]) -> None:
     console.print(f"- Removed vulnerabilities: {len(removed)}")
 
 
-def _sarif(data: dict[str, Any]) -> dict[str, Any]:
+def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
     results = []
     for finding in data["findings"]:
         level = "error" if finding["severity"] in {"critical", "high"} else "warning"
@@ -299,6 +330,9 @@ def _sarif(data: dict[str, Any]) -> dict[str, Any]:
                     "text": f"{finding['package']} {finding.get('version') or ''}: "
                     f"{finding.get('title') or finding['id']}"
                 },
+                "locations": [
+                    {"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}
+                ],
                 "properties": finding,
             }
         )

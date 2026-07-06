@@ -62,9 +62,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
 
+      # Login to the DHI registry to pull pinned base images. When DHI_REGISTRY_USERNAME
+      # or DHI_REGISTRY_TOKEN is absent (e.g., forks or PRs without repository secrets),
+      # the step fails gracefully and the local build falls back to public Python base
+      # images via --build-arg (see the build step below).
+      - name: Login to DHI registry
+        id: dhi-login
+        continue-on-error: true
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_REGISTRY_USERNAME }}
+          password: ${{ secrets.DHI_REGISTRY_TOKEN }}
+
       - name: Build CLI Docker image
         run: |
-          docker build -t craevidence:${{ steps.version.outputs.version }} .
+          if [ "${{ steps.dhi-login.outcome }}" = "success" ]; then
+            docker build -t craevidence:${{ steps.version.outputs.version }} .
+          else
+            # DHI registry unavailable; use public Python base images as fallback
+            docker build \
+              --build-arg BASE_IMAGE_BUILDER=python:3.14 \
+              --build-arg BASE_IMAGE=python:3.14-slim \
+              -t craevidence:${{ steps.version.outputs.version }} .
+          fi
 
       # Security gate: fail the build if HIGH/CRITICAL vulnerabilities found in the Docker image.
       # Only fixed vulnerabilities are flagged to avoid false positives (e.g. glibc in base image).
@@ -110,7 +131,8 @@ jobs:
           name: sbom
           path: sbom.cdx.json
 
-      # Docker Hub push (on release only)
+      # Registry logins must precede multi-arch push steps so buildx can authenticate
+      # when pushing layers to each registry.
       - name: Login to Docker Hub
         if: github.event_name == 'release'
         id: dockerhub-login
@@ -120,18 +142,6 @@ jobs:
           username: craevidence
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Tag and push to Docker Hub
-        if: github.event_name == 'release' && steps.dockerhub-login.outcome == 'success'
-        run: |
-          IMAGE=${{ vars.DOCKERHUB_IMAGE }}
-          docker tag craevidence:${{ steps.version.outputs.version }} \
-            ${IMAGE}:${{ steps.version.outputs.version }}
-          docker tag craevidence:${{ steps.version.outputs.version }} \
-            ${IMAGE}:latest
-          docker push ${IMAGE}:${{ steps.version.outputs.version }}
-          docker push ${IMAGE}:latest
-
-      # GHCR push (on release only)
       - name: Login to GHCR
         if: github.event_name == 'release'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9  # v3
@@ -140,18 +150,6 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag and push to GHCR
-        if: github.event_name == 'release'
-        run: |
-          IMAGE=ghcr.io/${{ github.repository_owner }}/craevidence
-          docker tag craevidence:${{ steps.version.outputs.version }} \
-            ${IMAGE}:${{ steps.version.outputs.version }}
-          docker tag craevidence:${{ steps.version.outputs.version }} \
-            ${IMAGE}:latest
-          docker push ${IMAGE}:${{ steps.version.outputs.version }}
-          docker push ${IMAGE}:latest
-
-      # Quay.io push (on release only)
       - name: Login to Quay.io
         if: github.event_name == 'release'
         id: quay-login
@@ -162,42 +160,75 @@ jobs:
           username: craevidence+all
           password: ${{ secrets.QUAY_TOKEN }}
 
-      - name: Tag and push to Quay.io
+      # Multi-arch release builds: each registry receives a linux/amd64 + linux/arm64
+      # manifest list. The manifest index digest is captured from the GHCR step (always
+      # available via GITHUB_TOKEN) and reused for all signing steps; the digest is
+      # content-addressed, so it is identical across registries for identical content.
+      - name: Build and push multi-arch image to GHCR
+        if: github.event_name == 'release'
+        id: build-ghcr
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/craevidence:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository_owner }}/craevidence:latest
+          build-args: |
+            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE_BUILDER=python:3.14' || '' }}
+            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE=python:3.14-slim' || '' }}
+
+      - name: Build and push multi-arch image to Docker Hub
+        if: github.event_name == 'release' && steps.dockerhub-login.outcome == 'success'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ vars.DOCKERHUB_IMAGE }}:${{ steps.version.outputs.version }}
+            ${{ vars.DOCKERHUB_IMAGE }}:latest
+          build-args: |
+            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE_BUILDER=python:3.14' || '' }}
+            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE=python:3.14-slim' || '' }}
+
+      - name: Build and push multi-arch image to Quay.io
         if: github.event_name == 'release' && steps.quay-login.outcome == 'success'
         continue-on-error: true
-        run: |
-          IMAGE=quay.io/craevidence/cli
-          docker tag craevidence:${{ steps.version.outputs.version }} \
-            ${IMAGE}:${{ steps.version.outputs.version }}
-          docker tag craevidence:${{ steps.version.outputs.version }} \
-            ${IMAGE}:latest
-          docker push ${IMAGE}:${{ steps.version.outputs.version }}
-          docker push ${IMAGE}:latest
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8  # v6.19.2
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            quay.io/craevidence/cli:${{ steps.version.outputs.version }}
+            quay.io/craevidence/cli:latest
+          build-args: |
+            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE_BUILDER=python:3.14' || '' }}
+            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE=python:3.14-slim' || '' }}
 
-      # Keyless signing of the pushed images (Sigstore OIDC, no long-lived keys).
-      # The manifest digest is identical across registries for identical content,
-      # so it is resolved once and each pushed reference is signed by digest.
+      # Keyless signing of the pushed manifest lists (Sigstore OIDC, no long-lived keys).
+      # All three signing steps reference the manifest index digest from the GHCR build;
+      # the digest is identical across registries for identical image content.
       - name: Install cosign
         if: github.event_name == 'release'
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
-
-      - name: Sign Docker Hub image
-        if: github.event_name == 'release' && steps.dockerhub-login.outcome == 'success'
-        env:
-          COSIGN_YES: "true"
-        run: |
-          DIGEST=$(docker inspect --format='{{ index .RepoDigests 0 }}' \
-            craevidence:${{ steps.version.outputs.version }} | sed 's/.*@//')
-          cosign sign --yes "${{ vars.DOCKERHUB_IMAGE }}@${DIGEST}"
 
       - name: Sign GHCR image
         if: github.event_name == 'release'
         env:
           COSIGN_YES: "true"
         run: |
-          DIGEST=$(docker inspect --format='{{ index .RepoDigests 0 }}' \
-            craevidence:${{ steps.version.outputs.version }} | sed 's/.*@//')
-          cosign sign --yes "ghcr.io/${{ github.repository_owner }}/craevidence@${DIGEST}"
+          cosign sign --yes \
+            "ghcr.io/${{ github.repository_owner }}/craevidence@${{ steps.build-ghcr.outputs.digest }}"
+
+      - name: Sign Docker Hub image
+        if: github.event_name == 'release' && steps.dockerhub-login.outcome == 'success'
+        env:
+          COSIGN_YES: "true"
+        run: |
+          cosign sign --yes "${{ vars.DOCKERHUB_IMAGE }}@${{ steps.build-ghcr.outputs.digest }}"
 
       - name: Sign Quay.io image
         if: github.event_name == 'release' && steps.quay-login.outcome == 'success'
@@ -205,9 +236,7 @@ jobs:
         env:
           COSIGN_YES: "true"
         run: |
-          DIGEST=$(docker inspect --format='{{ index .RepoDigests 0 }}' \
-            craevidence:${{ steps.version.outputs.version }} | sed 's/.*@//')
-          cosign sign --yes "quay.io/craevidence/cli@${DIGEST}"
+          cosign sign --yes "quay.io/craevidence/cli@${{ steps.build-ghcr.outputs.digest }}"
 
   # ---------------------------------------------------------------------------
   # Job 3: Publish to PyPI (on release)

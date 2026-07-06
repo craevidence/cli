@@ -20,8 +20,8 @@ Type "clear" Enter
 Show
 
 Sleep 800ms
-# One hero command: a free local security check that matches with Grype, enriches
-# with CISA KEV and FIRST EPSS, and gates CI on actively-exploited CVEs.
+# One hero command: a free local security check that gates CI on
+# actively-exploited vulnerabilities.
 Type "craevidence check --sbom sbom.cdx.json --fail-on known-exploited"
 Sleep 800ms
 Enter

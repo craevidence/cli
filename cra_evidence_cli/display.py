@@ -1,8 +1,9 @@
-"""User-facing display labels for CLI text output."""
+"""User-facing display labels and shared output helpers for CLI text output."""
 
 from __future__ import annotations
 
 import re
+import sys
 
 _TOKEN_RE = re.compile(r"^[A-Za-z0-9_]+$")
 
@@ -70,6 +71,23 @@ def humanize_identifier(value: object) -> str:
         lowered = part.lower()
         words.append(_ACRONYMS.get(lowered, lowered.capitalize()))
     return " ".join(words)
+
+
+def warn_unsupported_output_format(
+    format_name: str, supported: tuple[str, ...] = ("text", "json", "sarif")
+) -> None:
+    """Print a notice to stderr when an output format is not supported by a command.
+
+    Callers should then fall back to text rendering. The notice text is:
+    'format <x> not supported for this command; using text'
+
+    Only emits output when the requested format is not in the supported tuple.
+    """
+    if format_name not in supported:
+        sys.stderr.write(
+            f"format {format_name} not supported for this command; using text\n"
+        )
+        sys.stderr.flush()
 
 
 def humanize_field_path(value: object) -> str:

@@ -41,7 +41,9 @@ from cra_evidence_cli.local.signal import assert_no_cra_pass, build_dimensions, 
 from cra_evidence_cli.local.vex import VexParseError, apply_vex, load_vex
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
+    SBOMGenerationResult,
     _get_syft_version,
+    cleanup_generated_sbom,
     generate_sbom_from_directory,
     generate_sbom_from_image,
 )
@@ -113,7 +115,13 @@ def _split_csv(value: str | None) -> list[str]:
     "--sbom-output",
     "sbom_output",
     type=click.Path(dir_okay=False, path_type=Path),
-    help="Also write a copy of the Syft-generated SBOM here (no-op when --sbom is supplied).",
+    help="Also write a copy of the generated SBOM here (no-op when --sbom is supplied).",
+)
+@click.option(
+    "--output",
+    "output_opt",
+    type=click.Choice(["text", "json", "sarif", "markdown"], case_sensitive=False),
+    help="Report format for this run; overrides the group-level --output.",
 )
 @click.option(
     "--output-file",
@@ -173,6 +181,7 @@ def check(
     json_output: Path | None,
     sarif_output: Path | None,
     markdown_output: Path | None,
+    output_opt: str | None = None,
     verbose_opt: bool = False,
 ) -> None:
     """Run a client-side security check without an API key."""
@@ -214,7 +223,8 @@ def check(
     sbom_quality = bool(sbom_quality) or fail_on_score is not None
 
     verbose = verbose_opt or bool(ctx.obj.get("verbose"))
-    output_format = ctx.obj["config"].output_format
+    # The subcommand-level --output wins over the group-level one.
+    output_format = output_opt or ctx.obj["config"].output_format
     try:
         result = run_local_check(
             target_path=path,
@@ -246,34 +256,10 @@ def check(
                 err=True,
             )
 
-    machine = render(result, output_format, verbose=verbose)
-    if output_file is not None:
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        output_file.write_text(machine)
-        click.echo(render(result, "text", verbose=verbose))
-        click.echo(f"Wrote {output_format} report to {output_file}", err=True)
-    elif output_format == "text" and console.is_terminal:
-        print_text_report(console, result, verbose=verbose)
-    else:
-        click.echo(machine)
-
-    _write_reports(
-        result,
-        json_output=json_output,
-        sarif_output=sarif_output,
-        markdown_output=markdown_output,
-        verbose=verbose,
-    )
-
-    if annotations:
-        # Annotations are output formatting only: a failure here (e.g. an
-        # unwritable report path) must never change the exit code or mask a
-        # vulnerability gate. Swallow and warn; the gate below decides the exit.
-        try:
-            _emit_annotations(result, annotations, annotations_file)
-        except Exception as exc:  # noqa: BLE001
-            click.echo(f"Warning: failed to emit {annotations} annotations: {exc}", err=True)
-
+    # Evaluate the gate before rendering: the reports state the actual exit
+    # code, so a failing run must not carry the exit-0 wording. _enforce_gate
+    # only raises; the exit itself happens after every report is written.
+    gate_error: CRAEvidenceError | None = None
     try:
         _enforce_gate(
             result,
@@ -284,8 +270,41 @@ def check(
             fail_on_score=fail_on_score,
         )
     except CRAEvidenceError as exc:
-        click.echo(f"Error: {exc}", err=True)
-        sys.exit(exc.exit_code)
+        gate_error = exc
+    exit_code = gate_error.exit_code if gate_error is not None else 0
+
+    machine = render(result, output_format, verbose=verbose, exit_code=exit_code)
+    if output_file is not None:
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.write_text(machine)
+        click.echo(render(result, "text", verbose=verbose, exit_code=exit_code))
+        click.echo(f"Wrote {output_format} report to {output_file}", err=True)
+    elif output_format == "text" and console.is_terminal:
+        print_text_report(console, result, verbose=verbose, exit_code=exit_code)
+    else:
+        click.echo(machine)
+
+    _write_reports(
+        result,
+        json_output=json_output,
+        sarif_output=sarif_output,
+        markdown_output=markdown_output,
+        verbose=verbose,
+        exit_code=exit_code,
+    )
+
+    if annotations:
+        # Annotations are output formatting only: a failure here (e.g. an
+        # unwritable report path) must never change the exit code or mask a
+        # vulnerability gate. Swallow and warn; the gate outcome decides the exit.
+        try:
+            _emit_annotations(result, annotations, annotations_file)
+        except Exception as exc:  # noqa: BLE001
+            click.echo(f"Warning: failed to emit {annotations} annotations: {exc}", err=True)
+
+    if gate_error is not None:
+        click.echo(f"Error: {gate_error}", err=True)
+        sys.exit(exit_code)
 
 
 def _source_is_default(ctx: click.Context, name: str) -> bool:
@@ -334,13 +353,14 @@ def _write_reports(
     sarif_output: Path | None,
     markdown_output: Path | None,
     verbose: bool = False,
+    exit_code: int = 0,
 ) -> None:
     """Write extra report files in fixed formats, independent of --output.
 
     A single scan can yield several artifacts in one pass (for example SARIF for
     code scanning plus JSON for archival), so a job no longer has to re-run the
-    check once per format. Files are written before the gate runs so a failing
-    gate still leaves the artifacts on disk.
+    check once per format. Files are written before the process exits so a
+    failing gate still leaves the artifacts on disk.
     """
     for output_path, report_format in (
         (json_output, "json"),
@@ -350,7 +370,10 @@ def _write_reports(
         if output_path is None:
             continue
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(render(result, report_format, verbose=verbose), encoding="utf-8")
+        output_path.write_text(
+            render(result, report_format, verbose=verbose, exit_code=exit_code),
+            encoding="utf-8",
+        )
         click.echo(f"Wrote {report_format} report to {output_path}", err=True)
 
 
@@ -384,6 +407,54 @@ def run_local_check(
         )
         sbom_path = generated_sbom.file_path
 
+    try:
+        return _run_local_check_on_sbom(
+            sbom_path=sbom_path,
+            generated_sbom=generated_sbom,
+            target=target,
+            target_type=target_type,
+            target_path=target_path,
+            baseline=baseline,
+            strict=strict,
+            sbom_quality=sbom_quality,
+            vex_file=vex_file,
+            ignore_ids=ignore_ids,
+            sbom_output=sbom_output,
+        )
+    finally:
+        # Generated SBOMs live in a private temporary directory; remove it once
+        # the check is done (success or failure) so runs do not accumulate
+        # temp directories. User-supplied --sbom files are never touched.
+        if generated_sbom is not None:
+            cleanup_generated_sbom(generated_sbom.file_path)
+
+
+def _run_local_check_on_sbom(
+    *,
+    sbom_path: Path,
+    generated_sbom: SBOMGenerationResult | None,
+    target: str,
+    target_type: str,
+    target_path: Path,
+    baseline: Path | None,
+    strict: bool,
+    sbom_quality: bool,
+    vex_file: Path | None,
+    ignore_ids: set[str] | None,
+    sbom_output: Path | None,
+) -> LocalCheckResult:
+    if generated_sbom is not None and target_type == "directory":
+        if generated_sbom.component_count == 0:
+            msg = (
+                f"No dependency manifests or SBOM found under {target_path}. "
+                "check looks for package manifests and lockfiles (for example "
+                "requirements.txt, poetry.lock, package-lock.json, go.mod, "
+                "pom.xml, Cargo.lock, Gemfile.lock) and installed-package "
+                "metadata. Point check at a project directory, or pass an SBOM "
+                "with --sbom or an image with --image."
+            )
+            raise SBOMGenerationError(msg)
+
     # Keep a copy of the generated SBOM as a CI artifact (no-op for user-supplied --sbom).
     if sbom_output is not None:
         if generated_sbom is None:
@@ -403,10 +474,23 @@ def run_local_check(
     findings = []
     engine = "none"
     if scanner.is_available():
-        findings, source = scanner.scan_sbom(sbom_path)
-        coverage.append(source)
-        sources_consulted.add("grype")
-        engine = "grype-local"
+        try:
+            findings, source = scanner.scan_sbom(sbom_path)
+            coverage.append(source)
+            sources_consulted.add("grype")
+            engine = "grype-local"
+        except ScanEngineUnavailable as exc:
+            reason = (str(exc).splitlines() or ["no detail"])[0][:200]
+            click.echo(
+                f"Local matcher failed ({reason}); "
+                "querying OSV.dev over the network instead.",
+                err=True,
+            )
+            coverage.append(CoverageSource("grype-db", "unavailable", detail=str(exc)))
+            findings, source = OSVClient().query_components(components)
+            coverage.append(source)
+            sources_consulted.add("osv.dev")
+            engine = "osv-online"
     else:
         findings, source = OSVClient().query_components(components)
         coverage.append(source)

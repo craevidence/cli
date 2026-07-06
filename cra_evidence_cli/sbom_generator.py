@@ -11,7 +11,7 @@ from pathlib import Path
 
 from cra_evidence_cli.exceptions import CRAEvidenceError
 
-_SYFT_IMAGE = "anchore/syft:v1.44.0"
+_SYFT_IMAGE = "anchore/syft:v1.46.0"
 
 
 class SBOMGenerationError(CRAEvidenceError):
@@ -29,6 +29,22 @@ class SBOMGenerationResult:
     component_count: int
     format_type: str
     generation_method: str  # "syft" or "docker"
+
+
+def cleanup_generated_sbom(file_path: str | Path) -> None:
+    """Remove the private temp directory holding a generated SBOM.
+
+    Only directories created by generate_sbom_from_* (mkdtemp under the
+    system temp dir with the sbom_ prefix) are removed, so a user-supplied
+    SBOM path can never cause project files to be deleted.
+    """
+    parent = Path(file_path).parent
+    try:
+        in_tmp = parent.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve())
+    except OSError:
+        return
+    if in_tmp and parent.name.startswith("sbom_"):
+        shutil.rmtree(parent, ignore_errors=True)
 
 
 def check_syft_installed() -> bool:
@@ -241,6 +257,10 @@ def generate_sbom_from_directory(
     Syft accepts `dir:/path` as input to scan source directories for dependencies.
     This does not require Docker - only Syft needs to be installed (bundled in CLI image).
 
+    The SBOM is written into a private temporary directory. On failure that
+    directory is removed here; on success the caller owns the returned file and
+    removes its parent directory when done with it.
+
     Args:
         directory: Path to source directory to scan
         output_format: SBOM format ("cyclonedx" or "spdx")
@@ -318,6 +338,10 @@ def generate_sbom_from_image(
 
     This function tries to use locally installed Syft first. If Syft is not
     available, it falls back to running Syft via Docker.
+
+    The SBOM is written into a private temporary directory. On failure that
+    directory is removed here; on success the caller owns the returned file and
+    removes its parent directory when done with it.
 
     Args:
         image: Docker image reference (e.g., "nginx:latest", "alpine:3.19")

@@ -17,6 +17,23 @@ from cra_evidence_cli.config import (
 )
 from cra_evidence_cli.exceptions import ConfigurationError
 
+_CRA_ENV_KEYS = [
+    "CRA_EVIDENCE_API_KEY",
+    "CRA_EVIDENCE_URL",
+    "CRA_EVIDENCE_ORG",
+    "CRA_EVIDENCE_TIMEOUT",
+    "CRA_EVIDENCE_PRODUCT",
+    "CRA_EVIDENCE_VERSION",
+    "CRA_EVIDENCE_COMPONENT",
+]
+
+
+@pytest.fixture(autouse=True)
+def _clear_cra_env(monkeypatch):
+    """Remove ambient CRA_EVIDENCE_* env vars so each test starts from a clean slate."""
+    for key in _CRA_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
 
 class TestCRAEvidenceConfig:
     """Tests for CRAEvidenceConfig Pydantic model."""

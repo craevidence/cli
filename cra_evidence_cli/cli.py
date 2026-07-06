@@ -114,6 +114,7 @@ def cli(
             "config-check",
             "evidence",
             "compliance-as-code",
+            "version",
         ):
             ctx.obj["config"] = CRAEvidenceConfig(url=url, output_format=output)
             ctx.obj["verbose"] = verbose

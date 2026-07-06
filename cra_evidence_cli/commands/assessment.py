@@ -44,6 +44,7 @@ from cra_evidence_cli.assessment.templates import (
     list_templates,
     load_template,
 )
+from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.exceptions import ValidationError
 from cra_evidence_cli.local.disclaimer import DRAFT_WATERMARK, assert_disclaimer_present
 
@@ -65,6 +66,7 @@ def assessment(ctx: click.Context) -> None:
 def templates_cmd(ctx: click.Context) -> None:
     """List the bundled product-type starter templates."""
     output_format = ctx.obj["config"].output_format
+    warn_unsupported_output_format(output_format, ("text", "json"))
     items = list_templates()
     if output_format == "json":
         click.echo(
@@ -227,6 +229,7 @@ def check_cmd(
     This gate is not an audit and exit 0 does not establish compliance.
     """
     output_format = ctx.obj["config"].output_format
+    warn_unsupported_output_format(output_format, ("text", "json"))
     config = load_gate_config(config_path) or GateConfig()
     exceptions = _load_exceptions(exceptions_path, config)
 

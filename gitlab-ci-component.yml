@@ -4,7 +4,7 @@
 # Include in your .gitlab-ci.yml:
 #
 #   include:
-#     - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.4.4/gitlab-ci-component.yml'
+#     - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.6.0/gitlab-ci-component.yml'
 #       inputs:
 #         product: my-product
 #         version: $CI_COMMIT_TAG
@@ -17,16 +17,19 @@
 
 spec:
   inputs:
-    # === Required ===
+    # === Required for cra-evidence-upload (optional for check-only usage) ===
     product:
-      description: 'Product name or UUID'
+      description: 'Product name or UUID. Required for cra-evidence-upload.'
       type: string
+      default: ''
     version:
-      description: 'Version number (e.g., 1.0.0)'
+      description: 'Version number (e.g., 1.0.0). Required for cra-evidence-upload.'
       type: string
+      default: ''
     file:
-      description: 'Path to artifact file (SBOM, HBOM, VEX, or document)'
+      description: 'Path to artifact file (SBOM, HBOM, VEX, or document). Required for cra-evidence-upload.'
       type: string
+      default: ''
 
     # === API Configuration ===
     api-url:
@@ -36,7 +39,7 @@ spec:
     cli-package:
       description: 'pip package spec for the CRA Evidence CLI'
       type: string
-      default: 'craevidence>=3.4.0,<4'
+      default: 'craevidence>=3.6.0,<4'
 
     # === Artifact Options ===
     artifact-type:
@@ -108,7 +111,7 @@ spec:
       type: boolean
       default: false
     signature-bundle:
-      description: 'For SBOMs, path to an existing Sigstore/Cosign bundle to verify after upload'
+      description: 'For SBOMs, path to an existing Sigstore bundle to verify after upload'
       type: string
       default: ''
     signature-identity:
@@ -148,7 +151,7 @@ spec:
       aud: sigstore
   variables:
     CRA_BASE_URL: 'https://api.craevidence.com'
-    CRA_CLI_PACKAGE: 'craevidence>=3.4.0,<4'
+    CRA_CLI_PACKAGE: 'craevidence>=3.6.0,<4'
     CRA_ARTIFACT_TYPE: 'sbom'
     CRA_CREATE_PRODUCT: 'true'
     CRA_CREATE_VERSION: 'true'
@@ -264,7 +267,6 @@ spec:
       echo "Uploading ${CRA_ARTIFACT_TYPE} to CRA Evidence with the CRA Evidence CLI..."
       craevidence "$@"
 
----
 # Component job for the GitLab CI Components catalog.
 cra-evidence-upload:
   extends: .cra-evidence-upload
@@ -304,7 +306,7 @@ cra-evidence-upload:
 # Use with:  extends: .cra-evidence-check   (no API key, no account, no upload)
 #
 # Optional CI/CD variables:
-#   CRA_CHECK_PATH:    directory to scan (generates an SBOM with Syft). Default '.'
+#   CRA_CHECK_PATH:    directory to scan. Default '.'
 #   CRA_CHECK_SBOM:    path to a pre-built SBOM to score instead of scanning
 #   CRA_CHECK_IMAGE:   container image to scan instead of a directory
 #   CRA_CHECK_FAIL_ON: critical | high | medium | known-exploited (default none)
@@ -312,7 +314,7 @@ cra-evidence-upload:
 .cra-evidence-check:
   image: python:3.12-slim
   variables:
-    CRA_CLI_PACKAGE: 'craevidence>=3.4.0,<4'
+    CRA_CLI_PACKAGE: 'craevidence>=3.6.0,<4'
     CRA_CHECK_PATH: '.'
     CRA_CHECK_SBOM: ''
     CRA_CHECK_IMAGE: ''
@@ -321,9 +323,100 @@ cra-evidence-upload:
   script:
     - |
       set -eu
-      # No data is uploaded to CRA Evidence. By default uses the network for vulnerability data: Grype DB when installed, OSV.dev as fallback, plus CISA KEV and FIRST EPSS enrichment.
       python -m pip install --upgrade pip
       python -m pip install "${CRA_CLI_PACKAGE}"
+      ENGINE_DIR="/tmp/craevidence/bin"
+      GRYPE_DB_CACHE_DIR="/tmp/craevidence/grype-db"
+      mkdir -p "${ENGINE_DIR}" "${GRYPE_DB_CACHE_DIR}"
+      export ENGINE_DIR
+      export GRYPE_DB_CACHE_DIR
+      export PATH="${ENGINE_DIR}:${PATH}"
+      python - <<'PY'
+      import hashlib
+      import io
+      import os
+      import platform
+      import stat
+      import tarfile
+      import urllib.request
+
+      system = platform.system().lower()
+      arch = None
+      skip_engines = False
+      if system not in {"linux", "darwin"}:
+          print(f"WARNING: runner OS '{system}' is not supported for engine provisioning; vulnerability scanning will use the OSV.dev fallback.", flush=True)
+          skip_engines = True
+      else:
+          arch_raw = platform.machine().lower()
+          if arch_raw in {"x86_64", "amd64"}:
+              arch = "amd64"
+          elif arch_raw in {"aarch64", "arm64"}:
+              arch = "arm64"
+          else:
+              print(f"WARNING: runner architecture '{arch_raw}' is not supported for engine provisioning; vulnerability scanning will use the OSV.dev fallback.", flush=True)
+              skip_engines = True
+
+      tools = {
+          "syft": {
+              "repo": "anchore/syft",
+              "version": "1.46.0",
+              "sha256": {
+                  "linux": {
+                      "amd64": "d654f678b709eb53c393d38519d5ed7d2e57205529404018614cfefa0fb2b5ca",
+                      "arm64": "9fafef4db4f032ce81008d3a1529985d41ceb6ccdf2b388c9ce2f1ed7d32082e",
+                  },
+                  "darwin": {
+                      "amd64": "5c983db13533de02e5331aae88091116f25365840741f86234084a30166672a7",
+                      "arm64": "cd4e2c40e075684a5746d8959f76b6572bb2d2dda8cf6877dbfff1cc0baeea01",
+                  },
+              },
+          },
+          "grype": {
+              "repo": "anchore/grype",
+              "version": "0.115.0",
+              "sha256": {
+                  "linux": {
+                      "amd64": "3fad92940650e514c0aa2dad83526942a055e210cec09a8a59d9c024adc2b90e",
+                      "arm64": "b8541b9ecc3e936e7db4ff14b71a9474b25f3898ccaad63ee0bfe3449fcd734d",
+                  },
+                  "darwin": {
+                      "amd64": "f2c50aa2c00b633b24535dd44804f09d22b55a3f76d42b5290655af85e55aa64",
+                      "arm64": "a5faa957bca6f39e252a046b9431cd79745030c692dd400ab4c0c74266edc406",
+                  },
+              },
+          },
+      }
+
+      if not skip_engines:
+          bin_dir = os.environ["ENGINE_DIR"]
+          for name, meta in tools.items():
+              version = meta["version"]
+              archive = f"{name}_{version}_{system}_{arch}.tar.gz"
+              url = f"https://github.com/{meta['repo']}/releases/download/v{version}/{archive}"
+              try:
+                  with urllib.request.urlopen(url, timeout=60) as response:
+                      data = response.read()
+              except Exception as exc:
+                  print(f"WARNING: could not download {name}: {exc}; vulnerability scanning may use the OSV.dev fallback.", flush=True)
+                  continue
+              digest = hashlib.sha256(data).hexdigest()
+              expected = meta["sha256"][system][arch]
+              if digest != expected:
+                  raise SystemExit(f"{name} checksum mismatch")
+              try:
+                  with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+                      member = tar.getmember(name)
+                      src = tar.extractfile(member)
+                      if src is None:
+                          print(f"WARNING: {name} binary missing from archive; vulnerability scanning may use the OSV.dev fallback.", flush=True)
+                          continue
+                      dest = os.path.join(bin_dir, name)
+                      with open(dest, "wb") as handle:
+                          handle.write(src.read())
+                  os.chmod(dest, os.stat(dest).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+              except Exception as exc:
+                  print(f"WARNING: could not install {name}: {exc}; vulnerability scanning may use the OSV.dev fallback.", flush=True)
+      PY
       set -- check
       if [ -n "${CRA_CHECK_SBOM}" ]; then
         set -- "$@" --sbom "${CRA_CHECK_SBOM}"

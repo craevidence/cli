@@ -18,6 +18,7 @@ from pathlib import Path
 
 import click
 
+from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.local.disclaimer import (
     advisory_block,
 )
@@ -83,8 +84,9 @@ def _render_json(report: EolReport) -> str:
     )
 
 
-def _render_sarif(report: EolReport) -> str:
+def _render_sarif(report: EolReport, sbom_uri: str = "sbom.json") -> str:
     results = []
+    location = {"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}
     for finding in report.findings:
         if finding.is_eol:
             message = (
@@ -96,6 +98,7 @@ def _render_sarif(report: EolReport) -> str:
                     "ruleId": f"EOL-{finding.product}",
                     "level": "warning",
                     "message": {"text": message},
+                    "locations": [location],
                     "properties": finding.to_dict(),
                 }
             )
@@ -109,6 +112,7 @@ def _render_sarif(report: EolReport) -> str:
                     "ruleId": f"EOL-SUPPORT-{finding.product}",
                     "level": "note",
                     "message": {"text": message},
+                    "locations": [location],
                     "properties": finding.to_dict(),
                 }
             )
@@ -188,22 +192,40 @@ def eol_check(
     output_format = config.output_format
     verbose = verbose_opt or ctx.obj.get("verbose", False)
 
+    warn_unsupported_output_format(output_format, ("text", "json", "sarif"))
+
+    # Track the SBOM URI for SARIF output (never use absolute temp paths).
+    sbom_uri = "sbom.json"
+
     # Resolve components from SBOM or directory.
     try:
         if sbom_file is not None:
             components, _ = load_sbom(sbom_file)
+            sbom_str = str(sbom_file)
+            if not sbom_str.startswith("/tmp") and not sbom_str.startswith("/var/tmp"):  # noqa: S108
+                sbom_uri = sbom_str
         elif path.is_file():
             components, _ = load_sbom(path)
+            path_str = str(path)
+            if not path_str.startswith("/tmp") and not path_str.startswith("/var/tmp"):  # noqa: S108
+                sbom_uri = path_str
         else:
             from cra_evidence_cli.sbom_generator import (
                 SBOMGenerationError,
+                cleanup_generated_sbom,
                 generate_sbom_from_directory,
             )
             try:
                 gen = generate_sbom_from_directory(
-                    str(path), verbose=verbose
+                    str(path), verbose=verbose, offline=True
                 )
-                components, _ = load_sbom(gen.file_path)
+                try:
+                    components, _ = load_sbom(gen.file_path)
+                    # Directory-generated SBOMs live in a temp path; keep sbom_uri as fallback.
+                finally:
+                    # One private temp directory per generated SBOM; remove it
+                    # once parsed so runs do not accumulate sbom_* directories.
+                    cleanup_generated_sbom(gen.file_path)
             except SBOMGenerationError as exc:
                 raise click.ClickException(str(exc)) from exc
     except SBOMParseError as exc:
@@ -230,7 +252,7 @@ def eol_check(
     if output_format == "json":
         rendered = _render_json(report)
     elif output_format == "sarif":
-        rendered = _render_sarif(report)
+        rendered = _render_sarif(report, sbom_uri=sbom_uri)
     else:
         rendered = _render_text(report, verbose)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from io import StringIO
+from pathlib import Path
 
 from rich.console import Console
 
@@ -47,6 +48,27 @@ def test_default_text_is_concise() -> None:
     # And a pointer tells the user where the detail is.
     assert "-v" in text
     assert "--output json" in text
+
+
+def test_exit_note_reflects_exit_code() -> None:
+    """A non-zero exit code produces a factual exit note, not the exit-0 wording."""
+    passing = render(_result(), "text", exit_code=0)
+    failing = render(_result(), "text", exit_code=10)
+
+    assert "Exit 0 means no configured blocking findings" in passing
+    assert "Exit 0 means no configured blocking findings" not in failing
+    assert "Exit 10:" in failing
+    assert "threshold exceeded" in failing
+
+
+def test_exit_note_in_json_reflects_exit_code() -> None:
+    """JSON output carries the correct exit_note for failing runs."""
+    data = json.loads(render(_result(), "json", exit_code=10))
+    assert "Exit 0 means" not in data["exit_note"]
+    assert "Exit 10:" in data["exit_note"]
+
+    data_pass = json.loads(render(_result(), "json", exit_code=0))
+    assert "Exit 0 means no configured blocking findings" in data_pass["exit_note"]
 
 
 def test_verbose_text_shows_dimensions_but_not_raw_slugs() -> None:
@@ -99,3 +121,154 @@ def test_rich_text_report_uses_restrained_terminal_color() -> None:
 def test_plain_text_render_has_no_terminal_control_sequences() -> None:
     text = render(_result(), "text")
     assert "\x1b[" not in text
+
+
+# Fix 1: SARIF locations
+
+
+def test_sarif_results_have_locations() -> None:
+    """Every SARIF result must include a locations entry."""
+    result = _result()
+    result.findings = [
+        Finding(id="CVE-2026-0001", package="demo", version="1.0.0", severity="high")
+    ]
+    doc = json.loads(render(result, "sarif"))
+    for res in doc["runs"][0]["results"]:
+        assert "locations" in res, "SARIF result missing locations"
+        loc = res["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        assert loc, "SARIF location URI is empty"
+
+
+def test_sarif_location_uses_sbom_path_not_tmp() -> None:
+    """SARIF URI uses the user-supplied sbom_path, never an absolute /tmp path."""
+    result = _result()
+    result.sbom_path = Path("build/sbom.json")
+    result.findings = [
+        Finding(id="CVE-2026-0002", package="pkg", version="1.0.0", severity="medium")
+    ]
+    doc = json.loads(render(result, "sarif"))
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+    assert uri == "build/sbom.json"
+    assert not uri.startswith("/tmp")  # noqa: S108
+
+
+def test_sarif_location_falls_back_when_sbom_path_is_tmp() -> None:
+    """When sbom_path is a /tmp absolute path, the URI falls back to 'sbom.json'."""
+    result = _result()
+    result.sbom_path = Path("/tmp/syft-12345/sbom.json")  # noqa: S108
+    result.findings = [
+        Finding(id="CVE-2026-0003", package="pkg", version="1.0.0", severity="low")
+    ]
+    doc = json.loads(render(result, "sarif"))
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+    assert uri == "sbom.json"
+    assert not uri.startswith("/tmp")  # noqa: S108
+
+
+def test_sarif_location_uses_sbom_output_from_provenance() -> None:
+    """When sbom_path is absent but provenance has sbom_output, use that."""
+    result = _result()
+    result.sbom_path = None
+    result.provenance = {"engine": "grype-local", "sbom_output": "out/generated.json"}
+    result.findings = [
+        Finding(id="CVE-2026-0004", package="pkg", version="1.0.0", severity="low")
+    ]
+    doc = json.loads(render(result, "sarif"))
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+    assert uri == "out/generated.json"
+
+
+# Fix 2: top-actions ranking
+
+
+def test_top_actions_kev_without_fix_ranks_above_low_with_fix() -> None:
+    """A KEV finding with no fix must rank above a low finding that has a fix."""
+    result = _result()
+    result.findings = [
+        Finding(
+            id="CVE-LOW-FIXED",
+            package="low-pkg",
+            version="1.0",
+            severity="low",
+            fixed_versions=["1.1"],
+            known_exploited=False,
+        ),
+        Finding(
+            id="CVE-KEV-UNFIXED",
+            package="kev-pkg",
+            version="2.0",
+            severity="critical",
+            fixed_versions=[],
+            known_exploited=True,
+        ),
+    ]
+    text = render(result, "text")
+    kev_pos = text.find("kev-pkg")
+    low_pos = text.find("low-pkg")
+    assert kev_pos != -1, "KEV finding not in output"
+    assert low_pos != -1, "low finding not in output"
+    assert kev_pos < low_pos, "KEV finding should rank before low finding with fix"
+
+
+def test_top_actions_includes_all_findings_not_only_fixed() -> None:
+    """All findings are candidates; fix availability is only a tiebreaker."""
+    result = _result()
+    result.findings = [
+        Finding(
+            id="CVE-UNFIXED",
+            package="unfixed-pkg",
+            version="1.0",
+            severity="critical",
+            fixed_versions=[],
+            known_exploited=False,
+        ),
+        Finding(
+            id="CVE-FIXED",
+            package="fixed-pkg",
+            version="2.0",
+            severity="low",
+            fixed_versions=["2.1"],
+            known_exploited=False,
+        ),
+    ]
+    text = render(result, "text")
+    # The critical unfixed finding must appear in Top actions.
+    assert "unfixed-pkg" in text
+
+
+# Fix 3: markdown sections
+
+
+def test_markdown_promotes_all_sections() -> None:
+    """All double-newline section breaks become ## headings, not just the first."""
+    result = _result()
+    text = render(result, "markdown")
+    # Must start with a single # heading.
+    assert text.startswith("# Local SBOM Check")
+    # All major sections must be ## headings.
+    assert "\n\n## Summary" in text
+    assert "\n\n## Top actions" in text
+
+
+def test_markdown_first_line_is_h1_not_h2() -> None:
+    """The very first line of markdown output is H1, not H2."""
+    result = _result()
+    first_line = render(result, "markdown").splitlines()[0]
+    assert first_line.startswith("# ")
+    assert not first_line.startswith("## ")
+
+
+# Fix 5: footer text
+
+
+def test_verbose_text_mentions_output_json_in_provenance_note() -> None:
+    """The verbose data-provenance footer mentions '--output json'."""
+    text = render(_result(), "text", verbose=True)
+    assert "--output json" in text
+    assert "full machine report" in text

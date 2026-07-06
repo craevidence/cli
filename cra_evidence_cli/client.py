@@ -56,14 +56,19 @@ class CRAEvidenceClient:
         oidc_url = f"{self.base_url}/api/v1/oidc/token"
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                oidc_url,
-                json={"github_token": self.config.oidc_token},
-                headers={
-                    "User-Agent": f"craevidence-cli/{__version__}",
-                    "X-CLI-Version": __version__,
-                }
-            )
+            try:
+                response = await client.post(
+                    oidc_url,
+                    json={"github_token": self.config.oidc_token},
+                    headers={
+                        "User-Agent": f"craevidence-cli/{__version__}",
+                        "X-CLI-Version": __version__,
+                    }
+                )
+            except httpx.RequestError as exc:
+                raise APIError(
+                    message=f"Network error contacting {oidc_url}: {exc}",
+                ) from exc
 
             if response.status_code != 200:
                 error_detail = "OIDC token exchange failed"
@@ -209,7 +214,11 @@ class CRAEvidenceClient:
         Execute an HTTP request with retry logic for GET requests.
 
         Retries up to 3 times on 429 or 5xx responses with exponential
-        backoff (1s, 2s, 4s). Honours the Retry-After header when present.
+        backoff (1s, 2s, 4s). Honours the Retry-After header when present,
+        capped at 60 seconds per attempt.
+
+        Authentication headers are built here, after the OIDC access token
+        exchange has completed, so callers must not pass their own headers.
 
         Args:
             method: HTTP method (intended for GET requests)
@@ -224,13 +233,22 @@ class CRAEvidenceClient:
         """
         await self._ensure_access_token()
 
+        headers = kwargs.pop("headers", None)
+        if headers is None:
+            headers = self._get_headers()
+
         max_retries = 3
         backoff_seconds = [1, 2, 4]
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             last_response: httpx.Response | None = None
             for attempt in range(max_retries + 1):
-                response = await client.request(method, url, **kwargs)
+                try:
+                    response = await client.request(method, url, headers=headers, **kwargs)
+                except httpx.RequestError as exc:
+                    raise APIError(
+                        message=f"Network error contacting {url}: {exc}",
+                    ) from exc
                 last_response = response
 
                 if response.status_code == 429 or response.status_code >= 500:
@@ -238,7 +256,7 @@ class CRAEvidenceClient:
                         retry_after_header = response.headers.get("Retry-After")
                         if retry_after_header:
                             try:
-                                wait = float(retry_after_header)
+                                wait = min(float(retry_after_header), 60.0)
                             except ValueError:
                                 wait = float(backoff_seconds[attempt])
                         else:
@@ -281,6 +299,7 @@ class CRAEvidenceClient:
         # Multi-repo provenance: manual override slug for the
         # platform's auto-attribution by repository URL.
         component: str | None = None,
+        component_version: str | None = None,
         # Optional kernel config for CVE filtering
         kernel_config_path: Path | None = None,
         # Upload metadata (parity with CI components)
@@ -316,6 +335,7 @@ class CRAEvidenceClient:
             repo_path: Repository subdirectory (monorepo support)
             source_type: How the SBOM was generated: build_time, binary_analysis,
                 vendor, manifest, manual, import.
+            component_version: Component repository release version for this SBOM
             kernel_config_path: Optional path to kernel .config file for CVE filtering
             release_notes: Release notes for this version (max 5000 chars, only
                 applied on version creation)
@@ -416,6 +436,8 @@ class CRAEvidenceClient:
                     data["source_type"] = source_type
                 if component:
                     data["component"] = component
+                if component_version:
+                    data["component_version"] = component_version
 
                 if release_notes:
                     data["release_notes"] = release_notes
@@ -433,6 +455,10 @@ class CRAEvidenceClient:
                         files=files,
                         data=data,
                     )
+                except httpx.RequestError as exc:
+                    raise APIError(
+                        message=f"Network error contacting {self.base_url}/api/v1/ci/upload: {exc}",
+                    ) from exc
                 finally:
                     if kernel_f is not None:
                         kernel_f.close()
@@ -574,7 +600,7 @@ class CRAEvidenceClient:
                     data["pipeline_id"] = pipeline_id
                 if repository:
                     data["repository"] = repository
-                if repo_path:
+                if repo_path is not None:
                     data["repo_path"] = repo_path
 
                 if release_notes:
@@ -586,12 +612,17 @@ class CRAEvidenceClient:
                 if release_state:
                     data["release_state"] = release_state
 
-                response = await client.post(
-                    f"{self.base_url}/api/v1/ci/upload",
-                    headers=self._get_headers(),
-                    files=files,
-                    data=data,
-                )
+                try:
+                    response = await client.post(
+                        f"{self.base_url}/api/v1/ci/upload",
+                        headers=self._get_headers(),
+                        files=files,
+                        data=data,
+                    )
+                except httpx.RequestError as exc:
+                    raise APIError(
+                        message=f"Network error contacting {self.base_url}/api/v1/ci/upload: {exc}",
+                    ) from exc
 
                 return self._handle_response(response)
 
@@ -620,30 +651,29 @@ class CRAEvidenceClient:
         repo_path: str | None = None,
     ) -> dict[str, Any]:
         """
-        Upload a VEX document (CycloneDX JSON with vulnerabilities[]) to a product version.
+        Upload a VEX document (CycloneDX JSON with vulnerabilities[]) to CRA Evidence.
 
-        Resolves product slug → product_id and version string → version_id, then
-        POSTs to /api/v1/products/{product_id}/versions/{version_id}/vex.
+        POSTs multipart form data to /api/v1/ci/upload with artifact_type=vex.
 
         Args:
-            product: Product slug or UUID
-            version: Version number string
+            product: Product slug or ID
+            version: Version number
             file_path: Path to VEX file
-            create_product: Unused; kept for API compatibility
-            create_version: Unused; kept for API compatibility
-            no_inherit: Unused; kept for API compatibility
-            category: Unused; kept for API compatibility
-            subcategory: Unused; kept for API compatibility
-            product_type: Unused; kept for API compatibility
-            cra_role: Unused; kept for API compatibility
-            product_group: Unused; kept for API compatibility
-            environment: Unused; kept for API compatibility
-            tags: Unused; kept for API compatibility
-            commit_sha: Unused; kept for API compatibility
-            branch: Unused; kept for API compatibility
-            pipeline_id: Unused; kept for API compatibility
-            repository: Unused; kept for API compatibility
-            repo_path: Unused; kept for API compatibility
+            create_product: Create product if it doesn't exist
+            create_version: Create version if it doesn't exist
+            no_inherit: Skip inheriting CRA compliance artifacts from the previous version
+            category: CRA product category
+            subcategory: CRA Annex III/IV subcategory
+            product_type: Product type (software, hardware, mixed)
+            cra_role: CRA economic operator role
+            product_group: Product group slug
+            environment: Environment slug for this version
+            tags: Comma-separated list of tags to apply to this version
+            commit_sha: Git commit SHA (auto-detected in CI)
+            branch: Git branch name (auto-detected in CI)
+            pipeline_id: CI pipeline ID (auto-detected in CI)
+            repository: Repository URL or name (auto-detected in CI)
+            repo_path: Repository subdirectory (monorepo support)
 
         Returns:
             Upload response data
@@ -655,37 +685,60 @@ class CRAEvidenceClient:
         if not file_path.exists():
             raise FileNotFoundError(str(file_path))
 
-        product_id = await self._resolve_product_id(product)
-
-        version_response = await self._request_with_retry(
-            "GET",
-            f"{self.base_url}/api/v1/products/{product_id}/versions",
-            headers=self._get_headers(),
-        )
-        versions = self._handle_response(version_response)
-        version_id: str | None = None
-        if isinstance(versions, list):
-            for v in versions:
-                if v.get("version_number") == version:
-                    version_id = str(v["id"])
-                    break
-        if version_id is None:
-            raise APIError(
-                message=f"Version '{version}' not found for product '{product}'.",
-                status_code=404,
-            )
-
         await self._ensure_access_token()
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/json")}
+                data = {
+                    "product": product,
+                    "version": version,
+                    "artifact_type": "vex",
+                    "create_product": str(create_product).lower(),
+                    "create_version": str(create_version).lower(),
+                }
 
-                response = await client.post(
-                    f"{self.base_url}/api/v1/products/{product_id}/versions/{version_id}/vex",
-                    headers=self._get_headers(),
-                    files=files,
-                )
+                if no_inherit:
+                    data["no_inherit"] = "true"
+
+                if category:
+                    data["category"] = category
+                if subcategory:
+                    data["subcategory"] = subcategory
+                if product_type:
+                    data["product_type"] = product_type
+                if cra_role:
+                    data["cra_role"] = cra_role
+                if product_group:
+                    data["product_group"] = product_group
+
+                if environment:
+                    data["environment"] = environment
+                if tags:
+                    data["tags"] = tags
+
+                if commit_sha:
+                    data["commit_sha"] = commit_sha
+                if branch:
+                    data["branch"] = branch
+                if pipeline_id:
+                    data["pipeline_id"] = pipeline_id
+                if repository:
+                    data["repository"] = repository
+                if repo_path is not None:
+                    data["repo_path"] = repo_path
+
+                try:
+                    response = await client.post(
+                        f"{self.base_url}/api/v1/ci/upload",
+                        headers=self._get_headers(),
+                        files=files,
+                        data=data,
+                    )
+                except httpx.RequestError as exc:
+                    raise APIError(
+                        message=f"Network error contacting {self.base_url}/api/v1/ci/upload: {exc}",
+                    ) from exc
 
                 return self._handle_response(response)
 
@@ -736,24 +789,6 @@ class CRAEvidenceClient:
         product: str,
         version: str,
         file_path: Path,
-        create_product: bool = False,
-        create_version: bool = False,
-        no_inherit: bool = False,
-        # CRA classification
-        category: str | None = None,
-        subcategory: str | None = None,
-        product_type: str | None = None,
-        cra_role: str | None = None,
-        product_group: str | None = None,
-        # Version metadata
-        environment: str | None = None,
-        tags: str | None = None,
-        # CI metadata
-        commit_sha: str | None = None,
-        branch: str | None = None,
-        pipeline_id: str | None = None,
-        repository: str | None = None,
-        repo_path: str | None = None,
     ) -> dict[str, Any]:
         """
         Upload a SARIF security scan report to a product version.
@@ -765,21 +800,6 @@ class CRAEvidenceClient:
             product: Product slug or UUID
             version: Version number string
             file_path: Path to SARIF file (.json or .sarif)
-            create_product: Unused -- kept for API compatibility
-            create_version: Unused -- kept for API compatibility
-            no_inherit: Unused -- kept for API compatibility
-            category: Unused -- kept for API compatibility
-            subcategory: Unused -- kept for API compatibility
-            product_type: Unused -- kept for API compatibility
-            cra_role: Unused -- kept for API compatibility
-            product_group: Unused -- kept for API compatibility
-            environment: Unused -- kept for API compatibility
-            tags: Unused -- kept for API compatibility
-            commit_sha: Unused -- kept for API compatibility
-            branch: Unused -- kept for API compatibility
-            pipeline_id: Unused -- kept for API compatibility
-            repository: Unused -- kept for API compatibility
-            repo_path: Unused -- kept for API compatibility
 
         Returns:
             Upload response data
@@ -796,7 +816,6 @@ class CRAEvidenceClient:
         version_response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
-            headers=self._get_headers(),
         )
         versions = self._handle_response(version_response)
         version_id: str | None = None
@@ -862,7 +881,6 @@ class CRAEvidenceClient:
         version_response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
-            headers=self._get_headers(),
         )
         versions = self._handle_response(version_response)
         version_id: str | None = None
@@ -1078,7 +1096,7 @@ class CRAEvidenceClient:
                     data["pipeline_id"] = pipeline_id
                 if repository:
                     data["repository"] = repository
-                if repo_path:
+                if repo_path is not None:
                     data["repo_path"] = repo_path
 
                 if release_notes:
@@ -1090,12 +1108,17 @@ class CRAEvidenceClient:
                 if release_state:
                     data["release_state"] = release_state
 
-                response = await client.post(
-                    f"{self.base_url}/api/v1/ci/upload",
-                    headers=self._get_headers(),
-                    files=files,
-                    data=data,
-                )
+                try:
+                    response = await client.post(
+                        f"{self.base_url}/api/v1/ci/upload",
+                        headers=self._get_headers(),
+                        files=files,
+                        data=data,
+                    )
+                except httpx.RequestError as exc:
+                    raise APIError(
+                        message=f"Network error contacting {self.base_url}/api/v1/ci/upload: {exc}",
+                    ) from exc
 
                 return self._handle_response(response)
 
@@ -1164,7 +1187,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/ci/status",
-            headers=self._get_headers(),
             params={"product": product, "version": version},
         )
         return self._handle_response(response)
@@ -1240,11 +1262,16 @@ class CRAEvidenceClient:
             payload["component"] = component
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/api/v1/ci/scan",
-                headers=self._get_headers(),
-                data=payload,
-            )
+            try:
+                response = await client.post(
+                    f"{self.base_url}/api/v1/ci/scan",
+                    headers=self._get_headers(),
+                    data=payload,
+                )
+            except httpx.RequestError as exc:
+                raise APIError(
+                    message=f"Network error contacting {self.base_url}/api/v1/ci/scan: {exc}",
+                ) from exc
 
             return self._handle_response(response)
 
@@ -1267,7 +1294,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/ci/export",
-            headers=self._get_headers(),
             params={
                 "product": product,
                 "version": version,
@@ -1307,7 +1333,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/documents/{document_id}/gemara-source/download",
-            headers=self._get_headers(),
         )
 
         if response.status_code >= 400:
@@ -1344,7 +1369,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/ci/compare",
-            headers=self._get_headers(),
             params={
                 "product": product,
                 "version_a": version_a,
@@ -1364,7 +1388,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions/{version_id}/hboms",
-            headers=self._get_headers(),
         )
         result = self._handle_response(response)
         return result if isinstance(result, list) else []
@@ -1380,7 +1403,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions/{version_id}/vex",
-            headers=self._get_headers(),
         )
         result = self._handle_response(response)
         return result if isinstance(result, list) else []
@@ -1391,7 +1413,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/maturity",
-            headers=self._get_headers(),
         )
         return self._handle_response(response)
 
@@ -1402,7 +1423,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions/{version_id}/maturity",
-            headers=self._get_headers(),
         )
         return self._handle_response(response)
 
@@ -1440,7 +1460,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/versions/{version_id}/static-analysis",
-            headers=self._get_headers(),
             params=params,
         )
         result = self._handle_response(response)
@@ -1457,7 +1476,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/versions/{version_id}/static-analysis/summary",
-            headers=self._get_headers(),
         )
         result = self._handle_response(response)
         return result if isinstance(result, dict) else {}
@@ -1498,7 +1516,6 @@ class CRAEvidenceClient:
                     version_response = await self._request_with_retry(
                         "GET",
                         f"{self.base_url}/api/v1/products/{product_id}/versions",
-                        headers=self._get_headers(),
                     )
                     versions = self._handle_response(version_response)
                     version_id: str | None = None
@@ -1655,7 +1672,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/distributor/verifications",
-            headers=self._get_headers(),
             params=params,
         )
 
@@ -1678,7 +1694,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/distributor/verifications/{verification_id}",
-            headers=self._get_headers(),
         )
         return self._handle_response(response)
 
@@ -1708,7 +1723,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products",
-            headers=self._get_headers(),
         )
         products = self._handle_response(response)
 
@@ -1748,7 +1762,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
-            headers=self._get_headers(),
         )
         versions = self._handle_response(response)
 
@@ -1776,7 +1789,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/cra-profile",
-            headers=self._get_headers(),
         )
         return self._handle_response(response)
 
@@ -1836,7 +1848,6 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
-            headers=self._get_headers(),
         )
         versions = self._handle_response(response)
 
@@ -1856,7 +1867,6 @@ class CRAEvidenceClient:
         version_response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions/{version_id}",
-            headers=self._get_headers(),
         )
         version_detail = self._handle_response(version_response)
 
@@ -1889,9 +1899,14 @@ class CRAEvidenceClient:
         await self._ensure_access_token()
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/api/v1/sboms/verify",
-                json=payload,
-                headers=self._get_headers(),
-            )
+            try:
+                response = await client.post(
+                    f"{self.base_url}/api/v1/sboms/verify",
+                    json=payload,
+                    headers=self._get_headers(),
+                )
+            except httpx.RequestError as exc:
+                raise APIError(
+                    message=f"Network error contacting {self.base_url}/api/v1/sboms/verify: {exc}",
+                ) from exc
         return self._handle_response(response)

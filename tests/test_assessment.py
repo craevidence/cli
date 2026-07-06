@@ -415,3 +415,33 @@ def test_cmd_check_json_output(tmp_path: Path) -> None:
     assert data["exit_code"] == 25
     assert data["blocking"]
     assert "compliance" in data["disclaimer"].lower()
+
+
+def test_templates_unsupported_format_emits_notice() -> None:
+    """'assessment templates' with an unsupported format emits a stderr notice."""
+    runner = CliRunner()
+    result = runner.invoke(assessment, ["templates"], obj=_obj("sarif"))
+    assert result.exit_code == 0, result.output
+    combined = result.output
+    assert "sarif" in combined
+    assert "not supported" in combined
+    # Falls back to text listing.
+    assert "consumer-iot" in combined
+
+
+def test_check_unsupported_format_emits_notice(tmp_path: Path) -> None:
+    """'assessment check' with an unsupported format emits a stderr notice."""
+    runner = CliRunner()
+    runner.invoke(
+        assessment,
+        ["new", "--template", "consumer-iot", "--output-dir", str(tmp_path), "--non-interactive"],
+        obj=_obj(),
+    )
+    mpath = tmp_path / "assessment.yaml"
+    result = runner.invoke(
+        assessment, ["check", "--matrix", str(mpath)], obj=_obj("sarif")
+    )
+    # Exit code is non-zero (25) because the fresh matrix has gaps.
+    combined = result.output
+    assert "sarif" in combined
+    assert "not supported" in combined

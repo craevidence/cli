@@ -1,32 +1,29 @@
 # Account commands (require an API key)
 
 The commands below talk to the CRA Evidence API, so they need a
-`CRA_EVIDENCE_API_KEY` (or an OIDC identity in GitHub Actions for signed-SBOM
-uploads). They are separate from the no-account `craevidence check` local
-security check. Set your key as described under Authentication, then use any
-command below.
+`CRA_EVIDENCE_API_KEY` (or an OIDC identity in GitHub Actions). They are
+separate from the no-account `craevidence check` local security check. Set your
+key as described under Authentication, then use any command below.
 
 Back to the [README](../README.md).
 
 ## Authentication
 
-The CLI supports three authentication methods, evaluated in this order:
+The CLI supports four authentication methods. They are evaluated in the
+following precedence order (highest wins):
 
-1. **Environment variables** (recommended for CI/CD):
-
-   ```bash
-   export CRA_EVIDENCE_API_KEY=cra_key_xxx
-   export CRA_EVIDENCE_URL=https://api.craevidence.com
-   ```
-
-2. **Command-line flags**:
+1. **Command-line flags** (highest priority):
 
    ```bash
    craevidence --api-key cra_key_xxx --url https://api.craevidence.com upload-sbom ...
    ```
 
-   > **Note:** `--api-key`, `--url`, and `--output` are **global options** and must appear **before** the subcommand name.
-   > Example: `craevidence --output json upload-sbom --product my-app --version 1.0 --file sbom.json`
+2. **Environment variables** (recommended for CI/CD):
+
+   ```bash
+   export CRA_EVIDENCE_API_KEY=cra_key_xxx
+   export CRA_EVIDENCE_URL=https://api.craevidence.com
+   ```
 
 3. **Config file** (`~/.cra-evidence/config.yaml`):
 
@@ -37,6 +34,49 @@ The CLI supports three authentication methods, evaluated in this order:
    ```
 
    > **Security note:** Restrict config file permissions so only your user can read it: `chmod 600 ~/.cra-evidence/config.yaml`
+
+4. **OIDC identity** (GitHub Actions only):
+
+   Pass `--oidc` as a global flag. The CLI exchanges the GitHub Actions OIDC
+   token (audience `https://github.com/craevidence`) for a short-lived access
+   token that works for all commands in the session. The job needs:
+
+   ```yaml
+   permissions:
+     id-token: write
+     contents: read
+   ```
+
+   `--oidc` can be combined with `--sign` for signed-SBOM uploads (which also
+   requires `id-token: write`), but it is not limited to upload commands. Use
+   it whenever you want keyless authentication from a GitHub Actions workflow.
+
+### Global `--output` option
+
+`--api-key`, `--url`, `--oidc`, and `--output` are **global options** and must
+appear **before** the subcommand name. The output format option (`--output
+json|text|sarif|markdown`) controls the format for the following subcommand.
+
+```bash
+craevidence --output json status --product my-app --version 1.0
+craevidence --output sarif check --sbom sbom.json
+```
+
+The per-command reference sections below omit `--output` from their synopses;
+use the global placement shown above.
+
+### Product and version identity resolution
+
+Most commands accept `--product` and `--version` flags. When those flags are
+omitted, the CLI resolves them from the following sources in order (highest
+wins):
+
+1. Explicit `--product` / `--version` / `--component` flag
+2. `CRA_EVIDENCE_PRODUCT` / `CRA_EVIDENCE_VERSION` / `CRA_EVIDENCE_COMPONENT`
+   environment variables
+3. `.cra/evidence.yaml` in the working directory (or any parent directory)
+
+The README contains the full `.cra/evidence.yaml` reference.
 
 ### Upload an SBOM
 
@@ -54,6 +94,7 @@ craevidence upload-sbom \
   --image nginx:latest
 
 # Upload, scan, and fail the pipeline on high vulnerabilities
+# (--fail-on requires --scan; polls until the scan completes)
 craevidence upload-sbom \
   --product my-product \
   --version 1.2.3 \
@@ -78,15 +119,6 @@ craevidence upload-sbom \
   --no-create-version
 ```
 
-In GitHub Actions you can authenticate signed-SBOM uploads with an OIDC
-identity instead of a long-lived key for signing; the job needs:
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-```
-
 ## `upload-sbom`
 
 Upload a Software Bill of Materials. Accepts an existing SBOM file or generates one from a Docker image via Syft.
@@ -99,14 +131,16 @@ craevidence upload-sbom
   --image <docker-image>     # Generate SBOM from image (requires Syft)
   --source <directory>       # Generate SBOM from source directory (requires Syft)
   [--format cyclonedx|spdx]  # SBOM format for Syft generation (default: cyclonedx). Ignored when uploading with --file.
+  [--component <slug>]       # Component slug for multi-repo products
   [--no-create-product]      # Disable auto-creation of product (creation is on by default)
   [--no-create-version]      # Disable auto-creation of version (creation is on by default)
   [--target-markets DE,FR]   # Required when auto-creating a product
   [--scan]                   # Trigger vulnerability scan after upload
-  [--fail-on critical|high|medium|low]  # Exit non-zero if threshold exceeded
+  [--fail-on critical|high|medium|low]  # Require --scan; polls until scan completes (default wait: 300s)
+  [--scan-timeout <seconds>] # Max seconds to wait for scan completion when --fail-on is set (default: 300, min: 1)
   [--sign]                   # Create a Sigstore bundle before upload, then verify it
   [--signature-on]            # Verify <SBOM>.sigstore.json using signer policy from env vars
-  [--signature-bundle <path>] # Verify Sigstore/Cosign bundle after upload
+  [--signature-bundle <path>] # Verify Sigstore bundle after upload
   [--signature-identity <id>] # Expected signer identity for trusted verification
   [--signature-issuer <url>]  # Expected OIDC issuer for trusted verification
   [--fail-untrusted]          # Exit 22 unless signature verification is trusted
@@ -137,8 +171,24 @@ craevidence upload-sbom
   [--external-url <url>]
   [--release-state draft|pending_review|approved|released|deprecated|end_of_life]
   [--no-inherit]             # Do not inherit compliance artifacts from previous version
-  [--output json|text]       # Output format (default: text)
 ```
+
+**`--fail-on` requires `--scan`.** Using `--fail-on` without `--scan` is a usage
+error (exit 2). When both are set, the command waits for the asynchronous
+server-side scan to finish (polling every 5 seconds) before evaluating the gate.
+Use `--scan-timeout` to adjust the maximum wait (default 300 seconds, minimum 1).
+On timeout the command exits 3 with a message indicating the last scan state.
+
+Exit codes when `--fail-on` is set:
+
+| Code | Meaning |
+|------|---------|
+| 0 | No threshold exceeded |
+| 3 | Scan failed, scan disabled, or scan timed out |
+| 10 | Critical vulnerabilities found |
+| 11 | High vulnerabilities found |
+| 12 | Medium vulnerabilities found |
+| 13 | Low vulnerabilities found |
 
 `--release-state` on upload is a lifecycle shortcut. It is not a CRA-readiness
 gate and does not prove the version is compliant. CRA Evidence applies the same
@@ -156,13 +206,8 @@ craevidence upload-sbom \
   --sign
 ```
 
-In GitHub Actions, the job needs:
-
-```yaml
-permissions:
-  id-token: write
-  contents: read
-```
+In GitHub Actions, the signing step also needs `id-token: write` (same
+permission required for `--oidc`; see the Authentication section above).
 
 The CLI uses the current Sigstore signer identity from the created certificate
 when no explicit policy is supplied. That creates signed evidence, but it is not
@@ -331,19 +376,23 @@ craevidence upload-hbom
   [--environment production|staging|development|testing]
   [--tags <comma-separated>]
   [--no-inherit]
-  [--output json|text]
 ```
 
 ## `upload-vex`
 
-Upload a VEX (Vulnerability Exploitability eXchange) document.
+Upload a VEX (Vulnerability Exploitability eXchange) document to CRA Evidence.
+
+The product and version must already exist before uploading VEX; there are no
+`--create-product` or `--create-version` flags on this command.
+
+All CRA classification, CI metadata, and environment options listed below are
+transmitted to the server when provided.
 
 ```
 craevidence upload-vex
   --product <slug-or-id>
   --version <version-number>
   --file <path>
-  # Product and version must already exist. --create-product/--create-version are not available.
   # CRA classification
   [--category default|important_class_i|important_class_ii|critical]
   [--subcategory <value>]
@@ -360,38 +409,27 @@ craevidence upload-vex
   [--environment production|staging|development|testing]
   [--tags <comma-separated>]
   [--no-inherit]
-  [--output json|text]
 ```
+
+Text output includes a "Vulnerabilities" row with the count of VEX statements
+in the uploaded file, plus any CRA status warnings returned by the server.
 
 ## `upload-sarif`
 
 Upload SARIF security scan results to CRA Evidence. Supports SARIF 2.1.0 output from tools like CodeQL, Semgrep, Bandit, and govulncheck.
 
-The product and version must already exist. `--create-product` and `--create-version` are not available on this command.
+The product and version must already exist.
 
 ```
 craevidence upload-sarif
   --product <slug-or-id>
   --version <version-number>
   --file <path>              # Path to SARIF file (.json or .sarif)
-  # CRA classification
-  [--category default|important_class_i|important_class_ii|critical]
-  [--subcategory <value>]
-  [--product-type software|hardware|mixed]
-  [--cra-role manufacturer|importer|distributor]
-  [--product-group <name>]
-  # CI metadata (auto-detected in most CI environments)
-  [--commit <sha>]
-  [--branch <name>]
-  [--pipeline-id <id>]
-  [--repository <url-or-name>]
-  [--repo-path <subdir>]
-  [--no-ci-detect]
-  [--environment production|staging|development|testing]
-  [--tags <comma-separated>]
-  [--no-inherit]
-  [--output json|text]
 ```
+
+> **Note:** `upload-sarif` accepts only `--product`, `--version`, and `--file`.
+> CI metadata, environment, tags, and classification options are not available
+> on this command. Passing any removed option is a usage error (exit 2).
 
 ## `upload-attestation`
 
@@ -406,7 +444,6 @@ craevidence upload-attestation
   --product <slug-or-id>
   --version <version-number>
   --file <path>              # Path to DSSE/in-toto file (.json or .jsonl)
-  [--output json|text]
 ```
 
 ## `upload-document`
@@ -443,7 +480,6 @@ craevidence upload-document
   [--tags <comma-separated>]
   [--no-inherit]
   [--require-structured-mapping]
-  [--output json|text]
 ```
 
 `--require-structured-mapping` is an optional CI guardrail for supported
@@ -514,10 +550,22 @@ craevidence status
   --product <slug-or-id>
   --version <version-number>
   [--fail-on critical|high|medium|low|none]  # default: none
-  [--output json|text]
 ```
 
-When `--fail-on` is set to anything other than `none`, the command also automatically fails (exit code 20) if the CRA status is not `ready`.
+When `--fail-on` is set to anything other than `none`, the command also gates
+on CRA readiness. Exit codes:
+
+| Code | Meaning |
+|------|---------|
+| 0 | No threshold exceeded |
+| 10-13 | Vulnerability threshold exceeded (critical/high/medium/low) |
+| 20 | CRA legal floor not met (CRA status is not `ready`) |
+| 24 | CRA legal floor met but release policy not met |
+
+Exit 24 applies when the server returns a `release_policy_status` field that is
+not `ready` while `cra_floor_status` is `ready`. This means the product passes
+the CRA Regulation's baseline requirements but the organisation's own release
+policy adds stricter conditions that are not yet satisfied.
 
 When CRA Evidence reports retained source YAML provenance in
 `document_artifacts`, text output shows the explicit `download-source` command
@@ -560,7 +608,6 @@ It does not affect readiness or release gating.
 craevidence maturity
   --product <slug-or-id>
   [--version <version-number>]   # default: the product's reference version
-  [--output json|text]
 ```
 
 Text output prints the overall band/coverage, per-CRA-family coverage, and a per-practice table
@@ -634,8 +681,13 @@ craevidence wait-ready
   --version <version-number>
   [--timeout <seconds>]      # Default: 300
   [--interval <seconds>]     # Poll interval, default: 10
-  [--output json|text]
 ```
+
+During polling, each non-ready response prints a progress line to stdout showing
+elapsed time and the current status. The gate label is "Policy Status" when the
+server returns a `release_policy_status` field, or "CRA Status" otherwise.
+On success, the command prints which gate passed (Policy Status or CRA Status)
+before exiting 0. On timeout, the command exits 1.
 
 ## `release`
 
@@ -651,8 +703,14 @@ craevidence release
   --version <version-number>
   --state draft|pending_review|approved|released|deprecated|end_of_life
   [--superseded-by <version>]  # Record successor version; only valid with deprecated/end_of_life
-  [--output json|text]
 ```
+
+`--superseded-by` may only be used when `--state` is `deprecated` or
+`end_of_life`; passing it with any other state is a usage error (exit 2).
+
+When `--state deprecated` is used with `--superseded-by`, the old version is
+also archived (marked as replaced by the successor). Archiving does not occur
+for `end_of_life` state, even when `--superseded-by` is provided.
 
 ## `scan`
 
@@ -664,7 +722,7 @@ craevidence scan
   --version <version-number>
   [--component <slug>]              # Multi-repo: scan the SBOM attributed to this component
   [--fail-on critical|high|medium]  # Exit non-zero if vulnerabilities at or above this level are found
-  [--output json|text]
+  [--scan-timeout <seconds>]        # Max seconds to wait for scan completion (default: 300, min: 1)
 ```
 
 `--component` takes a `ProductComponent` slug. When set, the scan targets
@@ -672,6 +730,21 @@ the latest SBOM whose `component_id` matches that component, so multi-repo
 products can scan each component independently. When omitted, the latest
 SBOM for the version is used regardless of component (unchanged default).
 Archived components are not eligible.
+
+When `--fail-on` is set, the command triggers the server-side scan and then
+polls `GET /ci/status` every 5 seconds until the scan reaches a terminal
+state. Progress lines go to stderr. Use `--scan-timeout` to control how long
+to wait (default 300 seconds).
+
+Exit codes:
+
+| Code | Meaning |
+|------|---------|
+| 0 | No threshold exceeded |
+| 3 | Scan failed, scan disabled, or timed out |
+| 10 | Critical vulnerabilities found |
+| 11 | High vulnerabilities found |
+| 12 | Medium vulnerabilities found |
 
 ## `export`
 
@@ -699,7 +772,6 @@ craevidence compare
   --product <slug-or-id>
   --version-a <version>
   --version-b <version>
-  [--output json|text]
 ```
 
 ## `distributor`
@@ -717,7 +789,6 @@ craevidence distributor create
   [--external-product <name>]          # For products not in CRA Evidence
   [--external-manufacturer <name>]     # External manufacturer name
   [--product-identifier <sku>]         # Product identifier (SKU, model number)
-  [--output json|text]
 ```
 
 ### `distributor update`
@@ -747,7 +818,6 @@ craevidence distributor update VERIFICATION_ID
   # Compliance issues
   [--no-issues|--has-issues]
   [--issues-description <text>]
-  [--output json|text]
 ```
 
 ### `distributor complete`
@@ -756,7 +826,6 @@ Mark a verification as complete. `VERIFICATION_ID` is a positional argument.
 
 ```
 craevidence distributor complete VERIFICATION_ID
-  [--output json|text]
 ```
 
 ### `distributor stop-ship`
@@ -766,7 +835,6 @@ Issue a stop-ship flag on a verification. `VERIFICATION_ID` is a positional argu
 ```
 craevidence distributor stop-ship VERIFICATION_ID
   --reason <text>
-  [--output json|text]
 ```
 
 ### `distributor list`
@@ -776,9 +844,10 @@ List distributor verifications.
 ```
 craevidence distributor list
   [--status draft|verified|issues_found|stop_ship]
-  [--limit <int>]            # Default: 20
-  [--output json|text]
+  [--limit <int>]            # Default: 20, max: 100
 ```
+
+Verification numbers are shown in full in both text and JSON output.
 
 ### `distributor get`
 
@@ -786,8 +855,22 @@ Get details of a single verification. `VERIFICATION_ID` is a positional argument
 
 ```
 craevidence distributor get VERIFICATION_ID
-  [--output json|text]
 ```
+
+## `components`
+
+Inspect product components (multi-repo support). Read-only: shows which
+components a product has and which have already pushed SBOM evidence for the
+most recent version.
+
+```
+craevidence components list
+  --product <slug-or-id>
+  [--include-archived]       # Include soft-archived components in the output
+```
+
+The `--component <slug>` flag on `upload-sbom` and `scan` refers to the slug
+shown by `components list`. See the README for the full multi-repo workflow.
 
 ## `setup-profile`
 
@@ -812,17 +895,18 @@ craevidence setup-profile
   [--webhook-secret <secret>]              # Pass empty string to clear
   [--confirm-all]                          # Set all Annex I attestations to confirmed
   [--attestation KEY=true|false]           # Set individual attestation; repeatable
-  [--output json|text]
 ```
 
 ## `show-profile`
 
 Display the CRA compliance profile for a product.
 
+The product heading in text output shows the slug or ID supplied by the user,
+not the internal UUID from the API response.
+
 ```
 craevidence show-profile
   --product <slug-or-id>     # Required
-  [--output json|text]
 ```
 
 ## `validate`
@@ -832,7 +916,6 @@ Validate an SBOM file against the CRA Evidence ingestion pipeline. Reports forma
 ```
 craevidence validate
   --sbom <path>
-  [--output json|text]
 ```
 
 Exits with code 1 if the SBOM is invalid.
@@ -847,19 +930,21 @@ craevidence verify run <directory>
   --version <version-number>
   [--format cyclonedx|spdx]       # SBOM format for binary scan (default: cyclonedx)
   [--fail-on-discrepancies]        # Exit 1 if any discrepancies found
-  [--output json|text]
 ```
 
 The product and version must already exist with a declared SBOM uploaded. Requires Syft installed or Docker socket mounted.
 
 ## Common upload flags
 
+`upload-sarif` accepts only `--product`, `--version`, and `--file`. The flags
+below do not apply to it.
+
 | Flag | Applies To | Description |
 |---|---|---|
-| `--no-inherit` | upload-* | Skip inheriting compliance artifacts from the previous version |
-| `--product-group <name>` | upload-sbom, upload-hbom, upload-vex, upload-sarif, upload-document | Assign the product to a named product group |
-| `--environment <env>` | upload-sbom, upload-hbom, upload-vex, upload-sarif, upload-document | Target a specific deployment environment (e.g. `production`, `staging`) |
-| `--tags <comma-separated>` | upload-sbom, upload-hbom, upload-vex, upload-sarif, upload-document | Attach arbitrary metadata tags |
+| `--no-inherit` | upload-sbom, upload-hbom, upload-vex, upload-document | Skip inheriting compliance artifacts from the previous version |
+| `--product-group <name>` | upload-sbom, upload-hbom, upload-vex, upload-document | Assign the product to a named product group |
+| `--environment <env>` | upload-sbom, upload-hbom, upload-vex, upload-document | Target a specific deployment environment (e.g. `production`, `staging`) |
+| `--tags <comma-separated>` | upload-sbom, upload-hbom, upload-vex, upload-document | Attach arbitrary metadata tags |
 | `--no-create-product` | upload-sbom, upload-hbom, upload-document | Disable auto-creation of the product (creation is on by default) |
 | `--no-create-version` | upload-sbom, upload-hbom, upload-document | Disable auto-creation of the version (creation is on by default) |
 | `--target-markets <codes>` | upload-sbom, upload-hbom, upload-document | Comma-separated EU country codes required when auto-creating a product, e.g. `DE,FR,ES` |

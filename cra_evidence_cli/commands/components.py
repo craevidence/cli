@@ -19,7 +19,7 @@ from rich.console import Console
 from rich.table import Table
 
 from cra_evidence_cli.client import CRAEvidenceClient
-from cra_evidence_cli.exceptions import CRAEvidenceError
+from cra_evidence_cli.exceptions import APIError, AuthenticationError, CRAEvidenceError
 
 console = Console()
 
@@ -134,15 +134,15 @@ async def _fetch_components(
                 f"{base_url}/api/v1/products",
                 headers=headers,
             )
+            if r.status_code == 401:
+                msg = "Authentication failed (401). Check your API key or OIDC token."
+                raise AuthenticationError(msg)
             if r.status_code != 200:
                 msg = (
                     f"Failed to resolve product '{product}': "
                     f"HTTP {r.status_code}"
                 )
-                raise CRAEvidenceError(
-                    msg,
-                    exit_code=1,
-                )
+                raise APIError(msg, status_code=r.status_code)
             matches = r.json()
             match = next(
                 (p for p in matches if p.get("slug") == product),
@@ -150,10 +150,7 @@ async def _fetch_components(
             )
             if not match:
                 msg = f"Product '{product}' not found"
-                raise CRAEvidenceError(
-                    msg,
-                    exit_code=2,
-                )
+                raise APIError(msg, status_code=404)
             product_uuid = match["id"]
 
         params: dict[str, Any] = {}
@@ -166,14 +163,8 @@ async def _fetch_components(
         )
         if r.status_code == 401:
             msg = "Authentication failed (401). Check your API key or OIDC token."
-            raise CRAEvidenceError(
-                msg,
-                exit_code=1,
-            )
+            raise AuthenticationError(msg)
         if r.status_code != 200:
             msg = f"Failed to list components: HTTP {r.status_code} {r.text}"
-            raise CRAEvidenceError(
-                msg,
-                exit_code=1,
-            )
+            raise APIError(msg, status_code=r.status_code)
         return r.json()

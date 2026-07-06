@@ -153,3 +153,20 @@ def test_command_runs_without_api_key(runner, tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "API key is required" not in result.output
     assert "Secret scan" in result.output
+
+
+def test_unsupported_format_emits_notice(runner, tmp_path):
+    """An unsupported output format triggers a stderr notice and falls back to text."""
+    (tmp_path / "clean.py").write_text("x = 1\n", encoding="utf-8")
+    result = runner.invoke(
+        secrets_check,
+        [str(tmp_path), "--no-git-history"],
+        obj=_make_obj("markdown"),
+    )
+    assert result.exit_code == 0, result.output
+    # The stderr notice must mention the unsupported format.
+    combined = result.output
+    assert "markdown" in combined
+    assert "not supported" in combined
+    # Falls back to text: the normal text header must appear.
+    assert "Secret scan" in combined

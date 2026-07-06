@@ -37,7 +37,14 @@ def test_github_action_uses_cli_signing_path():
 def test_gitlab_component_uses_cli_signing_path():
     component_path = REPO_ROOT / "gitlab-ci-component.yml"
     component_text = component_path.read_text(encoding="utf-8")
-    spec, template, component_job = list(yaml.safe_load_all(component_text))
+    documents = list(yaml.safe_load_all(component_text))
+    # GitLab's component loader accepts at most two documents (spec + content);
+    # everything after the spec header must live in a single document.
+    assert len(documents) == 2
+    spec, content = documents
+    assert ".cra-evidence-upload" in content
+    assert "cra-evidence-upload" in content
+    assert ".cra-evidence-check" in content
 
     inputs = spec["spec"]["inputs"]
     assert inputs["create-product"]["default"] is True
@@ -47,13 +54,13 @@ def test_gitlab_component_uses_cli_signing_path():
     assert inputs["signature-issuer"]["type"] == "string"
     assert inputs["fail-untrusted"]["default"] is False
 
-    upload_template = template[".cra-evidence-upload"]
+    upload_template = content[".cra-evidence-upload"]
     assert upload_template["image"] == "python:3.12-slim"
     assert upload_template["id_tokens"]["SIGSTORE_ID_TOKEN"]["aud"] == "sigstore"
-    assert upload_template["variables"]["CRA_CLI_PACKAGE"] == "craevidence>=3.4.0,<4"
+    assert upload_template["variables"]["CRA_CLI_PACKAGE"] == "craevidence>=3.6.0,<4"
     assert upload_template["variables"]["CRA_TARGET_MARKETS"] == ""
 
-    variables = component_job["cra-evidence-upload"]["variables"]
+    variables = content["cra-evidence-upload"]["variables"]
     assert variables["CRA_TARGET_MARKETS"] == "$[[ inputs.target-markets ]]"
     assert variables["CRA_SIGN"] == "$[[ inputs.sign ]]"
     assert variables["CRA_SIGNATURE_IDENTITY"] == "$[[ inputs.signature-identity ]]"

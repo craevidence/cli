@@ -29,7 +29,7 @@ from cra_evidence_cli.local.models import utc_now_iso
 from cra_evidence_cli.local.osv import OSVClientError
 from cra_evidence_cli.local.sbom import SBOMParseError
 from cra_evidence_cli.local.securitytxt import SecurityTxtReport, validate_security_txt
-from cra_evidence_cli.sbom_generator import SBOMGenerationError
+from cra_evidence_cli.sbom_generator import SBOMGenerationError, cleanup_generated_sbom
 
 
 @click.group("draft")
@@ -117,7 +117,7 @@ def vex(
     The developer must evaluate each finding and supply an accurate status.
     """
     if sum(1 for item in (bool(image), bool(sbom_file)) if item) > 1:
-        msg = "Use only one input mode: PATH, --image, or --sbom."
+        msg = "Specify at most one of --image or --sbom."
         raise click.UsageError(msg)
 
     try:
@@ -218,7 +218,7 @@ def advisory(
     time-stamp an advisory. Review and complete every entry before use.
     """
     if sum(1 for item in (bool(image), bool(sbom_file)) if item) > 1:
-        msg = "Use only one input mode: PATH, --image, or --sbom."
+        msg = "Specify at most one of --image or --sbom."
         raise click.UsageError(msg)
 
     try:
@@ -396,10 +396,17 @@ def security_txt(
 
 def _resolve_components(
     path: Path, sbom_file: Path | None, verbose: bool
-) -> tuple[list, Path | None]:
-    """Parse components from an SBOM file, an SBOM path, or a directory SBOM."""
+) -> tuple[list, Path | None, Path | None]:
+    """Parse components from an SBOM file, an SBOM path, or a directory SBOM.
+
+    Returns (components, resolved_sbom, generated_file). generated_file is the
+    path of a directory-generated SBOM inside its private temp directory; the
+    caller must pass it to cleanup_generated_sbom once resolved_sbom is no
+    longer needed. It is None when the SBOM was supplied by the user.
+    """
     from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
 
+    generated_file: Path | None = None
     try:
         if sbom_file is not None:
             components, _ = load_sbom(sbom_file)
@@ -417,6 +424,7 @@ def _resolve_components(
                 gen = generate_sbom_from_directory(str(path), verbose=verbose, offline=True)
             except SBOMGenerationError as exc:
                 raise click.ClickException(str(exc)) from exc
+            generated_file = Path(gen.file_path)
             try:
                 components, _ = load_sbom(gen.file_path)
                 resolved_sbom = Path(gen.file_path)
@@ -427,7 +435,7 @@ def _resolve_components(
                 resolved_sbom = None
     except SBOMParseError as exc:
         raise click.ClickException(str(exc)) from exc
-    return components, resolved_sbom
+    return components, resolved_sbom, generated_file
 
 
 def _finding_dicts_for_risk(
@@ -519,18 +527,26 @@ def _emit_scaffold(
 ) -> None:
     from cra_evidence_cli.commands.gemara import TEMPLATE_BUILDERS
 
-    components, resolved_sbom = _resolve_components(path, sbom_file, bool(ctx.obj.get("verbose")))
+    components, resolved_sbom, generated_sbom_file = _resolve_components(
+        path, sbom_file, bool(ctx.obj.get("verbose"))
+    )
     comp_dicts = [{"name": c.name, "version": c.version, "purl": c.purl} for c in components]
-    if gemara_type == "RiskCatalog":
-        finding_dicts, finding_count = _finding_dicts_for_risk(path, resolved_sbom, ctx)
-        if finding_count > 10:
-            click.echo(
-                "Warning: seeding the first 10 vulnerability findings; "
-                "review the scan output for the full list.",
-                err=True,
-            )
-        if finding_dicts:
-            comp_dicts = finding_dicts
+    try:
+        if gemara_type == "RiskCatalog":
+            finding_dicts, finding_count = _finding_dicts_for_risk(path, resolved_sbom, ctx)
+            if finding_count > 10:
+                click.echo(
+                    "Warning: seeding the first 10 vulnerability findings; "
+                    "review the scan output for the full list.",
+                    err=True,
+                )
+            if finding_dicts:
+                comp_dicts = finding_dicts
+    finally:
+        # The directory-generated SBOM is only needed for the risk seeding
+        # above; remove its private temp directory once consumed.
+        if generated_sbom_file is not None:
+            cleanup_generated_sbom(generated_sbom_file)
     if len(comp_dicts) > 10:
         click.echo(
             f"Warning: seeding the first 10 of {len(comp_dicts)} components; "

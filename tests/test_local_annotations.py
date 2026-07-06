@@ -162,6 +162,42 @@ def test_gitlab_codequality_empty():
     assert annotations.gitlab_codequality(_result(findings=[])) == []
 
 
+def test_gitlab_codequality_avoids_tmp_path():
+    """GitLab Code Quality entries must never use an absolute /tmp path."""
+    result = _result(
+        findings=[_critical_kev()],
+        provenance={"sbom_path": "/tmp/syft-12345/sbom.json"},  # noqa: S108
+    )
+    entries = annotations.gitlab_codequality(result)
+    assert len(entries) == 1
+    path = entries[0]["location"]["path"]
+    assert not path.startswith("/tmp"), f"Must not use /tmp path, got: {path}"  # noqa: S108
+    assert path == "sbom.json"
+
+
+def test_gitlab_codequality_uses_sbom_path_attribute_over_provenance():
+    """sbom_path attribute (user-supplied) takes priority over provenance sbom_path."""
+    from pathlib import Path
+
+    result = _result(
+        findings=[_critical_kev()],
+        provenance={"sbom_path": "/tmp/syft-abc/sbom.json"},  # noqa: S108
+    )
+    result.sbom_path = Path("artifacts/sbom.json")
+    entries = annotations.gitlab_codequality(result)
+    assert entries[0]["location"]["path"] == "artifacts/sbom.json"
+
+
+def test_gitlab_codequality_uses_relative_provenance_path():
+    """A relative provenance sbom_path is used directly."""
+    result = _result(
+        findings=[_critical_kev()],
+        provenance={"sbom_path": "build/sbom.json"},
+    )
+    entries = annotations.gitlab_codequality(result)
+    assert entries[0]["location"]["path"] == "build/sbom.json"
+
+
 # resolve_mode
 
 

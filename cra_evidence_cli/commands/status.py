@@ -521,11 +521,13 @@ def wait_ready(
             cra_status = data.get("cra_status", "incomplete")
             # Gate readiness on the release-policy verdict, falling back to
             # cra_status when the field is absent.
-            gate_status = data.get("release_policy_status") or cra_status
+            release_policy_status = data.get("release_policy_status")
+            gate_status = release_policy_status or cra_status
 
             if gate_status == "ready":
+                gate_label = "Policy Status" if release_policy_status else "CRA Status"
                 console.print(
-                    f"  [{int(elapsed):>4}s] [bold green]CRA Status: READY[/bold green] "
+                    f"  [{int(elapsed):>4}s] [bold green]{gate_label}: READY[/bold green] "
                     f"- readiness gate passed."
                 )
                 sys.exit(0)
@@ -537,8 +539,10 @@ def wait_ready(
                 if scan_state and scan_state not in ("none", "completed")
                 else ""
             )
+            progress_label = "Policy Status" if release_policy_status else "Status"
+            status_part = f"[yellow]{gate_status}[/yellow]{scan_note}"
             console.print(
-                f"  [{int(elapsed):>4}s] Status: [yellow]{cra_status}[/yellow]{scan_note}"
+                f"  [{int(elapsed):>4}s] {progress_label}: {status_part}"
                 f" - next check in {current_interval + random.uniform(0, 2):.1f}s..."  # noqa: S311
             )
 

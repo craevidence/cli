@@ -522,9 +522,8 @@ def show_profile(
         )
 
         profile = data.get("cra_profile")
-        product_id = data.get("product_id", product)
 
-        format_profile_output(str(product_id), profile, output_format)
+        format_profile_output(product, profile, output_format)
 
     except CRAEvidenceError as e:
         console.print(f"[red]Error:[/red] {e}")

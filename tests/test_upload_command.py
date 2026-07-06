@@ -1269,11 +1269,20 @@ class TestUploadSbomComponentFlag:
         assert call_args is not None
         assert call_args.kwargs.get("component") == "firmware"
 
+    def test_component_version_flag_forwarded_to_client(self):
+        result, call_args = self._run_upload(
+            {}, ["--component-version", "2.4.0"],
+        )
+        assert result.exit_code == 0, result.output
+        assert call_args is not None
+        assert call_args.kwargs.get("component_version") == "2.4.0"
+
     def test_component_flag_absent_passes_none(self):
         result, call_args = self._run_upload({}, [])
         assert result.exit_code == 0, result.output
         assert call_args is not None
         assert call_args.kwargs.get("component") is None
+        assert call_args.kwargs.get("component_version") is None
 
     def test_target_markets_flag_forwarded_to_client(self):
         result, call_args = self._run_upload(
@@ -2067,3 +2076,326 @@ class TestSbomqsCheck:
 
         # human summary must still be visible - on stderr
         assert "sbomqs bsi-v2.0: 85.0/100" in result.stderr
+
+
+class TestUploadSbomFailOnGate:
+    """upload-sbom --scan --fail-on waits for the asynchronous scan and
+    gates on the completed counts; --fail-on without --scan is rejected."""
+
+    BASE_ENV = {
+        "CRA_EVIDENCE_API_KEY": "test_key_123",
+        "CRA_EVIDENCE_URL": "http://localhost:8000",
+    }
+
+    UPLOAD_RESPONSE_PENDING_SCAN = {
+        "artifact_id": "sbom-123",
+        "artifact_type": "sbom",
+        "product": {"name": "test", "created": False},
+        "version": {"number": "1.0", "created": False},
+        "scan_results": {"status": "pending", "vulnerabilities": None},
+    }
+
+    def _invoke(self, upload_response, status_responses, args, monotonic_values=None):
+        from itertools import count
+        from unittest.mock import MagicMock, patch
+
+        from cra_evidence_cli.cli import cli
+
+        # upload.py and scan.py share the asyncio module, so one patch
+        # covers the upload call and the status polls: the first response
+        # answers the upload, the rest answer the polls.
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.upload.CRAEvidenceClient"
+        ) as mock_client_cls, patch(
+            "cra_evidence_cli.commands.upload.asyncio.run",
+            side_effect=[upload_response, *status_responses],
+        ) as mock_run, patch(
+            "cra_evidence_cli.commands.scan.time.sleep"
+        ), patch(
+            "cra_evidence_cli.commands.scan.time.monotonic",
+            side_effect=monotonic_values or count(0.0, 1.0),
+        ):
+            mock_client_cls.return_value = MagicMock()
+            with runner.isolated_filesystem():
+                Path("sbom.json").write_text('{"components": []}')
+                result = runner.invoke(
+                    cli,
+                    [
+                        "upload-sbom",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "sbom.json",
+                        "--no-ci-detect",
+                        *args,
+                    ],
+                    env=self.BASE_ENV,
+                )
+        return result, mock_run
+
+    def test_fail_on_without_scan_is_usage_error(self):
+        from unittest.mock import patch
+
+        from cra_evidence_cli.cli import cli
+
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.upload.CRAEvidenceClient"
+        ) as mock_client_cls:
+            with runner.isolated_filesystem():
+                Path("sbom.json").write_text('{"components": []}')
+                result = runner.invoke(
+                    cli,
+                    [
+                        "upload-sbom",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "sbom.json",
+                        "--fail-on", "critical",
+                    ],
+                    env=self.BASE_ENV,
+                )
+
+        assert result.exit_code != 0
+        assert "--fail-on requires --scan" in result.output
+        mock_client_cls.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("fail_on", "summary", "expected_exit"),
+        [
+            ("critical", {"critical": 1, "high": 0, "medium": 0, "low": 0}, 10),
+            ("high", {"critical": 0, "high": 2, "medium": 0, "low": 0}, 11),
+            ("medium", {"critical": 0, "high": 0, "medium": 5, "low": 0}, 12),
+        ],
+    )
+    def test_pending_scan_is_polled_then_gated(self, fail_on, summary, expected_exit):
+        status_responses = [
+            {"scan_state": "running", "vulnerability_summary": {}},
+            {"scan_state": "completed", "vulnerability_summary": summary},
+        ]
+
+        result, mock_run = self._invoke(
+            self.UPLOAD_RESPONSE_PENDING_SCAN,
+            status_responses,
+            ["--scan", "--fail-on", fail_on],
+        )
+
+        assert result.exit_code == expected_exit, result.output
+        # 1 upload call + 2 status polls prove the command waited
+        assert mock_run.call_count == 3
+
+    def test_pending_scan_completing_clean_exits_zero(self):
+        status_responses = [
+            {
+                "scan_state": "completed",
+                "vulnerability_summary": {
+                    "critical": 0, "high": 0, "medium": 0, "low": 3,
+                },
+            },
+        ]
+
+        result, mock_run = self._invoke(
+            self.UPLOAD_RESPONSE_PENDING_SCAN,
+            status_responses,
+            ["--scan", "--fail-on", "medium"],
+        )
+
+        assert result.exit_code == 0, result.output
+        assert mock_run.call_count == 2
+
+    def test_scan_timeout_exits_3_with_clear_message(self):
+        status_responses = [
+            {"scan_state": "pending", "vulnerability_summary": {}},
+        ]
+
+        result, mock_run = self._invoke(
+            self.UPLOAD_RESPONSE_PENDING_SCAN,
+            status_responses,
+            ["--scan", "--fail-on", "high", "--scan-timeout", "120"],
+            monotonic_values=[0.0, 121.0],
+        )
+
+        assert result.exit_code == 3, result.output
+        assert "did not complete within 120 seconds" in result.output
+        assert mock_run.call_count == 2
+
+    def test_completed_scan_in_upload_response_gates_without_polling(self):
+        upload_response = {
+            "artifact_id": "sbom-123",
+            "artifact_type": "sbom",
+            "product": {"name": "test", "created": False},
+            "version": {"number": "1.0", "created": False},
+            "scan_results": {
+                "status": "completed",
+                "vulnerabilities": {
+                    "critical": 1, "high": 0, "medium": 0, "low": 0,
+                },
+            },
+        }
+
+        result, mock_run = self._invoke(
+            upload_response,
+            [],
+            ["--scan", "--fail-on", "critical"],
+        )
+
+        assert result.exit_code == 10, result.output
+        # only the upload call happened; no status polling was needed
+        assert mock_run.call_count == 1
+
+    def test_failed_scan_in_upload_response_exits_3(self):
+        upload_response = {
+            "artifact_id": "sbom-123",
+            "artifact_type": "sbom",
+            "product": {"name": "test", "created": False},
+            "version": {"number": "1.0", "created": False},
+            "scan_results": {"status": "failed", "vulnerabilities": None},
+        }
+
+        result, mock_run = self._invoke(
+            upload_response,
+            [],
+            ["--scan", "--fail-on", "critical"],
+        )
+
+        assert result.exit_code == 3, result.output
+        assert "scan failed" in result.output.lower()
+        assert mock_run.call_count == 1
+
+
+class TestUploadVexOutput:
+    """upload-vex renders the CI upload response shape, including the
+    VEX vulnerability count."""
+
+    BASE_ENV = {
+        "CRA_EVIDENCE_API_KEY": "test_key_123",
+        "CRA_EVIDENCE_URL": "http://localhost:8000",
+    }
+
+    def test_format_output_renders_vulnerability_count(self, monkeypatch):
+        out = StringIO()
+        monkeypatch.setattr(
+            upload_module,
+            "console",
+            Console(file=out, force_terminal=False, width=120, color_system=None),
+        )
+
+        format_output(
+            {
+                "artifact_id": "vex-123",
+                "artifact_type": "vex",
+                "product": {"name": "My Product", "created": False},
+                "version": {"number": "1.0", "created": False},
+                "vulnerability_count": 4,
+            },
+            "text",
+        )
+
+        rendered = out.getvalue()
+        assert "VEX" in rendered
+        assert "Vulnerabilities" in rendered
+        assert "4" in rendered
+
+    def test_upload_vex_forwards_options_to_client(self):
+        from unittest.mock import MagicMock, patch
+
+        from cra_evidence_cli.cli import cli
+
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.upload.CRAEvidenceClient"
+        ) as mock_client_cls, patch(
+            "cra_evidence_cli.commands.upload.asyncio.run"
+        ) as mock_run:
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_run.return_value = {
+                "artifact_id": "vex-123",
+                "artifact_type": "vex",
+                "product": {"name": "test", "created": False},
+                "version": {"number": "1.0", "created": False},
+                "vulnerability_count": 2,
+            }
+
+            with runner.isolated_filesystem():
+                Path("vex.json").write_text('{"vulnerabilities": []}')
+                result = runner.invoke(
+                    cli,
+                    [
+                        "upload-vex",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "vex.json",
+                        "--cra-role", "manufacturer",
+                        "--subcategory", "vpn",
+                        "--product-group", "iot",
+                        "--environment", "production",
+                        "--tags", "ci,nightly",
+                        "--commit", "abc123",
+                        "--no-inherit",
+                        "--no-ci-detect",
+                    ],
+                    env=self.BASE_ENV,
+                )
+
+        assert result.exit_code == 0, result.output
+        mock_client.upload_vex.assert_called_once()
+        kwargs = mock_client.upload_vex.call_args.kwargs
+        assert kwargs["product"] == "test"
+        assert kwargs["version"] == "1.0"
+        assert kwargs["cra_role"] == "manufacturer"
+        assert kwargs["subcategory"] == "vpn"
+        assert kwargs["category"] == "important_class_i"
+        assert kwargs["product_group"] == "iot"
+        assert kwargs["environment"] == "production"
+        assert kwargs["tags"] == "ci,nightly"
+        assert kwargs["commit_sha"] == "abc123"
+        assert kwargs["no_inherit"] is True
+
+
+class TestUploadDocumentTypeRow:
+    """upload-document shows the submitted document type in text output."""
+
+    BASE_ENV = {
+        "CRA_EVIDENCE_API_KEY": "test_key_123",
+        "CRA_EVIDENCE_URL": "http://localhost:8000",
+    }
+
+    def test_document_type_row_uses_submitted_type(self):
+        from unittest.mock import MagicMock, patch
+
+        from cra_evidence_cli.cli import cli
+
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.upload.CRAEvidenceClient"
+        ) as mock_client_cls, patch(
+            "cra_evidence_cli.commands.upload.asyncio.run"
+        ) as mock_run:
+            mock_client_cls.return_value = MagicMock()
+            # Response shaped like CIUploadResponse: no doc_type key
+            mock_run.return_value = {
+                "artifact_id": "doc-123",
+                "artifact_type": "document",
+                "product": {"name": "test", "created": False},
+                "version": {"number": "1.0", "created": False},
+            }
+
+            with runner.isolated_filesystem():
+                Path("report.pdf").write_text("pdf-bytes")
+                result = runner.invoke(
+                    cli,
+                    [
+                        "upload-document",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "report.pdf",
+                        "--type", "test_report",
+                        "--no-ci-detect",
+                    ],
+                    env=self.BASE_ENV,
+                )
+
+        assert result.exit_code == 0, result.output
+        assert "Document Type" in result.output
+        assert "Test report" in result.output

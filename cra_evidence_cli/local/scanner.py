@@ -103,9 +103,12 @@ class GrypeLocalScanner:
         ]
         env = {
             **os.environ,
-            "GRYPE_DB_AUTO_UPDATE": "true",
             "GRYPE_CHECK_FOR_APP_UPDATE": "false",
         }
+        # An explicit GRYPE_DB_AUTO_UPDATE from the caller's environment (for
+        # example "false" on an air-gapped runner) must stay in force, so the
+        # auto-update default is only applied when the variable is absent.
+        env.setdefault("GRYPE_DB_AUTO_UPDATE", "true")
         result = subprocess.run(  # noqa: S603
             cmd,
             capture_output=True,

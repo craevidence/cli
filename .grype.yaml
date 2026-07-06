@@ -1,55 +1,246 @@
 # Grype vulnerability scan configuration for the CRA Evidence CLI Docker image.
 #
-# All entries below are HIGH (or above) findings that come from the Go modules
-# statically linked into the bundled `syft` binary, which we ship at the latest
-# released version (v1.45.1, built with go1.26.3). We cannot rebuild syft with
-# newer Go modules ourselves; each fix depends on an upstream Anchore release.
-#
-# The DHI base image (`dhi.io/python:3.14`) is pinned to a digest that already
-# carries the patched openssl (3.5.6-1~deb13u2) and libc6, so no base-OS
-# suppressions are needed.
-#
-# We re-evaluate every suppression on 2026-07-24. Before that date, drop any
-# entry whose upstream fix has shipped (see "Re-evaluate when" notes) and bump
-# SYFT_VERSION in the Dockerfile to the release that contains it.
-#
-# Suppressions follow a simple analysis: the vulnerable code is not in the
-# execute path of `craevidence` CLI normal operation. Syft is invoked only
-# against user-supplied SBOM / container image inputs from the local file
-# system or local Docker daemon - never against attacker-controlled network
-# inputs, malicious git repositories, or HTTP servers. A formal OpenVEX
-# statement is a tracked follow-up.
+# Suppressions below are scoped to exact package versions observed by scanning
+# the pinned upstream Syft 1.46.0 and Grype 0.115.0 release binaries on
+# 2026-07-01. Re-evaluate before publishing and remove entries as soon as
+# upstream releases fixed binaries.
 
 ignore:
-  # ---------------------------------------------------------------------------
-  # Go stdlib - statically linked into Syft v1.45.1 (built with go1.26.3)
-  # ---------------------------------------------------------------------------
-  # Re-evaluate when: Anchore ships a Syft release built with go1.26.4+
-  # (or go1.25.11+). Verify with: syft version  (look for the GoVersion line).
-  - vulnerability: CVE-2026-42504
-    reason: "Go stdlib HIGH in Syft binary (go1.26.3). Fixed in go1.26.4 / go1.25.11. Latest Syft release (v1.45.1) still ships go1.26.3. Re-evaluate 2026-07-24."
+  - vulnerability: GO-2026-5037
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3. Re-evaluate when upstream rebuilds with Go 1.26.4 or 1.25.11."
   - vulnerability: GO-2026-5038
-    reason: "Go stdlib HIGH in Syft binary (go1.26.3). Fixed in go1.26.4 / go1.25.11. Latest Syft release (v1.45.1) still ships go1.26.3. Re-evaluate 2026-07-24."
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3. Re-evaluate when upstream rebuilds with Go 1.26.4 or 1.25.11."
+  - vulnerability: GO-2026-5039
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3. Re-evaluate when upstream rebuilds with Go 1.26.4 or 1.25.11."
+  - vulnerability: CVE-2026-27145
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3. Re-evaluate when upstream rebuilds with Go 1.26.4 or 1.25.11."
+  - vulnerability: CVE-2026-42504
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3. Re-evaluate when upstream rebuilds with Go 1.26.4 or 1.25.11."
+  - vulnerability: CVE-2026-42507
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3. Re-evaluate when upstream rebuilds with Go 1.26.4 or 1.25.11."
+  - vulnerability: GHSA-x744-4wpc-v9h2
+    package:
+      name: github.com/docker/docker
+      version: v28.5.2+incompatible
+    reason: "Found in the pinned Grype 0.115.0 binary. Advisory concerns Docker daemon authorization plugin handling; this image does not run a Docker daemon or expose Docker daemon endpoints."
+  - vulnerability: GHSA-pxq6-2prw-chj9
+    package:
+      name: github.com/docker/docker
+      version: v28.5.2+incompatible
+    reason: "Found in the pinned Grype 0.115.0 binary. Advisory concerns Docker plugin privilege validation in the daemon path; this image does not run a Docker daemon or expose Docker daemon endpoints."
+  - vulnerability: GHSA-x86f-5xw2-fm2r
+    package:
+      name: github.com/docker/docker
+      version: v28.5.2+incompatible
+    reason: "Found in the pinned Grype 0.115.0 binary. Advisory concerns Docker daemon archive extraction endpoints; this image does not run a Docker daemon or expose Docker daemon endpoints."
+  - vulnerability: GHSA-rg2x-37c3-w2rh
+    package:
+      name: github.com/docker/docker
+      version: v28.5.2+incompatible
+    reason: "Found in the pinned Grype 0.115.0 binary. Advisory concerns Docker daemon copy endpoints; this image does not run a Docker daemon or expose Docker daemon endpoints."
+  - vulnerability: GHSA-vp62-88p7-qqf5
+    package:
+      name: github.com/docker/docker
+      version: v28.5.2+incompatible
+    reason: "Found in the pinned Grype 0.115.0 binary. Advisory concerns Docker daemon copy endpoints; this image does not run a Docker daemon or expose Docker daemon endpoints."
 
-  # ---------------------------------------------------------------------------
-  # containerd module - statically linked into Syft v1.45.1 binary
-  # ---------------------------------------------------------------------------
-  # Re-evaluate when: Anchore ships a Syft release with containerd/v2 >= 2.3.2.
-  # Verify with: syft <image> -o cyclonedx-json | jq '.components[]|select(.name=="github.com/containerd/containerd/v2")'
-  - vulnerability: GHSA-33vj-92qq-66hc
-    reason: "containerd HIGH (v2.3.1 < 2.3.2) embedded in Syft binary. Syft uses containerd only to read image content, never runs containers, so the vulnerable runtime path is unreachable. Awaiting Syft dep bump. Re-evaluate 2026-07-24."
-  - vulnerability: GHSA-rgh6-rfwx-v388
-    reason: "containerd HIGH (v2.3.1 < 2.3.2) embedded in Syft binary. Syft uses containerd only to read image content, never runs containers, so the vulnerable runtime path is unreachable. Awaiting Syft dep bump. Re-evaluate 2026-07-24."
-  - vulnerability: GHSA-xhf5-7wjv-pqxp
-    reason: "containerd HIGH (v2.3.1 < 2.3.2) embedded in Syft binary. Syft uses containerd only to read image content, never runs containers, so the vulnerable runtime path is unreachable. Awaiting Syft dep bump. Re-evaluate 2026-07-24."
+  # DHI Debian Trixie runtime base findings. These are scoped to the exact
+  # package versions observed after refreshing the DHI digests on 2026-07-02.
+  # Review on 2026-10-01 or when DHI publishes a newer base digest.
+  - vulnerability: CVE-2026-5450
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. The finding requires libc scanf %mc with width greater than 1024; this Python CLI does not expose that parsing path. Review 2026-10-01."
+  - vulnerability: CVE-2026-5435
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. The finding affects deprecated glibc DNS printing functions; this CLI does not call them directly. Review 2026-10-01."
+  - vulnerability: CVE-2026-5928
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. Debian notes the special encoding condition is not possible in standard Unicode character sets; CLI runtime uses normal text processing. Review 2026-10-01."
+  - vulnerability: CVE-2026-6238
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. The finding affects deprecated glibc DNS functions; this CLI does not call them directly. Review 2026-10-01."
+  - vulnerability: CVE-2010-4756
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2018-20796
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2019-1010022
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2019-1010023
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2019-1010024
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2019-1010025
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2019-9192
+    package:
+      name: libc6
+      version: 2.41-12+deb13u3
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
 
-  # ---------------------------------------------------------------------------
-  # docker/cli module - statically linked into Syft v1.45.1 binary
-  # ---------------------------------------------------------------------------
-  # The installed version (v29.4.3+incompatible) is already newer than the
-  # advisory's fixed version (29.2.0+incompatible); Grype mismatches because of
-  # +incompatible pseudo-version ordering. No action available on our side.
-  # Re-evaluate when: Grype corrects the match or Syft pins a docker/cli the
-  # matcher recognizes as fixed.
-  - vulnerability: GO-2026-4610
-    reason: "docker/cli HIGH embedded in Syft binary. Installed v29.4.3+incompatible is already newer than the advisory fixed version 29.2.0+incompatible; this is a Grype +incompatible version-ordering false positive. Re-evaluate 2026-07-24."
+  - vulnerability: CVE-2025-69720
+    package:
+      name: libncursesw6
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. Debian marks this ncurses infocmp issue no-dsa/minor; the CLI does not process untrusted infocmp input. Review 2026-10-01."
+  - vulnerability: CVE-2025-69720
+    package:
+      name: libtinfo6
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. Debian marks this ncurses infocmp issue no-dsa/minor; the CLI does not process untrusted infocmp input. Review 2026-10-01."
+  - vulnerability: CVE-2025-69720
+    package:
+      name: ncurses-base
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. Debian marks this ncurses infocmp issue no-dsa/minor; the CLI does not process untrusted infocmp input. Review 2026-10-01."
+  - vulnerability: CVE-2025-69720
+    package:
+      name: ncurses-bin
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. Debian marks this ncurses infocmp issue no-dsa/minor; the CLI does not process untrusted infocmp input. Review 2026-10-01."
+  - vulnerability: CVE-2025-6141
+    package:
+      name: libncursesw6
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. Accepted as low-reachability ncurses base-image noise. Review 2026-10-01."
+  - vulnerability: CVE-2025-6141
+    package:
+      name: libtinfo6
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. Accepted as low-reachability ncurses base-image noise. Review 2026-10-01."
+  - vulnerability: CVE-2025-6141
+    package:
+      name: ncurses-base
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. Accepted as low-reachability ncurses base-image noise. Review 2026-10-01."
+  - vulnerability: CVE-2025-6141
+    package:
+      name: ncurses-bin
+      version: 6.5+20250216-2
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. Accepted as low-reachability ncurses base-image noise. Review 2026-10-01."
+
+  - vulnerability: CVE-2026-11822
+    package:
+      name: libsqlite3-0
+      version: 3.46.1-7+deb13u1
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. The finding requires opening a crafted SQLite database and executing FTS5 MATCH; this CLI does not process user SQLite databases. Review 2026-10-01."
+  - vulnerability: CVE-2026-11824
+    package:
+      name: libsqlite3-0
+      version: 3.46.1-7+deb13u1
+    reason: "Debian Trixie base package, Grype fix-state wont-fix. The finding requires opening a crafted SQLite database and executing FTS5 MATCH; this CLI does not process user SQLite databases. Review 2026-10-01."
+  - vulnerability: CVE-2021-45346
+    package:
+      name: libsqlite3-0
+      version: 3.46.1-7+deb13u1
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. This CLI does not process user SQLite databases. Review 2026-10-01."
+  - vulnerability: CVE-2025-70873
+    package:
+      name: libsqlite3-0
+      version: 3.46.1-7+deb13u1
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. This CLI does not process user SQLite databases. Review 2026-10-01."
+
+  - vulnerability: CVE-2026-27171
+    package:
+      name: zlib1g
+      version: 1:1.3.dfsg+really1.3.1-1+b1
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. Accepted as runtime base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2026-34743
+    package:
+      name: liblzma5
+      version: 5.8.1-1
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. Accepted as runtime base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2026-42250
+    package:
+      name: libbz2-1.0
+      version: 1.0.8-6
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. Accepted as runtime base-image noise for this non-root CLI image. Review 2026-10-01."
+
+  - vulnerability: CVE-2026-13595
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and medium severity. CLI runs non-root and does not perform privileged util-linux operations. Review 2026-10-01."
+  - vulnerability: CVE-2026-27456
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. CLI runs non-root and does not perform privileged util-linux operations. Review 2026-10-01."
+  - vulnerability: CVE-2026-3184
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state wont-fix and medium severity. CLI runs non-root and does not perform privileged util-linux operations. Review 2026-10-01."
+  - vulnerability: CVE-2022-0563
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2025-14104
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and negligible severity. Accepted as base-image noise for this non-root CLI image. Review 2026-10-01."
+  - vulnerability: CVE-2026-53612
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and unknown severity. CLI runs non-root and does not perform privileged util-linux operations. Review 2026-10-01."
+  - vulnerability: CVE-2026-53613
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and unknown severity. CLI runs non-root and does not perform privileged util-linux operations. Review 2026-10-01."
+  - vulnerability: CVE-2026-53614
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and unknown severity. CLI runs non-root and does not perform privileged util-linux operations. Review 2026-10-01."
+  - vulnerability: CVE-2026-53615
+    package:
+      name: libuuid1
+      version: 2.41-5
+    reason: "Debian Trixie base package, Grype fix-state not-fixed and unknown severity. CLI runs non-root and does not perform privileged util-linux operations. Review 2026-10-01."
