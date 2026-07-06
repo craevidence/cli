@@ -60,7 +60,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f  # v3
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
 
       # Login to the DHI registry to pull pinned base images. When DHI_REGISTRY_USERNAME
       # or DHI_REGISTRY_TOKEN is absent (e.g., forks or PRs without repository secrets),
