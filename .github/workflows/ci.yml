@@ -263,6 +263,20 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
+      # Refuse to publish artifacts whose metadata version does not match the
+      # release tag. PyPI uploads are immutable, so a v3.6.0 release must carry
+      # exactly version 3.6.0.
+      - name: Verify release tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          if [ "${RELEASE_TAG}" != "v${VERSION}" ]; then
+            echo "::error::Release tag '${RELEASE_TAG}' does not match package version 'v${VERSION}'"
+            exit 1
+          fi
+          echo "Release tag '${RELEASE_TAG}' matches package version 'v${VERSION}'."
+
       - name: Set up Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
