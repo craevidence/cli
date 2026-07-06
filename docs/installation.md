@@ -1,6 +1,6 @@
 # Installation
 
-How to install the CRA Evidence CLI via PyPI, Homebrew, Docker, container registries, or from source.
+How to install the CRA Evidence CLI via PyPI, Docker, container registries, or from source.
 
 Back to the [README](../README.md).
 
@@ -9,12 +9,6 @@ Back to the [README](../README.md).
 ```bash
 pip install craevidence          # standard install
 pipx install craevidence         # isolated environment (recommended for a CLI)
-```
-
-## Homebrew
-
-```bash
-brew install craevidence/tap/craevidence
 ```
 
 ## Docker

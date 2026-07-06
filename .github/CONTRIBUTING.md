@@ -35,8 +35,9 @@ Thanks for your interest in improving the CRA Evidence CLI.
 
 ## Releases and changelog
 
-Release notes are published on the [GitHub Releases](https://github.com/craevidence/cli/releases)
-page. That page is the canonical changelog.
+Notable changes are recorded in [CHANGELOG.md](../CHANGELOG.md). Release notes
+are published on the [GitHub Releases](https://github.com/craevidence/cli/releases)
+page.
 
 ## Reporting bugs and requesting features
 

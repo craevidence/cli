@@ -1,14 +1,23 @@
 # CRA Evidence CLI
 
+[![CI](https://github.com/craevidence/cli/actions/workflows/ci.yml/badge.svg)](https://github.com/craevidence/cli/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/github/license/craevidence/cli)](https://github.com/craevidence/cli/blob/main/LICENSE)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://github.com/craevidence/cli/blob/main/docs/installation.md)
+[![Docker pulls](https://img.shields.io/docker/pulls/craevidence/cli)](https://hub.docker.com/r/craevidence/cli)
+
 Command-line tools for CRA Evidence workflows and local software supply-chain checks.
+
+![craevidence check scans an SBOM and gates CI on known-exploited vulnerabilities](https://raw.githubusercontent.com/craevidence/cli/main/docs/demo.gif)
 
 The CLI has two modes:
 
 - Local commands that run without a CRA Evidence account or API key.
 - Account commands that upload evidence or read release state from CRA Evidence.
 
-This page covers the public command basics. Registered CRA Evidence users can
-sign in to view the detailed command documentation at https://docs.craevidence.com/cli.
+This page covers the public command basics. The full reference lives in
+[docs/](https://github.com/craevidence/cli/blob/main/docs/README.md).
+Registered CRA Evidence users can also sign in to view the command
+documentation at https://docs.craevidence.com/cli.
 
 The local checks are review aids and CI gates. They are not an audit, and
 exit 0 does not prove compliance.
@@ -29,7 +38,18 @@ The installed command is:
 craevidence --help
 ```
 
-Python 3.12 or newer is required.
+Python 3.12 or newer is required. Docker images and other install options are
+covered in the [installation guide](https://github.com/craevidence/cli/blob/main/docs/installation.md).
+
+## Documentation
+
+| Page | Contents |
+|---|---|
+| [Local commands](https://github.com/craevidence/cli/blob/main/docs/local-commands.md) | `check`, `eol-check`, `egress-check`, `secrets-check`, `config-check`, `draft`, `assessment`, `db`, and the offline template scaffold. |
+| [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Uploads, scan, status, release lifecycle, distributor, profiles, validation, and verification. |
+| [CI/CD integration](https://github.com/craevidence/cli/blob/main/docs/ci-cd.md) | GitHub Action, GitLab Component, Docker, Jenkins, OpenSSF Scorecard, and complyctl. |
+| [Installation](https://github.com/craevidence/cli/blob/main/docs/installation.md) | PyPI, Docker, container registries, and from source. |
+| [Troubleshooting](https://github.com/craevidence/cli/blob/main/docs/troubleshooting.md) | Common errors and fixes. |
 
 ## Local Check
 
@@ -126,6 +146,8 @@ export CRA_EVIDENCE_URL=https://api.craevidence.com
 | `CRA_EVIDENCE_VERSION` | Default product version for upload commands. |
 | `CRA_EVIDENCE_COMPONENT` | Default component slug for component-aware uploads. |
 | `CRA_EVIDENCE_COMPONENT_VERSION` | Default component release version. |
+| `CRA_EVIDENCE_TIMEOUT` | HTTP request timeout in seconds for account commands. Defaults to `60`. |
+| `CRA_NO_WARN` | Set to any value to suppress API URL configuration warnings. |
 
 Credentials can also be stored in `~/.cra-evidence/config.yaml`. Keep that file
 private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.

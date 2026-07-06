@@ -76,7 +76,32 @@ wins):
    environment variables
 3. `.cra/evidence.yaml` in the working directory (or any parent directory)
 
-The README contains the full `.cra/evidence.yaml` reference.
+### `.cra/evidence.yaml` reference
+
+A repository can commit `.cra/evidence.yaml` so CI commands do not need
+`--product`, `--version`, and `--component` on every invocation. Discovery
+walks up from the working directory; the git root is the fallback.
+
+```yaml
+schema_version: 1
+product: my-product
+component: api-server
+component_kind: service
+version_from: git-tag
+```
+
+| Key | Allowed values | Required |
+|---|---|---|
+| `schema_version` | `1` or `2` | yes |
+| `product` | string | no |
+| `component` | string | no |
+| `component_kind` | `frontend`, `service`, `datastore`, `firmware`, `library`, `other` | no |
+| `version_from` | `git-tag`, `file:<path>`, `pyproject`, `package.json`, `env:<VAR>` | no |
+| `product_version_from` | same as `version_from` | no |
+| `component_version_from` | same as `version_from` | no |
+
+Unknown keys are rejected, so a typo cannot silently disable identity
+resolution.
 
 ### Upload an SBOM
 

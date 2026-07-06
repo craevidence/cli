@@ -269,6 +269,8 @@ craevidence draft threat-model    [PATH] [--sbom <sbom.json>] [--diagram <arch.m
 
 ## `eol-check`
 
+![craevidence eol-check reporting end-of-life components from an SBOM](demo-eol-check.gif)
+
 Flag SBOM components whose version is past end-of-life, using the public
 [endoflife.date](https://endoflife.date) dataset. No API key. Advisory only:
 it never gates a pipeline (it always exits 0 on success), and **being past
@@ -352,6 +354,8 @@ back to `text`.
 
 ## `config-check`
 
+![craevidence config-check auditing a Dockerfile for insecure defaults](demo-config-check.gif)
+
 Audit Dockerfiles, Terraform, and Kubernetes/Compose manifests for a curated set
 of insecure-default and attack-surface patterns. **100% local, no network, no
 API key.** Advisory by default (it exits 0 even when findings are reported); pass
@@ -378,6 +382,8 @@ back to `text`.
   scanning cannot observe every runtime or organisational control.
 
 ## `compliance-as-code template --offline`
+
+![craevidence compliance-as-code template scaffolding a risk catalog offline](demo-scaffold.gif)
 
 Scaffold starter compliance YAML with `compliance-as-code template`. By default it
 pre-fills real product, org, and SBOM-component data from your account; add
