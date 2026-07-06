@@ -1,5 +1,6 @@
 # CRA Evidence CLI
 
+[![PyPI](https://img.shields.io/pypi/v/craevidence)](https://pypi.org/project/craevidence/)
 [![CI](https://github.com/craevidence/cli/actions/workflows/ci.yml/badge.svg)](https://github.com/craevidence/cli/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/github/license/craevidence/cli)](https://github.com/craevidence/cli/blob/main/LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://github.com/craevidence/cli/blob/main/docs/installation.md)

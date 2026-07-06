@@ -6,6 +6,9 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore"
+    groups:
+      python:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -13,10 +16,6 @@ updates:
       interval: "weekly"
     commit-message:
       prefix: "chore"
-
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    commit-message:
-      prefix: "chore"
+    groups:
+      github-actions:
+        patterns: ["*"]
