@@ -20,6 +20,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Build Tools",
+    "Topic :: Security",
 ]
 keywords = ["sbom", "cra", "cybersecurity", "compliance", "cicd"]
 
@@ -48,6 +49,10 @@ dev = [
 
 [project.urls]
 Homepage = "https://craevidence.com"
+Documentation = "https://docs.craevidence.com/cli"
+Repository = "https://github.com/craevidence/cli"
+"Bug Tracker" = "https://github.com/craevidence/cli/issues"
+Changelog = "https://github.com/craevidence/cli/blob/main/CHANGELOG.md"
 
 [project.scripts]
 craevidence = "cra_evidence_cli.cli:main"
