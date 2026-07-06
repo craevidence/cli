@@ -1,5 +1,6 @@
 """Tests for customer-facing CI wrapper metadata."""
 
+import re
 from pathlib import Path
 
 import yaml
@@ -29,7 +30,11 @@ def test_github_action_uses_cli_signing_path():
     assert "--signature-bundle" in action_text
     assert "permissions: id-token: write" in action_text
     assert "exit \"${CLI_EXIT}\"" in action_text
-    assert "actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405" in action_text
+    # Pinned by full commit SHA (supply-chain hardening), version-agnostic so a
+    # dependency bump of the action does not break this assertion.
+    assert re.search(r"actions/setup-python@[0-9a-f]{40}\b", action_text), (
+        "action.yml must pin actions/setup-python by full commit SHA"
+    )
     assert "/api/v1/ci/upload" not in action_text
     assert "curl -s" not in action_text
 
