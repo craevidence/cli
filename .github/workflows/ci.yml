@@ -89,8 +89,11 @@ jobs:
 
       # Security gate: fail the build if HIGH/CRITICAL vulnerabilities found in the Docker image.
       # Only fixed vulnerabilities are flagged to avoid false positives (e.g. glibc in base image).
+      # Suppressions live in .github/grype.yaml, loaded via GRYPE_CONFIG.
       - name: Scan image for vulnerabilities (Grype)
         uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
+        env:
+          GRYPE_CONFIG: .github/grype.yaml
         with:
           image: craevidence:${{ steps.version.outputs.version }}
           severity-cutoff: high
