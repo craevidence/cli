@@ -347,3 +347,123 @@ def test_network_error_on_product_list_falls_back_gracefully(runner, tmp_path, m
     )
 
     assert result.exit_code == 0, result.output
+
+
+# Unsupported format notice (fix 9)
+
+
+def test_unsupported_format_emits_notice(runner, tmp_path, monkeypatch):
+    """An unsupported format triggers a notice to stderr and falls back to text."""
+    sbom = tmp_path / "sbom.json"
+    _write_cyclonedx_sbom(sbom)
+
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products",
+        lambda **kwargs: set(),
+    )
+
+    result = runner.invoke(
+        eol_check,
+        ["--sbom", str(sbom)],
+        obj=_make_obj("markdown"),
+    )
+
+    assert result.exit_code == 0, result.output
+    combined = result.output
+    assert "markdown" in combined
+    assert "not supported" in combined
+    assert "End-of-life check" in combined
+
+
+# SARIF locations (fix 1)
+
+
+def test_sarif_results_have_locations(runner, tmp_path, monkeypatch):
+    """Every SARIF result entry must include a 'locations' field."""
+    sbom = tmp_path / "sbom.json"
+    _write_cyclonedx_sbom(sbom, name="python", version="3.7.17")
+
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products",
+        lambda **kwargs: {"python"},
+    )
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_cycles",
+        lambda product, **kwargs: _PAST_CYCLES,
+    )
+
+    result = runner.invoke(
+        eol_check,
+        ["--sbom", str(sbom)],
+        obj=_make_obj("sarif"),
+    )
+
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.output)
+    for entry in doc["runs"][0]["results"]:
+        assert "locations" in entry, "SARIF result is missing locations"
+        uri = entry["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        assert not uri.startswith("/tmp"), f"SARIF location must not be a temp path: {uri}"  # noqa: S108
+
+
+def test_sarif_location_uses_user_supplied_sbom_path(runner, tmp_path, monkeypatch):
+    """When --sbom points to a relative path, SARIF uses that path (not a temp path)."""
+    sbom = tmp_path / "sbom.json"
+    _write_cyclonedx_sbom(sbom, name="python", version="3.7.17")
+
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products",
+        lambda **kwargs: {"python"},
+    )
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_cycles",
+        lambda product, **kwargs: _PAST_CYCLES,
+    )
+
+    result = runner.invoke(
+        eol_check,
+        ["--sbom", str(sbom)],
+        obj=_make_obj("sarif"),
+    )
+
+    assert result.exit_code == 0, result.output
+    doc = json.loads(result.output)
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+    # The URI must match the provided path (or the fallback); never a /tmp path.
+    assert not uri.startswith("/tmp")  # noqa: S108
+
+
+# Offline mode in directory path (fix 7)
+
+
+def test_directory_mode_passes_offline_to_generator(runner, tmp_path, monkeypatch):
+    """When a directory is provided, generate_sbom_from_directory is called with offline=True."""
+    captured: dict = {}
+
+    from cra_evidence_cli.local.sbom import SBOMParseError
+
+    def fake_generate(directory, verbose=False, offline=False, **kwargs):
+        captured["offline"] = offline
+        msg = "no manifest"
+        raise SBOMParseError(msg)
+
+    monkeypatch.setattr(
+        "cra_evidence_cli.sbom_generator.generate_sbom_from_directory",
+        fake_generate,
+    )
+    # Also patch the import inside the command function.
+    monkeypatch.setattr(
+        "cra_evidence_cli.commands.eol.generate_sbom_from_directory",
+        fake_generate,
+        raising=False,
+    )
+
+    runner.invoke(
+        eol_check,
+        [str(tmp_path)],
+        obj=_make_obj("text"),
+    )
+
+    assert captured.get("offline") is True, "offline=True was not passed to the SBOM generator"

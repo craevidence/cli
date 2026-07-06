@@ -42,10 +42,16 @@ craevidence upload-sbom --product my-app --version 1.0 --file sbom.json
 
 ### `401 Unauthorized` while building the CLI Docker image
 
-The source Dockerfile uses Docker Hardened Images from `dhi.io` and pins the
-Python 3.14 builder/runtime images by digest. A build error such as
-`failed to authorize` or `401 Unauthorized` while loading
-`dhi.io/python:3.14` metadata means Docker cannot read that registry metadata
-with the current credentials. It is not a CLI build error and it is not a
-reason to downgrade Python. Use DHI registry access for fresh pulls, or build
-from a machine/cache that already has the pinned Python 3.14 digests available.
+The published Dockerfile defaults to Docker Hardened Images (DHI) from `dhi.io`. Building it
+requires either DHI registry credentials or the `--build-arg` public-base override:
+
+```bash
+docker build \
+  --build-arg BASE_IMAGE_BUILDER=python:3.14 \
+  --build-arg BASE_IMAGE=python:3.14-slim \
+  -t craevidence-cli:local .
+```
+
+The `--build-arg` form substitutes standard public Python images for the DHI bases. The resulting
+image behaves identically; only the base image source differs. See
+[Installation](installation.md#building-the-docker-image-from-source) for the full command.

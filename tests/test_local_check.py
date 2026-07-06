@@ -610,8 +610,11 @@ def test_explicit_flag_overrides_policy(monkeypatch, tmp_path):
 def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
     _install_fake_scanner(monkeypatch, [])
-    # Fake Syft directory generation -> a real SBOM file we can copy.
-    generated = tmp_path / "generated_sbom.json"
+    # Fake Syft directory generation -> a real SBOM file in its own directory,
+    # mirroring the private temp dir the real generator creates.
+    gen_dir = tmp_path / "sbom_gen"
+    gen_dir.mkdir()
+    generated = gen_dir / "sbom.json"
     _write_sbom(generated)
     from cra_evidence_cli.sbom_generator import SBOMGenerationResult
 
@@ -620,11 +623,108 @@ def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
         "generate_sbom_from_directory",
         lambda *a, **k: SBOMGenerationResult(generated, 1, "cyclonedx", "syft"),
     )
+    src = tmp_path / "src"
+    src.mkdir()
     out_sbom = tmp_path / "artifact_sbom.json"
-    res = _run_check([str(tmp_path), "--sbom-output", str(out_sbom)])
+    res = _run_check([str(src), "--sbom-output", str(out_sbom)])
     assert res.exit_code == 0, res.output
     assert out_sbom.exists()
     assert json.loads(out_sbom.read_text())["bomFormat"] == "CycloneDX"
+    # The generated SBOM's temp directory is removed after a successful run.
+    assert not gen_dir.exists()
+
+
+def test_directory_without_manifests_gives_clear_error(monkeypatch, tmp_path):
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [])
+    # Syft finds nothing in the directory -> an SBOM without a components list.
+    gen_dir = tmp_path / "sbom_gen"
+    gen_dir.mkdir()
+    empty = gen_dir / "sbom.json"
+    empty.write_text(json.dumps({"bomFormat": "CycloneDX", "specVersion": "1.5"}))
+    from cra_evidence_cli.sbom_generator import SBOMGenerationResult
+
+    monkeypatch.setattr(
+        check_module,
+        "generate_sbom_from_directory",
+        lambda *a, **k: SBOMGenerationResult(empty, 0, "cyclonedx", "syft"),
+    )
+    src = tmp_path / "src"
+    src.mkdir()
+    res = _run_check([str(src)])
+    assert res.exit_code == 1
+    assert "No dependency manifests or SBOM found under" in res.stderr
+    assert "requirements.txt" in res.stderr  # the hint lists what check looks for
+    assert "Unsupported SBOM format" not in res.stderr
+    assert not gen_dir.exists()  # the temp dir is cleaned up on this failure too
+
+
+def test_malformed_sbom_keeps_unsupported_format_error(monkeypatch, tmp_path):
+    from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
+
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"name": "not-an-sbom"}))
+    with pytest.raises(SBOMParseError, match="Unsupported SBOM format"):
+        load_sbom(bad)
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    res = _run_check(["--sbom", str(bad)])
+    assert res.exit_code == 1
+    assert "Unsupported SBOM format" in res.stderr
+
+
+def test_output_flag_on_check_subcommand(monkeypatch, tmp_path):
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [])
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+    runner = CliRunner()
+    # Subcommand-level flag alone.
+    res = runner.invoke(cli, ["check", "--sbom", str(sbom), "--output", "json"])
+    assert res.exit_code == 0, res.output
+    assert json.loads(res.stdout)["schema_version"] == "craevidence.local_check.v1"
+    # Subcommand-level flag overrides the group-level flag.
+    res = runner.invoke(
+        cli, ["--output", "text", "check", "--sbom", str(sbom), "--output", "json"]
+    )
+    assert res.exit_code == 0, res.output
+    assert json.loads(res.stdout)["schema_version"] == "craevidence.local_check.v1"
+    # Group-level flag still applies when the subcommand flag is absent.
+    res = runner.invoke(cli, ["--output", "json", "check", "--sbom", str(sbom)])
+    assert res.exit_code == 0, res.output
+    assert json.loads(res.stdout)["schema_version"] == "craevidence.local_check.v1"
+    # The subcommand flag can switch back to text over a json group default.
+    res = runner.invoke(
+        cli, ["--output", "json", "check", "--sbom", str(sbom), "--output", "text"]
+    )
+    assert res.exit_code == 0, res.output
+    assert "Local SBOM Check" in res.stdout
+
+
+def test_scan_env_respects_explicit_grype_db_auto_update(monkeypatch, tmp_path):
+    from cra_evidence_cli.local import scanner as scanner_module
+
+    envs = []
+
+    def fake_run(cmd, **kwargs):
+        envs.append(kwargs.get("env") or {})
+        return SimpleNamespace(returncode=0, stdout=json.dumps({"matches": []}), stderr="")
+
+    monkeypatch.setattr(scanner_module.subprocess, "run", fake_run)
+    scanner = scanner_module.GrypeLocalScanner()
+    scanner._path = "/usr/bin/grype"
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    # An explicit user value is never clobbered.
+    monkeypatch.setenv("GRYPE_DB_AUTO_UPDATE", "false")
+    scanner.scan_sbom(sbom)
+    assert envs[0]["GRYPE_DB_AUTO_UPDATE"] == "false"
+
+    # Without an explicit value, auto-update defaults on.
+    envs.clear()
+    monkeypatch.delenv("GRYPE_DB_AUTO_UPDATE")
+    scanner.scan_sbom(sbom)
+    assert envs[0]["GRYPE_DB_AUTO_UPDATE"] == "true"
 
 
 def test_sbom_output_noop_when_sbom_supplied(monkeypatch, tmp_path):
@@ -637,6 +737,89 @@ def test_sbom_output_noop_when_sbom_supplied(monkeypatch, tmp_path):
     assert res.exit_code == 0
     assert not out_sbom.exists()
     assert "--sbom-output ignored" in res.stderr
+
+
+def test_grype_failure_falls_back_to_osv(monkeypatch, tmp_path):
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+
+    class FailingScanner:
+        def is_available(self):
+            return True
+
+        def scan_sbom(self, sbom_path):
+            msg = "local database unavailable"
+            raise ScanEngineUnavailable(msg)
+
+    class FakeOSVClient:
+        def query_components(self, components):
+            return [], _Cov("osv.dev", "present")
+
+    monkeypatch.setattr(check_module, "GrypeLocalScanner", FailingScanner)
+    monkeypatch.setattr(check_module, "OSVClient", FakeOSVClient)
+    monkeypatch.setattr(
+        check_module,
+        "fetch_kev_catalog",
+        lambda: (set(), _Cov("cisa-kev", "present", as_of="2026-06-10")),
+    )
+    monkeypatch.setattr(
+        check_module,
+        "fetch_epss_scores",
+        lambda cves: ({}, _Cov("first-epss", "present", as_of="2026-06-10")),
+    )
+
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+    res = _run_check(["--sbom", str(sbom)])
+
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.stdout)
+    assert payload["provenance"]["engine"] == "osv-online"
+    assert payload["provenance"]["osv.dev"]["status"] == "present"
+    assert payload["provenance"]["grype-db"]["status"] == "unavailable"
+    assert any(
+        source["source"] == "grype-db" and source["status"] == "unavailable"
+        for source in payload["coverage"]
+    )
+    assert any(
+        source["source"] == "osv.dev" and source["status"] == "present"
+        for source in payload["coverage"]
+    )
+    # The switch to the network fallback is announced on stderr with the reason.
+    assert "Local matcher failed (local database unavailable)" in res.stderr
+    assert "querying OSV.dev over the network instead" in res.stderr
+
+
+def test_no_fallback_notice_when_grype_absent(monkeypatch, tmp_path):
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+
+    class NoGrype:
+        def is_available(self):
+            return False
+
+    class FakeOSVClient:
+        def query_components(self, components):
+            return [], _Cov("osv.dev", "present")
+
+    monkeypatch.setattr(check_module, "GrypeLocalScanner", NoGrype)
+    monkeypatch.setattr(check_module, "OSVClient", FakeOSVClient)
+    monkeypatch.setattr(
+        check_module,
+        "fetch_kev_catalog",
+        lambda: (set(), _Cov("cisa-kev", "present", as_of="2026-06-10")),
+    )
+    monkeypatch.setattr(
+        check_module,
+        "fetch_epss_scores",
+        lambda cves: ({}, _Cov("first-epss", "present", as_of="2026-06-10")),
+    )
+
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+    res = _run_check(["--sbom", str(sbom)])
+
+    assert res.exit_code == 0, res.output
+    assert json.loads(res.stdout)["provenance"]["engine"] == "osv-online"
+    assert "Local matcher failed" not in res.stderr
 
 
 def test_annotations_github_emits_workflow_commands(monkeypatch, tmp_path):

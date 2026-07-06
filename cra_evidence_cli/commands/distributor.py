@@ -58,14 +58,13 @@ def format_verification_output(data: dict, output_format: str) -> None:
     table.add_row("", "")
     table.add_row("[bold]Checklist[/bold]", "")
 
-    checklist = data.get("checklist", {})
-    for step, info in checklist.items():
-        if isinstance(info, dict):
-            completed = info.get("completed", False)
-        else:
-            completed = bool(info)
+    checklist_steps = data.get("checklist_steps", [])
+    for step_info in checklist_steps:
+        if not step_info.get("applicable", True):
+            continue
+        completed = step_info.get("completed", False)
         icon = "[green]\u2713[/green]" if completed else "[red]\u2717[/red]"
-        label = step.replace("_", " ").title()
+        label = step_info.get("label") or step_info.get("step", "").replace("_", " ").title()
         table.add_row(f"  {label}", icon)
 
     console.print(table)
@@ -102,7 +101,7 @@ def format_list_output(data: list, output_format: str) -> None:
         comp_style = "green" if completion == 100 else "yellow" if completion >= 50 else "red"
 
         table.add_row(
-            item.get("verification_number", "N/A")[:12],
+            item.get("verification_number", "N/A"),
             item.get("product_name", "N/A")[:20],
             f"[{status_style}]{humanize_identifier(status)}[/{status_style}]",
             f"[{comp_style}]{completion}%[/{comp_style}]",
@@ -492,6 +491,10 @@ def list_verifications(
     """
     config = ctx.obj["config"]
     output_format = config.output_format
+
+    if limit > 100:
+        msg = "--limit cannot exceed 100."
+        raise click.UsageError(msg)
 
     try:
         validate_config(config)

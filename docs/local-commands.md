@@ -6,6 +6,11 @@ They use the network for vulnerability data and public datasets.
 
 Back to the [README](../README.md).
 
+Global options such as `--output` and `--verbose` precede the subcommand:
+`craevidence --output json <subcommand> ...`. The `check` command additionally
+accepts `--output` directly as its own option, overriding the group-level value
+for that run; all other commands in this page use only the group-level form.
+
 ## `check`
 
 Run a no-key local security snapshot. This command does not require
@@ -43,8 +48,8 @@ Notes:
   `--deny-license AGPL-3.0-only,GPL-3.0-only`.
 - `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`; if it
   is not installed the dimension is skipped (reported as `unavailable`, never a silent pass).
-- Each finding's exploit probability ([EPSS](https://www.first.org/epss/)) is shown inline and
-  used to rank the "Top actions".
+- Each finding's exploit probability is shown inline when available and used to
+  rank the "Top actions".
 - `--vex` consumes an [OpenVEX](https://openvex.dev/) (or CSAF VEX) document and suppresses a
   finding **before** the gates only when a matching statement is `fixed`, or `not_affected` with
   a justification or impact statement (a `not_affected` statement with no rationale never
@@ -75,13 +80,29 @@ Notes:
   when set; `gitlab` writes a Code Quality JSON report (path via `--annotations-file`); `auto`
   detects the provider from the CI environment. A failed annotation write warns and is skipped,
   so it can never mask a vulnerability gate.
-- `--sbom-output` writes a copy of the Syft-generated SBOM to the given path (handy as a CI
+- `--sbom-output` writes a copy of the generated SBOM to the given path (handy as a CI
   artifact). It is a no-op (with a message) when you supplied the SBOM yourself via `--sbom`.
 - `--json-output`, `--sarif-output`, and `--markdown-output` each write that format to a path
   regardless of `--output`, so a single scan can produce several files in one pass (for example
   SARIF for code scanning plus JSON for archival) instead of re-running the check per format.
   They are written before any gate runs, so a failing gate still leaves the artifacts on disk,
   and missing parent directories are created.
+- `--output` accepts `text`, `json`, `sarif`, or `markdown`. It may be given at the group level
+  (`craevidence --output json check ...`) or after the subcommand (`craevidence check --output
+  json ...`); the subcommand-level value takes precedence when both are given.
+- Gate exit codes: `--fail-on critical` exits 10; `--fail-on high` exits 11; `--fail-on medium`
+  exits 12; `--fail-on known-exploited` exits 17. `--fail-on-score` exits 14 when the sbomqs
+  score is below the threshold. `--strict` exits 15 when a required data source is stale or
+  unavailable. `--deny-license` exits 16 when a denied license is detected.
+- When a local vulnerability engine is absent or its scan fails, the command falls back to
+  querying OSV.dev over the network. When an installed engine fails, a notice goes to stderr:
+  `Local matcher failed (<reason>); querying OSV.dev over the network instead.` The OSV.dev
+  path reports real severities, CVE aliases, fixed versions, and supports all `--fail-on` gates
+  identically to the local engine path.
+- Pointing `check` at a directory that contains no recognised dependency manifests exits 1 with
+  an explanatory message listing the manifest types it looks for (for example `requirements.txt`,
+  `poetry.lock`, `package-lock.json`, `go.mod`, `pom.xml`, `Cargo.lock`, `Gemfile.lock`).
+  A genuinely malformed file passed via `--sbom` exits 1 with `Unsupported SBOM format`.
 
 The result is a local snapshot, not a compliance verdict. `exit 0` means no
 blocking findings were found under the selected local gate.
@@ -168,8 +189,8 @@ craevidence draft vex [PATH]
   [--output-file, -o <out.vex.json>]
 ```
 
-- It runs the same finding pipeline as `check` (Grype when installed, else
-  OSV.dev), then emits one statement per finding. The status is always
+- It runs the same finding pipeline as `check` (Grype when installed and
+  working, with OSV.dev as the fallback when it is absent or fails), then emits one statement per finding. The status is always
   `under_investigation`; it never pre-fills `not_affected` or `fixed`, so the
   tool never asserts non-exploitability on your behalf.
 - `--format csaf` emits a CSAF 2.0 VEX document instead. We already consume CSAF
@@ -191,8 +212,8 @@ craevidence draft advisory [PATH]
   [--output-file, -o <advisory.json>]
 ```
 
-- It runs the same finding pipeline as `check` (Grype when installed, else
-  OSV.dev), then emits a draft CSAF 2.0 advisory (`document.category`
+- It runs the same finding pipeline as `check` (Grype when installed and
+  working, with OSV.dev as the fallback when it is absent or fails), then emits a draft CSAF 2.0 advisory (`document.category`
   `csaf_security_advisory`). Each entry carries placeholder `notes`, a
   `vendor_fix` remediation, and a `product_status` referencing the affected
   component, for you to fill in.
@@ -218,6 +239,7 @@ craevidence draft security.txt --validate <path>|- [--fail-on-invalid]
   `Expires`, or an already expired `Expires`. Warnings: a soon-to-expire
   `Expires` (within 30 days) and any leftover placeholder values. Validation is advisory and exits 0; pass
   `--fail-on-invalid` to exit 7 when it finds errors.
+
 ### `draft risk-assessment` and `draft threat-model`
 
 Scaffold compliance YAML seeded from your SBOM components. Neither needs an API
@@ -226,7 +248,7 @@ threat-model` makes no network call; `draft risk-assessment` runs a local
 vulnerability scan that by default uses the network for vulnerability data.
 
 ```
-craevidence draft risk-assessment [PATH] [--sbom <sbom.json>] [--product <name>] [--org <name>] [-o <out.yaml>]
+craevidence draft risk-assessment [PATH] [--sbom <sbom.json>] [--template <id>] [--product <name>] [--org <name>] [-o <out.yaml>]
 craevidence draft threat-model    [PATH] [--sbom <sbom.json>] [--diagram <arch.mmd>] [--product <name>] [--org <name>] [-o <out.yaml>]
 ```
 
@@ -253,11 +275,13 @@ it never gates a pipeline (it always exits 0 on success), and **being past
 end-of-life is not the same as being vulnerable**.
 
 ```
-craevidence eol-check [PATH]
+craevidence [--output text|json|sarif] eol-check [PATH]
   [--sbom <sbom.json>]
-  [--output-file, -o <path>]
-  [--output text|json|sarif]
+  [-o <path>]
 ```
+
+`markdown` is not supported; passing `--output markdown` prints a notice to stderr and falls
+back to `text`.
 
 - It parses an SBOM (from `--sbom`, an SBOM file path, or one generated from a
   directory) and looks up each component name against endoflife.date. Matching
@@ -282,10 +306,9 @@ Advisory only: it never gates (always exits 0 on success), and it never claims
 that personal data is processed or that anything is unlawful.
 
 ```
-craevidence egress-check [PATH]
+craevidence [--output text|json|sarif] egress-check [PATH]
   [--sbom <sbom.json>]
   [-o <path>]
-  [--output text|json|sarif]
 ```
 
 - Layers 1 and 2 read the SBOM (from `--sbom`, an SBOM file path, or one
@@ -305,12 +328,14 @@ local, no network, no API key.** Advisory by default (it exits 0 even when
 matches are found); pass `--fail-on-match` to gate a CI job (exit code 18).
 
 ```
-craevidence secrets-check [PATH]
+craevidence [--output text|json|sarif] secrets-check [PATH]
   [--no-git-history]
   [--fail-on-match]
   [-o <path>]
-  [--output text|json|sarif]
 ```
+
+`markdown` is not supported; passing `--output markdown` prints a notice to stderr and falls
+back to `text`.
 
 - It looks for high-confidence provider patterns (AWS, GitHub, Slack, Google,
   Stripe, private-key blocks, JWTs) plus high-entropy values assigned to
@@ -333,11 +358,13 @@ API key.** Advisory by default (it exits 0 even when findings are reported); pas
 `--fail-on-match` to gate a CI job (exit code 19).
 
 ```
-craevidence config-check [PATH]
+craevidence [--output text|json|sarif] config-check [PATH]
   [--fail-on-match]
   [-o <path>]
-  [--output text|json|sarif]
 ```
+
+`markdown` is not supported; passing `--output markdown` prints a notice to stderr and falls
+back to `text`.
 
 - It checks for things like containers running as root (no `USER`, or `USER
   root`), `privileged`/`hostNetwork` pods, `allowPrivilegeEscalation`, broad Linux
@@ -412,6 +439,10 @@ Two optional committed files tune the gate, both auto-discovered in `.cra/`:
 You can also seed a product-type risk set into the existing scaffold with
 `craevidence draft risk-assessment --template <id>` or
 `craevidence compliance-as-code template --type risk-catalog --template <id>`.
+
+`assessment templates` and `assessment check` support `--output text` and `--output json` (via
+the group-level `--output`). `sarif` and `markdown` are not supported; passing either prints a
+notice to stderr and falls back to `text`.
 
 ## `version`
 

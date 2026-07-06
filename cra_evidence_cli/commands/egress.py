@@ -17,6 +17,7 @@ from pathlib import Path
 
 import click
 
+from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.local.disclaimer import (
     advisory_block,
 )
@@ -232,6 +233,7 @@ def egress_check(
         # Directory: generate an SBOM offline then also scan source.
         from cra_evidence_cli.sbom_generator import (  # noqa: PLC0415
             SBOMGenerationError,
+            cleanup_generated_sbom,
             generate_sbom_from_directory,
         )
 
@@ -251,11 +253,16 @@ def egress_check(
             # components; continue with a source-only egress scan rather than
             # aborting (the source URL scan does not need an SBOM).
             components = []
+        finally:
+            # One private temp directory per generated SBOM; remove it once
+            # parsed so runs do not accumulate sbom_* directories.
+            cleanup_generated_sbom(generated.file_path)
 
         source_root = path
 
     report = evaluate(components, source_root)
 
+    warn_unsupported_output_format(output_format, ("text", "json", "sarif"))
     if output_format == "json":
         rendered = _render_json(report)
     elif output_format == "sarif":

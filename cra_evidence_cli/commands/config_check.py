@@ -14,6 +14,7 @@ from pathlib import Path
 
 import click
 
+from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.local.config_audit import ConfigReport, evaluate
 from cra_evidence_cli.local.disclaimer import (
     advisory_block,
@@ -146,6 +147,8 @@ def config_check(
     config = ctx.obj["config"]
     output_format = config.output_format
     verbose = verbose_opt or ctx.obj.get("verbose", False)
+
+    warn_unsupported_output_format(output_format, ("text", "json", "sarif"))
 
     report = evaluate(path)
 

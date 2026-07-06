@@ -15,6 +15,7 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import CRAEvidenceError
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
+    cleanup_generated_sbom,
     generate_sbom_from_directory,
 )
 
@@ -199,7 +200,7 @@ def verify_run(
                 )
             else:
                 console.print(f"[red]Upload failed:[/red] {e}")
-            sys.exit(1)
+            sys.exit(e.exit_code)
 
         version_id = str(upload_response["version"]["id"])
         binary_sbom_id = str(upload_response["artifact_id"])
@@ -217,7 +218,7 @@ def verify_run(
             )
         except CRAEvidenceError as e:
             console.print(f"[red]Verification failed:[/red] {e}")
-            sys.exit(1)
+            sys.exit(e.exit_code)
 
         # Step D: Print results
         _format_verify_output(verify_response, output_format)
@@ -236,9 +237,7 @@ def verify_run(
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
     finally:
-        # Clean up generated temp file
+        # Generated SBOMs live in a private temp directory (one per run);
+        # remove the whole directory so runs do not accumulate sbom_* dirs.
         if generated_sbom_path and generated_sbom_path.exists():
-            try:
-                generated_sbom_path.unlink()
-            except OSError:
-                pass
+            cleanup_generated_sbom(generated_sbom_path)

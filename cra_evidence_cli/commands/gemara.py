@@ -61,7 +61,6 @@ TEMPLATE_TYPES = {
 GEMARA_TYPE_MAP: dict[str, tuple[str, str]] = {
     "RiskCatalog": ("risk_assessment", "version"),
     "ThreatCatalog": ("threat_model", "version"),
-    "CapabilityCatalog": ("threat_model", "version"),
     "GuidanceCatalog": ("update_mechanism_documentation", "product"),
     "ControlCatalog": ("secure_development_policy", "product"),
     # EvaluationLog is per-build evidence of control execution.
@@ -553,12 +552,14 @@ def template(
     """
     Generate a starter compliance YAML file for a product.
 
-    By default this pulls product name, slug and org name from the CRA Evidence
-    API and - for RiskCatalog / ThreatCatalog - pre-populates entries with real
-    SBOM component names as subjects. With --offline it builds locally from a
-    placeholder identity, with no API key and no network. Add --sbom to seed
-    subjects from a local SBOM; without --sbom, offline output uses placeholders
-    for product data and subject matter. Install cue to validate locally.
+    By default this fetches product name and slug from the CRA Evidence API
+    and - for RiskCatalog / ThreatCatalog - pre-populates entries with real
+    SBOM component names as subjects. Use --org to set the organisation name
+    in the generated file; product API objects do not carry an org name. With
+    --offline it builds locally from a placeholder identity, with no API key
+    and no network. Add --sbom to seed subjects from a local SBOM; without
+    --sbom, offline output uses placeholders for product data and subject
+    matter. Install cue to validate locally.
     """
     config = ctx.obj["config"]
     gemara_type = TEMPLATE_TYPES[template_type.lower()]
@@ -624,11 +625,8 @@ def template(
                 except APIError:
                     # Non-fatal: template still renders with bracketed placeholders.
                     components = []
-            org_name = (
-                product_obj.get("organisation_name")
-                or product_obj.get("org_name")
-                or ""
-            )
+            # Product API objects do not carry an org name; use --org when provided.
+            org_name = org_name_opt or ""
             builder = TEMPLATE_BUILDERS[gemara_type]
             return builder(product_obj, org_name, components)
 
@@ -692,9 +690,10 @@ def validate(ctx: click.Context, file_path: Path, remote: bool) -> None:
     """
     Validate a compliance YAML document against the CUE schema.
 
-    Uses the local `cue` binary when available (fast, offline). Falls back
-    to server-side validation when CUE is not installed, or when --remote
-    is given.
+    Uses the local `cue` binary when available (runs without calling CRA
+    Evidence, but cue may fetch the schema module from the CUE registry on
+    first use). Falls back to server-side validation when CUE is not
+    installed, or when --remote is given.
 
     Exit codes:
       0  valid

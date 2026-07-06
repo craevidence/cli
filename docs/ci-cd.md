@@ -25,8 +25,10 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-      - run: syft . -o cyclonedx-json > sbom.cdx.json
+      - name: Build SBOM
+        run: |
+          # Replace this with the SBOM command your build already uses.
+          your-sbom-command > sbom.cdx.json
       - uses: craevidence/cli@v3
         with:
           api-key: ${{ secrets.CRA_EVIDENCE_API_KEY }}
@@ -52,7 +54,7 @@ component:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.4.4/gitlab-ci-component.yml'
+  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.6.0/gitlab-ci-component.yml'
     inputs:
       product: $CI_PROJECT_NAME
       version: $CI_COMMIT_TAG
@@ -66,6 +68,11 @@ include:
       signature-issuer: https://gitlab.com
       fail-untrusted: true
 ```
+
+After the v3.6.0 release is published to the GitLab CI/CD Catalog, you can also
+use the catalog include form instead of the raw URL. The component provides
+separate `.cra-evidence-upload` and `.cra-evidence-check` job templates; extend
+the one you need (or include both).
 
 The component requests GitLab's `SIGSTORE_ID_TOKEN` with audience `sigstore`
 for the upload job. Teams that already create their own bundle can use
@@ -83,27 +90,27 @@ on:
 jobs:
   cra-upload:
     runs-on: ubuntu-latest
+    env:
+      IMAGE_NAME: my-image
     steps:
       - uses: actions/checkout@v4
-
-      - name: Generate SBOM
-        run: syft . -o cyclonedx-json > sbom.json
 
       - name: Upload to CRA Evidence
         run: |
           docker run --rm \
             -e CRA_EVIDENCE_API_KEY=${{ secrets.CRA_EVIDENCE_API_KEY }} \
-            -v $(pwd):/workspace:ro \
+            -v /var/run/docker.sock:/var/run/docker.sock \
             craevidence/cli:latest \
             upload-sbom \
               --product my-product \
               --version ${{ github.ref_name }} \
-              --file /workspace/sbom.json \
+              --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
               --scan \
               --fail-on high
 ```
 
-Generating an SBOM directly from a built Docker image (no pre-generation needed):
+Generating an SBOM directly from a built Docker image (set `IMAGE_NAME` in the
+job-level `env:` block or replace with the literal image reference):
 
 ```yaml
       - name: Generate and Upload SBOM from Image
@@ -184,6 +191,40 @@ pipeline {
 
 ---
 
+## Vulnerability DB caching
+
+When the check gate runs, the local scanner downloads a vulnerability database
+on its first run. Subsequent runs skip the download if the database is current.
+Caching the database directory between CI jobs reduces network traffic and
+speeds up cold starts.
+
+**GitHub Action** (engine and DB stored under `$RUNNER_TEMP/craevidence-*`):
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: ${{ runner.temp }}/craevidence-grype-db
+    key: vuln-db-${{ runner.os }}-${{ runner.arch }}
+    restore-keys: vuln-db-${{ runner.os }}-
+```
+
+Place this step before the `craevidence/cli@v3` action step.
+
+**GitLab CI component** (engine and DB stored under `/tmp/craevidence/*`):
+
+```yaml
+cache:
+  key: vuln-db-${CI_RUNNER_EXECUTABLE_ARCH}
+  paths:
+    - /tmp/craevidence/grype-db/
+```
+
+The vulnerability database refreshes daily. A cached copy younger than 24
+hours is reused without a download. Caching is optional: jobs without a warm
+cache still succeed but download the database each run.
+
+---
+
 ## Compliance Pipeline Integrations
 
 The CLI accepts artefacts produced by upstream OpenSSF/EU tooling without
@@ -195,8 +236,10 @@ producers into a CI job.
 
 [Scorecard](https://github.com/ossf/scorecard) emits SARIF 2.1.0 covering
 SDLC security checks (branch protection, dependency review, CI tests, code
-review, signed releases (20 checks). These map to CRA Annex I Req 10
-(secure development process). Push the SARIF to CRA Evidence via the
+review, signed releases, among 20 checks total). These map to CRA Annex I,
+Part I (design and development with an appropriate level of cybersecurity)
+and Annex I, Part II, point 3 (effective and regular tests and reviews of
+the security of the product). Push the SARIF to CRA Evidence via the
 existing `upload-sarif` command.
 
 ```yaml

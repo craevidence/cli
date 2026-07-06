@@ -1,137 +1,79 @@
 # CRA Evidence CLI
 
-Command-line tool for CI/CD integration with [CRA Evidence](https://craevidence.com), helping manufacturers meet EU Cyber Resilience Act requirements.
+Command-line tools for CRA Evidence workflows and local software supply-chain checks.
 
-![Running craevidence check on an SBOM: a local security snapshot that matches with Grype and enriches with CISA KEV and FIRST EPSS, gating CI on known-exploited CVEs with exit code 17.](docs/demo.gif)
+The CLI has two modes:
 
-Try it live in your browser, no install required:
-[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/craevidence/cli)
+- Local commands that run without a CRA Evidence account or API key.
+- Account commands that upload evidence or read release state from CRA Evidence.
 
-## Local Security Check (no account)
+This page covers the public command basics. Registered CRA Evidence users can
+sign in to view the detailed command documentation at https://docs.craevidence.com/cli.
 
-`craevidence check` scans a project directory, a container image, or an existing SBOM for known
-vulnerabilities and prints a local security snapshot: **no account and no API key.**
-It never contacts CRA Evidence. It uses the network for vulnerability data: it matches
-with Grype when Grype is installed (which may download or update the Grype database), falls back to
-OSV.dev when Grype is unavailable, and consults CISA KEV and FIRST EPSS for enrichment.
-It generates the SBOM for you with [Syft](https://github.com/anchore/syft),
-matches vulnerabilities with [Grype](https://github.com/anchore/grype) (used automatically when
-installed)
-or the free [OSV.dev](https://osv.dev) database, and flags **known-exploited** CVEs ([CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog))
-and exploit probability ([FIRST EPSS](https://www.first.org/epss/)).
+The local checks are review aids and CI gates. They are not an audit, and
+exit 0 does not prove compliance.
 
-It is deliberately honest: it never claims "compliant," the machine report carries detailed
-review metadata, and verbose output shows **what a local snapshot cannot tell you**.
-
-Where it earns its place in a developer's workflow:
-
-- Drop it into CI as a real gate: pick a threshold with `--fail-on` and the build stops on its own.
-- Mute the false positives you've already triaged with a `--vex` file, before the gate runs.
-- Commit a `.cra/check.yaml` once and every run and every teammate share the same gates and ignore list.
-- Findings land inline on the pull or merge request with `--annotations github|gitlab`.
-- Only the vulnerabilities that are new since `--baseline` block you, so an old backlog doesn't.
-- Hand the same run to other tools with `--output sarif|json` (code scanning, dashboards) and keep the SBOM via `--sbom-output`.
+## Install
 
 ```bash
-# Install
-pip install craevidence                     # PyPI
-pipx install craevidence                    # PyPI, isolated (recommended for a CLI)
-brew install craevidence/tap/craevidence    # Homebrew (via tap)
+pip install craevidence
+pipx install craevidence
+```
 
-# Run (no signup, ~30 seconds)
-craevidence check .                              # scan a project directory
-craevidence check --image ghcr.io/acme/app:1.4.2 # scan a container image
-craevidence check --sbom sbom.cdx.json           # score an SBOM you already have
+`pipx` is a good fit for command-line tools because it installs the package in
+an isolated environment.
 
-# Use it as a CI gate (exit non-zero on actively-exploited vulns)
+The installed command is:
+
+```bash
+craevidence --help
+```
+
+Python 3.12 or newer is required.
+
+## Local Check
+
+`craevidence check` scans a directory, container image, or existing SBOM and
+reports known vulnerability signals that can block CI when a threshold is met.
+It does not require an account and does not upload your project to CRA Evidence.
+
+```bash
+craevidence check .
+craevidence check --image ghcr.io/acme/app:1.4.2
+craevidence check --sbom sbom.cdx.json
 craevidence check . --fail-on known-exploited
 ```
 
-**Example output:**
+By default, `check` uses network data sources. It uses Grype when installed
+and working, falls back to OSV.dev when Grype is absent or fails, and consults
+CISA KEV plus FIRST EPSS for enrichment. For a network-restricted run, provide
+an SBOM with `--sbom` and run where Grype has a local database; CISA KEV and
+FIRST EPSS enrichment are reported as unavailable if they cannot be reached.
 
-```text
-Local SBOM Check
+Verbose output includes a section named **What this local snapshot cannot tell
+you**. The JSON output keeps the same review context in machine-readable form.
 
-Summary
-Components: 2 | Vulnerabilities: 8 (critical=0, high=0, medium=8) | Known-exploited: 0
+## Free Commands
 
-Top actions
-- requests 2.20.0: upgrade to 2.31.0
-- jinja2 3.1.3: upgrade to 3.1.4
+These commands do not need `CRA_EVIDENCE_API_KEY`:
 
-Reviewed dimensions
-- Needs Review:    SBOM exists and is machine-readable
-- Action required: Known vulnerability snapshot
-- Action required: Remediation information
-- Needs Review:    Third-party component inventory
-
-What this local snapshot cannot tell you
-- Intended purpose, foreseeable misuse, and CRA product classification.
-- Whether the product risk assessment has been completed and approved.
-- Whether technical file review or sign-off has been completed.
-  ...
-
-Data provenance and source credits: see --output json and the README.
-
-Exit 0 means no configured blocking findings in this local snapshot.
-```
-
-Each dimension carries a plain-English message and its exact CRA citation ids in the
-`--output json` report; the human summary stays uncluttered.
-
-By default the check uses the network: Grype matches against its vulnerability database (updating it
-when online), or OSV.dev is queried as a fallback when Grype is not installed, with CISA KEV and FIRST
-EPSS consulted for enrichment.
-Add `--output json|sarif|markdown` for machine-readable CI output, and `--baseline previous.json` to
-show what changed since the last run. See [Local commands](docs/local-commands.md#check) for the full
-flag and exit-code reference.
-
-**What an account adds** (the `check` command does not require one): trend across
-versions, vulnerability **reachability**, VEX lifecycle, attestation tracking, and
-notified-body / technical-file export. The local check is an honest snapshot; the platform is the
-system of record.
-
-## Free commands (no account, no API key)
-
-Everything below runs fully client-side. No CRA Evidence account, no API key, no upload.
-Full flags, output, and CRA citations for each are in [docs/local-commands.md](docs/local-commands.md).
-
-| Command | What it does |
+| Command | Purpose |
 |---|---|
-| [`check`](docs/local-commands.md#check) | Scan a directory, image, or SBOM and print a local security summary; gate CI with `--fail-on`. |
-| [`eol-check`](docs/local-commands.md#eol-check) | Flag end-of-life and support status of SBOM components (endoflife.date). |
-| [`egress-check`](docs/local-commands.md#egress-check) | Inventory external interfaces and data-egress indicators in code and dependencies. |
-| [`secrets-check`](docs/local-commands.md#secrets-check) | Scan the working tree for candidate hard-coded secrets. |
-| [`config-check`](docs/local-commands.md#config-check) | Audit Dockerfile / Terraform / Kubernetes config for insecure defaults. |
-| [`draft`](docs/local-commands.md#draft) | Scaffold VEX, security.txt, advisory, risk-assessment, and threat-model drafts for manual completion. |
-| [`compliance-as-code template --offline`](docs/local-commands.md#compliance-as-code-template---offline) | Build a starter compliance YAML (risk/threat/policy) locally from an SBOM. |
-| [`assessment`](docs/local-commands.md#assessment) | Scaffold a CRA Annex I applicability matrix from a product-type template and gate CI on unaddressed Part II duties or unjustified waivers. |
-| [`db update`](docs/local-commands.md#db-update) / [`db status`](docs/local-commands.md#db-status) | Manage and inspect the local Grype vulnerability database cache. |
-| [`version`](docs/local-commands.md#version) | Show CLI version information. |
+| `check` | Scan a directory, image, or SBOM and gate CI with `--fail-on`. |
+| `eol-check` | Flag end-of-life and support status from local SBOM components. |
+| `egress-check` | Inventory external interfaces and data-egress indicators. |
+| `secrets-check` | Scan the working tree for candidate hard-coded secrets. |
+| `config-check` | Audit Dockerfile, Terraform, and Kubernetes files for insecure defaults. |
+| `draft` | Scaffold VEX, security.txt, advisory, risk-assessment, and threat-model drafts for review. |
+| `compliance-as-code template --offline` | Create starter YAML from local input without an API key. |
+| `assessment` | Scaffold an Annex I applicability matrix and gate CI on structured gaps. |
+| `db update` / `db status` | Manage and inspect the local Grype vulnerability database cache. |
 
-## See it in action
+## CI Examples
 
-Every command below runs locally with no account and no API key.
-
-**End-of-life and support status** (`eol-check`):
-
-![craevidence eol-check flags components past end-of-life and without a known support cycle.](docs/demo-eol-check.gif)
-
-**Insecure-default config audit** (`config-check`):
-
-![craevidence config-check flags a Dockerfile that fetches a remote URL and runs as root.](docs/demo-config-check.gif)
-
-**Scaffold a risk catalog, offline** (`compliance-as-code template`):
-
-![craevidence compliance-as-code template builds a starter risk catalog YAML from an SBOM with no network.](docs/demo-scaffold.gif)
-
-## Use it as a CI gate (free)
-
-The local `check` gate needs no account and no API key: install the CLI and fail the build on a
-threshold you choose.
+GitHub Actions:
 
 ```yaml
-# GitHub Actions: .github/workflows/cra-check.yml (no API key)
 jobs:
   cra-check:
     runs-on: ubuntu-latest
@@ -141,8 +83,9 @@ jobs:
       - run: craevidence check . --fail-on known-exploited
 ```
 
+GitLab CI:
+
 ```yaml
-# GitLab CI (no API key)
 cra-check:
   image: python:3.12-slim
   script:
@@ -150,143 +93,92 @@ cra-check:
     - craevidence check . --fail-on known-exploited
 ```
 
-The packaged GitHub Action and GitLab Component (which also upload evidence with an API key), plus
-Docker, Jenkins, OpenSSF Scorecard, and complyctl integrations, are in [docs/ci-cd.md](docs/ci-cd.md).
+## Account Commands
 
-## With a CRA Evidence account (API key)
+Commands that upload evidence or read CRA Evidence release state need an API key:
 
-These commands talk to the CRA Evidence API and need `CRA_EVIDENCE_API_KEY` (or OIDC in GitHub
-Actions). Full reference: [docs/account-commands.md](docs/account-commands.md).
+```bash
+export CRA_EVIDENCE_API_KEY=...
+craevidence upload-sbom --product my-product --version 1.0.0 --file sbom.cdx.json
+craevidence status --product my-product --version 1.0.0
+```
 
-| Area | Commands |
+The default API URL is:
+
+```text
+https://api.craevidence.com
+```
+
+You can override it with:
+
+```bash
+export CRA_EVIDENCE_URL=https://api.craevidence.com
+```
+
+## Environment Variables
+
+| Variable | Purpose |
 |---|---|
-| Upload evidence | [`upload-sbom`](docs/account-commands.md#upload-sbom), `upload-hbom`, `upload-vex`, `upload-sarif`, `upload-attestation`, `upload-document`, `upload-diagram` |
-| Scan & status | [`scan`](docs/account-commands.md#scan), `status`, `maturity`, `wait-ready` |
-| Release lifecycle | [`release`](docs/account-commands.md#release), `export`, `compare` |
-| Distributor & profile | [`distributor`](docs/account-commands.md#distributor), `setup-profile`, `show-profile`, `evidence` |
-| Validation & verification | [`validate`](docs/account-commands.md#validate), `verify run`, `compliance-as-code` upload |
+| `CRA_EVIDENCE_API_KEY` | API key for account commands. |
+| `CRA_EVIDENCE_URL` | CRA Evidence API URL. Defaults to `https://api.craevidence.com`. |
+| `CRA_EVIDENCE_ORG` | Default organization slug. |
+| `CRA_EVIDENCE_PRODUCT` | Default product slug for upload commands. |
+| `CRA_EVIDENCE_VERSION` | Default product version for upload commands. |
+| `CRA_EVIDENCE_COMPONENT` | Default component slug for component-aware uploads. |
+| `CRA_EVIDENCE_COMPONENT_VERSION` | Default component release version. |
 
-## Install
-
-```bash
-pip install craevidence                     # PyPI
-pipx install craevidence                    # PyPI, isolated (recommended for a CLI)
-brew install craevidence/tap/craevidence    # Homebrew (via tap)
-docker run --rm craevidence/cli:latest --help   # Docker (Syft bundled)
-```
-
-Container registries, building from source, and SBOM generation from Docker images are covered in
-[docs/installation.md](docs/installation.md).
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|---|---|---|
-| `CRA_EVIDENCE_API_KEY` | API key for authentication | (required) |
-| `CRA_EVIDENCE_URL` | CRA Evidence base URL | `https://api.craevidence.com` |
-| `CRA_EVIDENCE_ORG` | Default organization slug | (optional) |
-| `CRA_EVIDENCE_TIMEOUT` | Request timeout in seconds | `60` |
-| `CRA_EVIDENCE_PRODUCT` | Product slug for upload commands | (optional) |
-| `CRA_EVIDENCE_VERSION` | Version for upload commands | (optional) |
-| `CRA_EVIDENCE_COMPONENT` | Component slug for upload commands | (optional) |
-
-### Config File
-
-Location: `~/.cra-evidence/config.yaml`
-
-```yaml
-# API configuration
-api_key: cra_key_xxx
-url: https://api.craevidence.com
-
-# Default organization (optional)
-default_org: my-org
-
-# Output preferences (optional)
-output_format: json
-
-# HTTP settings (optional)
-timeout: 60
-```
-
-> **Security note:** `chmod 600 ~/.cra-evidence/config.yaml` so no other user on the system can read your API key.
-
-### Repository identity (`.cra/evidence.yaml`)
-
-Commit a `.cra/evidence.yaml` so upload commands know which product, component, and version a repository belongs to, without repeating `--product` and `--version` on every command.
-
-```yaml
-# .cra/evidence.yaml
-schema_version: 1
-product: my-platform        # product slug this repository contributes to
-component: firmware         # this repository's component (omit for a single-repo product)
-component_kind: firmware    # frontend | service | datastore | firmware | library | other
-version_from: git-tag       # git-tag | file:VERSION | pyproject | package.json | env:VAR
-```
-
-The file is discovered from the current directory first, then from the repository root. Precedence is explicit flag, then `CRA_EVIDENCE_PRODUCT` / `CRA_EVIDENCE_VERSION` / `CRA_EVIDENCE_COMPONENT`, then this file. For a monorepo, place one file per sub-project directory and run the command from that directory. The free `check` and `assessment` commands do not read or require it.
-
-With the file in place, a release step is just:
-
-```bash
-craevidence upload-sbom --file sbom.cdx.json
-```
+Credentials can also be stored in `~/.cra-evidence/config.yaml`. Keep that file
+private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.
 
 ## Exit Codes
 
 | Code | Meaning |
 |---|---|
-| 0 | Success |
-| 1 | General error |
-| 2 | Authentication error |
-| 3 | API error |
-| 4 | Validation error |
-| 5 | File not found |
-| 6 | Configuration error |
-| 7 | security.txt validation found errors (`draft security.txt --validate --fail-on-invalid`) |
-| 10 | Critical vulnerabilities found (`--fail-on critical`) |
-| 11 | High vulnerabilities found (`--fail-on high`) |
-| 12 | Medium vulnerabilities found (`--fail-on medium`) |
-| 13 | Low vulnerabilities found (`--fail-on low`) |
-| 14 | SBOM quality score below `--fail-on-score` threshold |
-| 15 | Local scan engine unavailable for no-key `check` |
-| 16 | License policy threshold exceeded |
-| 17 | Known-exploited vulnerabilities found (`check --fail-on known-exploited`) |
-| 18 | Candidate secrets found (`secrets-check --fail-on-match`) |
-| 19 | Insecure-default config findings (`config-check --fail-on-match`) |
-| 20 | CRA status is not `ready` when `--fail-on` is set to anything other than `none` |
-| 21 | Structured evidence mapping was required but the upload did not populate mapped fields |
-| 22 | SBOM signature trust required but verification was not trusted |
-| 23 | SBOM signing failed or no Sigstore OIDC identity was available |
-| 24 | CRA legal floor is met but the organisation's release policy is not (`--fail-on` set) |
-| 25 | Mandatory Annex I requirement (Part I(1) or a Part II duty) is not addressed (`assessment check`) |
-| 26 | Annex I Part I(2) requirement marked not-applicable without a justification (`assessment check`) |
+| 0 | Success. For local gates, no configured blocking finding was present in this local snapshot. |
+| 1 | General error. |
+| 2 | Authentication error. |
+| 3 | API error. |
+| 4 | Validation error. |
+| 5 | File not found. |
+| 6 | Configuration error. |
+| 7 | security.txt validation failed. |
+| 10 | Critical vulnerabilities found. |
+| 11 | High vulnerabilities found. |
+| 12 | Medium vulnerabilities found. |
+| 13 | Low vulnerabilities found. |
+| 14 | SBOM quality score below the configured threshold. |
+| 15 | Local scan engine unavailable. |
+| 16 | License policy threshold exceeded. |
+| 17 | Known-exploited vulnerabilities found. |
+| 18 | Candidate secrets found. |
+| 19 | Insecure-default config findings found. |
+| 20 | CRA status is not ready when a status gate is enabled. |
+| 21 | Structured evidence mapping was required but was not populated. |
+| 22 | SBOM signature trust was required but verification was not trusted. |
+| 23 | SBOM signing failed or no Sigstore OIDC identity was available. |
+| 24 | CRA legal floor is met but the configured release policy is not. |
+| 25 | Mandatory Annex I requirement is not addressed. |
+| 26 | Annex I Part I(2) requirement is marked not-applicable without a justification. |
 
-## Documentation
+Exit 0 != compliance. Local output is a snapshot for review and CI policy, not
+a legal conclusion.
 
-- [Local commands (no account)](docs/local-commands.md)
-- [Account commands (API key)](docs/account-commands.md)
-- [CI/CD integration](docs/ci-cd.md)
-- [Installation](docs/installation.md)
-- [Troubleshooting](docs/troubleshooting.md)
+## Data Sources
 
-## Credits and data sources
-
-The local check builds on open data and tooling, credited here rather than in every run's output:
-
-- [Grype](https://github.com/anchore/grype) and [Syft](https://github.com/anchore/syft), Apache-2.0 projects from Anchore, for vulnerability matching and SBOM generation.
-- [OSV.dev](https://osv.dev) for the no-Grype fallback; OSV records retain their originating database licenses.
-- [CISA Known Exploited Vulnerabilities catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) (CC0 public-domain data) for known-exploited flags.
-- [FIRST EPSS](https://www.first.org/epss/) for exploit-probability scores; EPSS data is provided by FIRST.org.
+| Source | Use |
+|---|---|
+| FIRST EPSS | Exploit-probability enrichment. |
+| CISA KEV | Known-exploited vulnerability enrichment. |
+| OSV.dev | Open source vulnerability data when the OSV path is used. |
+| Anchore Grype | Local vulnerability matching when installed. |
+| Anchore Syft | SBOM generation from directories and images when installed or included in the Docker image. |
+| endoflife.date | End-of-life and support-cycle data for `eol-check`. |
 
 ## Support
 
-- Documentation: https://docs.craevidence.com/cli
-- Issues: https://github.com/craevidence/cli/issues
+- Website: https://craevidence.com
 - Email: support@craevidence.com
 
 ## License
 
-MIT License. See LICENSE file for details.
+MIT License. See the package license file for details.

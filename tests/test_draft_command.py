@@ -547,7 +547,25 @@ def test_advisory_rejects_image_and_sbom_together(tmp_path: Path):
         obj=_obj(),
     )
     assert result.exit_code != 0
-    assert "Use only one input mode" in result.output
+    assert "--image" in result.output or "--sbom" in result.output
+
+
+def test_vex_rejects_image_and_sbom_error_message(tmp_path: Path):
+    """The mutual-exclusion error for vex mentions --image and --sbom, not PATH."""
+    dummy = tmp_path / "sbom.json"
+    dummy.write_text("{}", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        draft,
+        ["vex", "--image", "ubuntu:22.04", "--sbom", str(dummy)],
+        obj=_obj(),
+    )
+    assert result.exit_code != 0
+    # The error must reference the actual flags, not a non-existent PATH mode.
+    output = result.output
+    assert "--image" in output or "--sbom" in output
+    # Must NOT claim PATH is an exclusive input mode (PATH is always present with a default).
+    assert "PATH, --image, or --sbom" not in output
 
 
 def test_advisory_round_trips_as_csaf_suppressing_nothing(tmp_path: Path):

@@ -70,3 +70,73 @@ class TestReleaseCommand:
         # Should fail on config validation, NOT on click choice validation
         # (exit code 2 = click usage error for bad choice, other codes = our code ran)
         assert result.exit_code != 2 or "Invalid value for '--state'" not in result.output
+
+
+class TestSupersededByValidation:
+    """Tests for --superseded-by client-side validation."""
+
+    def test_superseded_by_rejected_with_released_state(self):
+        """--superseded-by is not valid with state 'released'."""
+        runner = CliRunner()
+        result = runner.invoke(
+            set_release_state,
+            [
+                "--product", "test",
+                "--version", "1.0",
+                "--state", "released",
+                "--superseded-by", "2.0",
+            ],
+            obj={"config": None, "verbose": False},
+            catch_exceptions=False,
+        )
+        assert result.exit_code != 0
+        assert "end_of_life" in result.output or "deprecated" in result.output
+
+    def test_superseded_by_rejected_with_draft_state(self):
+        """--superseded-by is not valid with state 'draft'."""
+        runner = CliRunner()
+        result = runner.invoke(
+            set_release_state,
+            [
+                "--product", "test",
+                "--version", "1.0",
+                "--state", "draft",
+                "--superseded-by", "2.0",
+            ],
+            obj={"config": None, "verbose": False},
+            catch_exceptions=False,
+        )
+        assert result.exit_code != 0
+
+    def test_superseded_by_accepted_with_deprecated(self):
+        """--superseded-by is valid with state 'deprecated' (validation passes)."""
+        runner = CliRunner()
+        result = runner.invoke(
+            set_release_state,
+            [
+                "--product", "test",
+                "--version", "1.0",
+                "--state", "deprecated",
+                "--superseded-by", "2.0",
+            ],
+            obj={"config": None, "verbose": False},
+            catch_exceptions=True,
+        )
+        # Must not fail on the --superseded-by check (exit 2 for usage error).
+        assert "--superseded-by is only valid" not in (result.output or "")
+
+    def test_superseded_by_accepted_with_end_of_life(self):
+        """--superseded-by is valid with state 'end_of_life' (validation passes)."""
+        runner = CliRunner()
+        result = runner.invoke(
+            set_release_state,
+            [
+                "--product", "test",
+                "--version", "1.0",
+                "--state", "end_of_life",
+                "--superseded-by", "2.0",
+            ],
+            obj={"config": None, "verbose": False},
+            catch_exceptions=True,
+        )
+        assert "--superseded-by is only valid" not in (result.output or "")

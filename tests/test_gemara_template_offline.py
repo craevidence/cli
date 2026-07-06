@@ -110,6 +110,13 @@ def test_offline_risk_catalog_can_seed_from_local_sbom(tmp_path: Path) -> None:
     assert "Risk related to urllib3" in titles
 
 
+def test_capability_catalog_not_in_type_map() -> None:
+    """CapabilityCatalog is not in GEMARA_TYPE_MAP: the backend renderer rejects it."""
+    from cra_evidence_cli.commands.gemara import GEMARA_TYPE_MAP
+
+    assert "CapabilityCatalog" not in GEMARA_TYPE_MAP
+
+
 def test_offline_never_calls_the_api(monkeypatch, tmp_path: Path) -> None:
     # If the offline path touched the API, this stub would raise.
     def _boom(*args, **kwargs):  # noqa: ANN002, ANN003

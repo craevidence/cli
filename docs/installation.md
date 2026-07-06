@@ -1,51 +1,58 @@
 # Installation
 
-How to install the CRA Evidence CLI via PyPI, Homebrew, Docker, container registries, or from source, plus how to install Syft for SBOM generation.
+How to install the CRA Evidence CLI via PyPI, Homebrew, Docker, container registries, or from source.
 
 Back to the [README](../README.md).
 
-## Install
+## PyPI
 
 ```bash
-# Install
-pip install craevidence                     # PyPI
-pipx install craevidence                    # PyPI, isolated (recommended for a CLI)
-brew install craevidence/tap/craevidence    # Homebrew (via tap)
-
-# Run (no signup, ~30 seconds)
-craevidence check .                              # scan a project directory
-craevidence check --image ghcr.io/acme/app:1.4.2 # scan a container image
-craevidence check --sbom sbom.cdx.json           # score an SBOM you already have
-
-# Use it as a CI gate (exit non-zero on actively-exploited vulns)
-craevidence check . --fail-on known-exploited
+pip install craevidence          # standard install
+pipx install craevidence         # isolated environment (recommended for a CLI)
 ```
 
-## Installation
-
-### PyPI
+## Homebrew
 
 ```bash
-pip install craevidence
+brew install craevidence/tap/craevidence
 ```
 
-### Docker
+## Docker
 
 ```bash
 docker pull craevidence/cli:latest
 ```
 
-### Container Registries
+### Container registries
 
 The CLI Docker image is published to multiple registries:
 
-| Registry | Image | Usage |
-|----------|-------|-------|
-| **Docker Hub** (primary) | `craevidence/cli:latest` | Default - no registry prefix needed |
-| **GHCR** | `ghcr.io/craevidence/craevidence:latest` | Alternative if Docker Hub rate-limited |
-| **Quay.io** | `quay.io/craevidence/cli:latest` | Alternative mirror |
+| Registry | Image |
+|----------|-------|
+| Docker Hub (primary) | `craevidence/cli:latest` |
+| GHCR | `ghcr.io/craevidence/craevidence:latest` |
+| Quay.io | `quay.io/craevidence/cli:latest` |
 
-### From Source
+### Building the Docker image from source
+
+The published Dockerfile defaults to Docker Hardened Images (DHI) from `dhi.io`. If you do not have
+DHI registry access, pass public Python base images via build-args:
+
+```bash
+git clone https://github.com/craevidence/cli.git
+cd cli
+docker build \
+  --build-arg BASE_IMAGE_BUILDER=python:3.14 \
+  --build-arg BASE_IMAGE=python:3.14-slim \
+  -t craevidence-cli:local .
+```
+
+Without the build-args the build uses the pinned DHI digests, which require DHI credentials. The
+resulting image is functionally identical; only the base image provenance differs.
+
+## From Source
+
+Install the Python package in editable mode:
 
 ```bash
 git clone https://github.com/craevidence/cli.git
@@ -53,9 +60,10 @@ cd cli
 pip install -e .
 ```
 
-### SBOM Generation from Docker Images
+## SBOM Generation from Docker Images
 
-The CLI Docker image includes Syft for generating SBOMs directly from Docker images. When using the Docker image, no additional installation is required. Mount the Docker socket:
+The CLI Docker image includes the local tools needed to generate SBOMs directly
+from Docker images. Mount the Docker socket only in trusted CI/CD environments:
 
 ```bash
 docker run --rm \
@@ -65,9 +73,10 @@ docker run --rm \
   upload-sbom --product my-app --version 1.0 --image nginx:latest
 ```
 
-> **Security note:** Mounting the Docker socket grants the container full control over the Docker daemon. Only do this in trusted CI/CD environments.
+> **Security note:** Mounting the Docker socket grants the container full control over the Docker daemon.
 
-If running the CLI natively (`pip install`), install Syft separately:
+Native installs can upload an existing SBOM with `--file`. Directory and image
+generation require the local SBOM generator on `PATH`:
 
 ```bash
 # macOS

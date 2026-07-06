@@ -181,12 +181,14 @@ async def test_upload_sbom_posts_target_markets(test_config, tmp_path, monkeypat
         create_product=True,
         create_version=True,
         target_markets="DE,ES",
+        component_version="2.4.0",
     )
 
     assert result["artifact_id"] == "sbom-123"
     assert captured["url"] == "https://api.test.craevidence.com/api/v1/ci/upload"
     assert captured["file_name"] == "sbom.json"
     assert captured["data"]["target_markets"] == "DE,ES"
+    assert captured["data"]["component_version"] == "2.4.0"
 
 
 @pytest.mark.asyncio
@@ -377,3 +379,132 @@ async def test_get_static_analysis_summary_uses_summary_endpoint(test_config):
         "GET",
         "https://api.test.craevidence.com/api/v1/versions/ver-456/static-analysis/summary",
     )
+
+
+@pytest.mark.asyncio
+async def test_oidc_get_exchanges_token_before_request(monkeypatch):
+    """In OIDC mode with no cached token, a GET first exchanges the OIDC
+    token, then sends the request with the exchanged bearer token."""
+    from cra_evidence_cli.config import CRAEvidenceConfig
+
+    config = CRAEvidenceConfig(
+        url="https://api.test.craevidence.com",
+        oidc_mode=True,
+        oidc_token="github-oidc-token",  # noqa: S106
+    )
+    client = CRAEvidenceClient(config)
+
+    calls = []
+
+    class FakeAsyncClient:
+        def __init__(self, timeout=None):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, json=None, headers=None):
+            calls.append(("POST", url, headers, json))
+            return Response(status_code=200, json={"access_token": "exchanged-token"})
+
+        async def request(self, method, url, headers=None, **kwargs):
+            calls.append((method, url, headers))
+            return Response(status_code=200, json={"cra_status": "ready"})
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    result = await client.get_version_status(product="p", version="1.0")
+
+    assert result == {"cra_status": "ready"}
+    assert len(calls) == 2
+    exchange = calls[0]
+    assert exchange[0] == "POST"
+    assert exchange[1] == "https://api.test.craevidence.com/api/v1/oidc/token"
+    assert exchange[3] == {"github_token": "github-oidc-token"}
+    get_call = calls[1]
+    assert get_call[0] == "GET"
+    assert get_call[1].endswith("/api/v1/ci/status")
+    assert get_call[2]["Authorization"] == "Bearer exchanged-token"
+
+
+@pytest.mark.asyncio
+async def test_upload_vex_posts_ci_upload_form(test_config, tmp_path, monkeypatch):
+    """VEX uploads go to /api/v1/ci/upload as multipart form data and
+    transmit the classification, version, and CI metadata options."""
+    vex_file = tmp_path / "vex.json"
+    vex_file.write_text('{"vulnerabilities": []}')
+
+    client = CRAEvidenceClient(test_config)
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, files, data):
+            captured["url"] = url
+            captured["file_name"] = files["file"][0]
+            captured["data"] = data
+            return Response(
+                status_code=201,
+                json={
+                    "artifact_id": "vex-123",
+                    "artifact_type": "vex",
+                    "vulnerability_count": 3,
+                },
+            )
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    result = await client.upload_vex(
+        product="my-product",
+        version="1.0.0",
+        file_path=vex_file,
+        no_inherit=True,
+        category="important_class_i",
+        subcategory="vpn",
+        product_type="software",
+        cra_role="manufacturer",
+        product_group="iot",
+        environment="production",
+        tags="ci,nightly",
+        commit_sha="abc123",
+        branch="main",
+        pipeline_id="42",
+        repository="https://github.com/acme/device",
+        repo_path="firmware",
+    )
+
+    assert result["artifact_id"] == "vex-123"
+    assert result["vulnerability_count"] == 3
+    assert captured["url"] == "https://api.test.craevidence.com/api/v1/ci/upload"
+    assert captured["file_name"] == "vex.json"
+    assert captured["data"] == {
+        "product": "my-product",
+        "version": "1.0.0",
+        "artifact_type": "vex",
+        "create_product": "false",
+        "create_version": "false",
+        "no_inherit": "true",
+        "category": "important_class_i",
+        "subcategory": "vpn",
+        "product_type": "software",
+        "cra_role": "manufacturer",
+        "product_group": "iot",
+        "environment": "production",
+        "tags": "ci,nightly",
+        "commit_sha": "abc123",
+        "branch": "main",
+        "pipeline_id": "42",
+        "repository": "https://github.com/acme/device",
+        "repo_path": "firmware",
+    }

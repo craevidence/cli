@@ -14,6 +14,7 @@ from cra_evidence_cli.repo_config import (
     find_repo_config,
     load_repo_config,
     resolve_identity,
+    resolve_upload_identity,
     resolve_version,
 )
 
@@ -106,7 +107,7 @@ def test_schema_version_missing_raises(tmp_path: Path) -> None:
 
 
 def test_schema_version_wrong_value_raises(tmp_path: Path) -> None:
-    path = _evidence_yaml(tmp_path, "schema_version: 2\nproduct: foo\n")
+    path = _evidence_yaml(tmp_path, "schema_version: 3\nproduct: foo\n")
     with pytest.raises(ConfigurationError, match="unsupported schema_version"):
         load_repo_config(path)
 
@@ -129,6 +130,18 @@ def test_valid_config_parses(tmp_path: Path) -> None:
     assert cfg.component == "api"
     assert cfg.component_kind == "service"
     assert cfg.version_from == "pyproject"
+
+
+def test_schema_v2_parses_component_version_from(tmp_path: Path) -> None:
+    path = _evidence_yaml(
+        tmp_path,
+        "schema_version: 2\nproduct: myapp\ncomponent: api\n"
+        "product_version_from: env:PRODUCT_VER\n"
+        "component_version_from: env:COMPONENT_VER\n",
+    )
+    cfg = load_repo_config(path)
+    assert cfg.product_version_from == "env:PRODUCT_VER"
+    assert cfg.component_version_from == "env:COMPONENT_VER"
 
 
 def test_empty_file_parses_with_all_none(tmp_path: Path) -> None:
@@ -405,3 +418,28 @@ def test_version_from_resolved_when_version_absent(
     _, version, _ = resolve_identity(None, None, None)
 
     assert version == "4.2.0"
+
+
+def test_upload_identity_resolves_component_version(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _evidence_yaml(
+        tmp_path,
+        "schema_version: 2\nproduct: p\n"
+        "product_version_from: env:PRODUCT_VER\n"
+        "component_version_from: env:COMPONENT_VER\n",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CRA_EVIDENCE_VERSION", raising=False)
+    monkeypatch.delenv("CRA_EVIDENCE_COMPONENT_VERSION", raising=False)
+    monkeypatch.setenv("PRODUCT_VER", "1.0.0")
+    monkeypatch.setenv("COMPONENT_VER", "2.4.0")
+
+    product, version, component, component_version = resolve_upload_identity(
+        None, None, None, None
+    )
+
+    assert product == "p"
+    assert version == "1.0.0"
+    assert component is None
+    assert component_version == "2.4.0"

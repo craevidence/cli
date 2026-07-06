@@ -32,8 +32,8 @@ jobs:
 
       - name: Install Grype and prime its database
         env:
-          GRYPE_VERSION: "0.114.0"
-          GRYPE_SHA256: edda0968d8827daab01d32b3cd7de192ae0915005e7bbfcfef9e68e79bc43343
+          GRYPE_VERSION: "0.115.0"
+          GRYPE_SHA256: 3fad92940650e514c0aa2dad83526942a055e210cec09a8a59d9c024adc2b90e
         run: |
           TARBALL="grype_${GRYPE_VERSION}_linux_amd64.tar.gz"
           curl -fsSL "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/${TARBALL}" -o "${TARBALL}"

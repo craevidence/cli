@@ -75,3 +75,19 @@ def test_file_path_is_passed_to_client():
     mock_client.upload_hbom.assert_called_once()
     kwargs = mock_client.upload_hbom.call_args.kwargs
     assert Path(kwargs["file_path"]).name == "hbom.json"
+
+
+def test_csv_help_points_to_real_schema_sources():
+    from click.testing import CliRunner
+
+    from cra_evidence_cli.cli import cli
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["upload-hbom", "--help"])
+
+    assert result.exit_code == 0
+    # The help must not advertise a template invocation that does not exist
+    assert "--csv template" not in result.output
+    # It points at real sources for the column schema instead
+    assert "name column is required" in result.output
+    assert "docs/account-commands.md" in result.output

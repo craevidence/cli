@@ -145,8 +145,8 @@ def update(cache_dir_opt: str | None) -> None:
         # matching how check.py surfaces a missing engine.
         exc = ScanEngineUnavailable(
             "Grype is not installed. Install Grype to manage the local "
-            "vulnerability database, or run the CRA Evidence Docker image with "
-            "bundled engines."
+            "vulnerability database. The `check` command can still use the "
+            "OSV.dev fallback when Grype is absent."
         )
         click.echo(f"Error: {exc}", err=True)
         sys.exit(exc.exit_code)

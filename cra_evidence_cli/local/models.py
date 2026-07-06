@@ -104,8 +104,14 @@ class LocalCheckResult:
     baseline: dict[str, Any] | None = None
     suppressions: list[dict[str, Any]] = field(default_factory=list)
 
-    def to_dict(self) -> dict[str, Any]:
+    def to_dict(self, exit_code: int = 0) -> dict[str, Any]:
         summary = summarize_findings(self.findings)
+        if exit_code:
+            exit_note = (
+                f"Exit {exit_code}: configured blocking threshold exceeded in this local snapshot."
+            )
+        else:
+            exit_note = "Exit 0 means no configured blocking findings in this local snapshot."
         return {
             "schema_version": "craevidence.local_check.v1",
             "target": {"type": self.target_type, "value": self.target},
@@ -129,7 +135,7 @@ class LocalCheckResult:
             "sources_consulted": self.sources_consulted,
             "attributions": self.attributions,
             "baseline": self.baseline,
-            "exit_note": "Exit 0 means no configured blocking findings in this local snapshot.",
+            "exit_note": exit_note,
             "advisory": advisory_block(),
         }
 

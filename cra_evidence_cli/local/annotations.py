@@ -37,6 +37,34 @@ def _findings(result: LocalCheckResult) -> list[dict[str, Any]]:
     return result.to_dict().get("findings", [])
 
 
+def _is_temp_path(path_str: str) -> bool:
+    """Return True if the path looks like an OS temp-directory path."""
+    return path_str.startswith("/tmp") or path_str.startswith("/var/tmp")  # noqa: S108
+
+
+def _resolve_sbom_uri(result: LocalCheckResult) -> str:
+    """Resolve the SBOM path for use in annotation location fields.
+
+    Returns a repository-relative path when available. Never returns an
+    absolute temp-directory path; falls back to the literal 'sbom.json'.
+    """
+    if result.sbom_path is not None:
+        path_str = str(result.sbom_path)
+        if not _is_temp_path(path_str):
+            return path_str
+    sbom_output = result.provenance.get("sbom_output")
+    if sbom_output:
+        s = str(sbom_output)
+        if not _is_temp_path(s):
+            return s
+    prov_path = result.provenance.get("sbom_path")
+    if prov_path:
+        s = str(prov_path)
+        if not _is_temp_path(s):
+            return s
+    return "sbom.json"
+
+
 def _short_title(finding: dict[str, Any]) -> str:
     title = finding.get("title")
     if title:
@@ -127,7 +155,7 @@ def gitlab_codequality(result: LocalCheckResult) -> list[dict[str, Any]]:
     if not findings:
         return []
 
-    sbom_path = result.provenance.get("sbom_path") or "sbom.json"
+    sbom_path = _resolve_sbom_uri(result)
 
     entries: list[dict[str, Any]] = []
     for finding in findings:

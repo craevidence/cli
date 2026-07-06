@@ -14,7 +14,7 @@ import pytest
 from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
-from cra_evidence_cli.exceptions import CRAEvidenceError
+from cra_evidence_cli.exceptions import APIError, AuthenticationError, CRAEvidenceError
 
 
 @pytest.fixture
@@ -173,4 +173,42 @@ class TestComponentsList:
             )
 
         assert result.exit_code == 2
+        assert "not found" in result.output
+
+    def test_authentication_error_exits_2(self, runner, base_env):
+        """AuthenticationError (exit 2) from _fetch_components is propagated."""
+        with patch(
+            "cra_evidence_cli.commands.components._fetch_components"
+        ) as mock_fetch:
+            async def _auth_fail(**_kwargs):
+                msg = "Authentication failed (401). Check your API key or OIDC token."
+                raise AuthenticationError(msg)
+            mock_fetch.side_effect = _auth_fail
+
+            result = runner.invoke(
+                cli,
+                ["components", "list", "--product", "security-camera"],
+                env=base_env,
+            )
+
+        assert result.exit_code == 2
+        assert "Authentication" in result.output or "401" in result.output
+
+    def test_product_not_found_exits_3(self, runner, base_env):
+        """APIError with status 404 (exit 3) is raised for product-not-found."""
+        with patch(
+            "cra_evidence_cli.commands.components._fetch_components"
+        ) as mock_fetch:
+            async def _not_found(**_kwargs):
+                msg = "Product 'ghost' not found"
+                raise APIError(msg, status_code=404)
+            mock_fetch.side_effect = _not_found
+
+            result = runner.invoke(
+                cli,
+                ["components", "list", "--product", "ghost"],
+                env=base_env,
+            )
+
+        assert result.exit_code == 3
         assert "not found" in result.output

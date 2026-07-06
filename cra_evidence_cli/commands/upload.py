@@ -16,18 +16,21 @@ from rich.table import Table
 
 from cra_evidence_cli.ci_detect import merge_ci_metadata
 from cra_evidence_cli.client import CRAEvidenceClient
+from cra_evidence_cli.commands.scan import wait_for_scan_completion
 from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.display import humanize_field_path, humanize_identifier
 from cra_evidence_cli.exceptions import (
+    APIError,
     CRAEvidenceError,
     SbomqsThresholdExceeded,
     SignatureVerificationUntrusted,
     StructuredEvidenceMappingRequired,
     VulnerabilityThresholdExceeded,
 )
-from cra_evidence_cli.repo_config import resolve_identity
+from cra_evidence_cli.repo_config import resolve_identity, resolve_upload_identity
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
+    cleanup_generated_sbom,
     generate_sbom_from_directory,
     generate_sbom_from_image,
 )
@@ -249,6 +252,9 @@ def format_output(data: dict, output_format: str, verbose: bool = False) -> None
 
     if data.get("component_count") is not None:
         table.add_row("Packages", str(data["component_count"]))
+
+    if data.get("vulnerability_count") is not None:
+        table.add_row("Vulnerabilities", str(data["vulnerability_count"]))
 
     if data.get("quality_score") is not None:
         score = data["quality_score"]
@@ -861,7 +867,23 @@ def _resolve_signature_inputs(
 @click.option(
     "--fail-on",
     type=click.Choice(["critical", "high", "medium", "low"], case_sensitive=False),
-    help="Fail if vulnerabilities of this severity or higher are found",
+    help=(
+        "Fail if vulnerabilities of this severity or higher are found. "
+        "Requires --scan."
+    ),
+)
+@click.option(
+    "--scan-timeout",
+    "scan_timeout",
+    type=click.IntRange(min=1),
+    default=300,
+    show_default=True,
+    help=(
+        "Maximum seconds to wait for the scan to finish when --scan and "
+        "--fail-on are both set. The scan runs asynchronously on the "
+        "server, so the gate polls the status endpoint until the scan "
+        "completes or the timeout elapses."
+    ),
 )
 # CRA classification options
 @click.option(
@@ -955,6 +977,12 @@ def _resolve_signature_inputs(
     ),
 )
 @click.option(
+    "--component-version",
+    "component_version",
+    default=None,
+    help="Component repository release version for this SBOM",
+)
+@click.option(
     "--sbomqs-check",
     "sbomqs_check",
     is_flag=True,
@@ -1046,6 +1074,7 @@ def upload_sbom(
     create_version: bool,
     scan: bool,
     fail_on: str | None,
+    scan_timeout: int,
     # CRA classification
     category: str | None,
     subcategory: str | None,
@@ -1063,6 +1092,7 @@ def upload_sbom(
     no_inherit: bool,
     supersedes: str | None,
     component_slug: str | None,
+    component_version: str | None,
     sbomqs_check: bool,
     fail_on_score: int | None,
     environment: str | None,
@@ -1094,8 +1124,8 @@ def upload_sbom(
     verbose = ctx.obj.get("verbose", False)
 
     try:
-        product, version_number, component_slug = resolve_identity(
-            product, version_number, component_slug
+        product, version_number, component_slug, component_version = resolve_upload_identity(
+            product, version_number, component_slug, component_version
         )
     except CRAEvidenceError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -1180,6 +1210,16 @@ def upload_sbom(
     # --fail-on-score is only meaningful with --sbomqs-check
     if fail_on_score is not None and not sbomqs_check:
         msg = "--fail-on-score requires --sbomqs-check."
+        raise click.UsageError(
+            msg
+        )
+
+    # --fail-on gates on scan results, so a scan must be requested
+    if fail_on and not scan:
+        msg = (
+            "--fail-on requires --scan. The gate evaluates vulnerability "
+            "scan results, so add --scan to trigger a scan after upload."
+        )
         raise click.UsageError(
             msg
         )
@@ -1376,6 +1416,7 @@ def upload_sbom(
                 repository=ci_metadata.get("repository"),
                 repo_path=ci_metadata.get("repo_path"),
                 component=component_slug,
+                component_version=component_version,
                 environment=environment,
                 tags=tags,
                 kernel_config_path=kernel_config_path,
@@ -1427,11 +1468,26 @@ def upload_sbom(
                 signature_trust_status(data.get("signature_verification"))
             )
 
-        # Check vulnerability threshold
+        # Vulnerability gate: wait for the asynchronous scan to finish,
+        # then check the counts against the threshold.
         if fail_on:
             scan_results = data.get("scan_results") or {}
-            vuln_summary = scan_results.get("vulnerabilities") or {}
-            check_vulnerability_threshold(vuln_summary, fail_on)
+            scan_status = scan_results.get("status")
+            if scan_status == "completed":
+                check_vulnerability_threshold(
+                    scan_results.get("vulnerabilities") or {}, fail_on
+                )
+            elif scan_status in ("failed", "disabled"):
+                msg = (
+                    f"Vulnerability scan {scan_status}; the --fail-on gate "
+                    "cannot be evaluated."
+                )
+                raise APIError(message=msg)
+            else:
+                vuln_summary = wait_for_scan_completion(
+                    client, product, version_number, scan_timeout
+                )
+                check_vulnerability_threshold(vuln_summary, fail_on)
 
     except CRAEvidenceError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -1439,9 +1495,11 @@ def upload_sbom(
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
     finally:
-        # Clean up generated SBOM file
+        # Generated SBOMs live in a private temp directory (one per run);
+        # remove the whole directory, not just the file, so runs do not
+        # accumulate empty sbom_* directories.
         if generated_sbom_path and generated_sbom_path.exists():
-            generated_sbom_path.unlink(missing_ok=True)
+            cleanup_generated_sbom(generated_sbom_path)
         if generated_signature_bundle_path and generated_signature_bundle_path.exists():
             generated_signature_bundle_path.unlink(missing_ok=True)
         # Clean up temp kernel config extracted from firmware
@@ -1476,8 +1534,9 @@ def upload_sbom(
     help=(
         "Path to a components CSV (canonical HBOM schema). The CSV is parsed "
         "and built into a CycloneDX HBOM server-side. Mutually exclusive with "
-        "--file. Get the schema with `craevidence upload-hbom` --csv template "
-        "or the version's CSV-template download."
+        "--file. Only the name column is required; download the full column "
+        "template from the version's HBOM tab in CRA Evidence, or see "
+        "docs/account-commands.md for the column reference."
     ),
 )
 @click.option(
@@ -1925,101 +1984,12 @@ def upload_vex(
     type=click.Path(exists=True, path_type=Path),
     help="Path to SARIF file (.json or .sarif)",
 )
-# CRA classification options
-@click.option(
-    "--category",
-    type=click.Choice(VALID_CATEGORIES, case_sensitive=False),
-    help="CRA product category (auto-derived from --subcategory if provided)",
-)
-@click.option(
-    "--subcategory",
-    type=click.Choice(VALID_SUBCATEGORIES, case_sensitive=False),
-    help="CRA Annex III/IV product subcategory (e.g., firewall_ids_ips, vpn)",
-)
-@click.option(
-    "--product-type",
-    "product_type",
-    type=click.Choice(VALID_PRODUCT_TYPES, case_sensitive=False),
-    help="Product type: software, hardware, or mixed",
-)
-@click.option(
-    "--cra-role",
-    type=click.Choice(VALID_CRA_ROLES, case_sensitive=False),
-    help="CRA economic operator role (default: manufacturer)",
-)
-@click.option(
-    "--product-group",
-    "product_group",
-    help="Product group slug",
-)
-# CI metadata options
-@click.option(
-    "--commit",
-    "commit_sha",
-    help="Git commit SHA (auto-detected in CI environments)",
-)
-@click.option(
-    "--branch",
-    help="Git branch name (auto-detected in CI environments)",
-)
-@click.option(
-    "--pipeline-id",
-    help="CI pipeline ID (auto-detected in CI environments)",
-)
-@click.option(
-    "--repository",
-    help="Repository URL or name (auto-detected in CI environments)",
-)
-@click.option(
-    "--repo-path",
-    help="Repository subdirectory for monorepo support",
-)
-@click.option(
-    "--no-ci-detect",
-    is_flag=True,
-    help="Disable automatic CI environment detection",
-)
-@click.option(
-    "--no-inherit",
-    "no_inherit",
-    is_flag=True,
-    default=False,
-    help=(
-        "Skip inheriting CRA compliance artifacts from the previous version "
-        "when creating a new version"
-    ),
-)
-@click.option(
-    "--environment",
-    type=click.Choice(["production", "staging", "development", "testing"]),
-    help="Deployment environment",
-)
-@click.option(
-    "--tags",
-    help="Comma-separated tags",
-)
 @click.pass_context
 def upload_sarif(
     ctx: click.Context,
     product: str | None,
     version_number: str | None,
     file_path: Path,
-    # CRA classification
-    category: str | None,
-    subcategory: str | None,
-    product_type: str | None,
-    cra_role: str | None,
-    product_group: str | None,
-    # CI metadata
-    commit_sha: str | None,
-    branch: str | None,
-    pipeline_id: str | None,
-    repository: str | None,
-    repo_path: str | None,
-    no_ci_detect: bool,
-    no_inherit: bool,
-    environment: str | None,
-    tags: str | None,
 ) -> None:
     """
     Upload SARIF security scan results to CRA Evidence.
@@ -2027,8 +1997,7 @@ def upload_sarif(
     Supports SARIF 2.1.0 output from tools like CodeQL, Semgrep, Bandit,
     govulncheck, and any other SARIF-compliant scanner.
 
-    CI environment metadata is automatically detected for GitHub Actions, GitLab CI,
-    Jenkins, Azure DevOps, CircleCI, and Bitbucket Pipelines.
+    The product and version must already exist.
 
     """
     config = ctx.obj["config"]
@@ -2041,26 +2010,12 @@ def upload_sarif(
         console.print(f"[red]Error:[/red] {e}")
         sys.exit(e.exit_code)
 
-    # Validate CRA classification consistency
-    category, subcategory = validate_classification(category, subcategory)
-
     try:
         validate_config(config)
 
-        # Merge CLI flags with auto-detected CI metadata
-        ci_metadata = merge_ci_metadata(
-            cli_commit=commit_sha,
-            cli_branch=branch,
-            cli_pipeline_id=pipeline_id,
-            cli_repository=repository,
-            cli_repo_path=repo_path,
-            auto_detect=not no_ci_detect,
-        )
-
         if verbose:
             console.print(f"[dim]Uploading SARIF from {file_path}[/dim]")
-            if ci_metadata.get("commit_sha"):
-                console.print(f"[dim]Commit: {ci_metadata['commit_sha']}[/dim]")
+            console.print(f"[dim]Product: {product}, Version: {version_number}[/dim]")
 
         client = CRAEvidenceClient(config)
 
@@ -2069,19 +2024,6 @@ def upload_sarif(
                 product=product,
                 version=version_number,
                 file_path=file_path,
-                no_inherit=no_inherit,
-                category=category,
-                subcategory=subcategory,
-                product_type=product_type,
-                cra_role=cra_role,
-                product_group=product_group,
-                commit_sha=ci_metadata.get("commit_sha"),
-                branch=ci_metadata.get("branch"),
-                pipeline_id=ci_metadata.get("pipeline_id"),
-                repository=ci_metadata.get("repository"),
-                repo_path=ci_metadata.get("repo_path"),
-                environment=environment,
-                tags=tags,
             )
         )
 
@@ -2418,6 +2360,7 @@ def upload_document(
                 release_state=release_state,
             )
         )
+        data.setdefault("doc_type", document_type)
 
         format_output(data, output_format, verbose)
         enforce_structured_mapping(data, require_structured_mapping)

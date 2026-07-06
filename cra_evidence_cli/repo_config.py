@@ -8,19 +8,21 @@ the file.
 
 YAML schema
 -----------
-``schema_version`` is required and must equal 1. Unknown keys are rejected
+``schema_version`` is required and must be 1 or 2. Unknown keys are rejected
 (a typo must not silently disable identity resolution).
 
 ==================  ================================================  =========
 Key                 Type / allowed values                             Default
 ==================  ================================================  =========
-``schema_version``  integer (must be 1)                               required
+``schema_version``  integer (1 or 2)                                  required
 ``product``         string                                            none
 ``component``       string                                            none
 ``component_kind``  one of frontend|service|datastore|firmware|       none
                     library|other
 ``version_from``    string (git-tag|file:<path>|pyproject|            none
                     package.json|env:<VAR>)
+``product_version_from``    same as version_from                      none
+``component_version_from``  same as version_from                      none
 ==================  ================================================  =========
 
 Example ``.cra/evidence.yaml``::
@@ -48,7 +50,15 @@ from cra_evidence_cli.exceptions import ConfigurationError, CRAEvidenceError
 
 _DEFAULT_CONFIG_PATH = Path(".cra/evidence.yaml")
 
-_ALLOWED_KEYS = {"schema_version", "product", "component", "component_kind", "version_from"}
+_ALLOWED_KEYS = {
+    "schema_version",
+    "product",
+    "component",
+    "component_kind",
+    "version_from",
+    "product_version_from",
+    "component_version_from",
+}
 
 _VALID_COMPONENT_KINDS = {"frontend", "service", "datastore", "firmware", "library", "other"}
 
@@ -61,6 +71,8 @@ class RepoConfig:
     component: str | None = None
     component_kind: str | None = None
     version_from: str | None = None
+    product_version_from: str | None = None
+    component_version_from: str | None = None
 
 
 def find_repo_config(start: Path | None = None) -> Path | None:
@@ -96,7 +108,7 @@ def find_repo_config(start: Path | None = None) -> Path | None:
 def load_repo_config(path: Path) -> RepoConfig:
     """Parse and validate ``.cra/evidence.yaml`` at ``path``.
 
-    Raises ``ConfigurationError`` when schema_version is missing or not 1,
+    Raises ``ConfigurationError`` when schema_version is missing or unsupported,
     when unknown keys are present, or when component_kind is not a recognised
     value.
     """
@@ -137,10 +149,10 @@ def load_repo_config(path: Path) -> RepoConfig:
             "Add 'schema_version: 1' at the top of the file."
         )
         raise ConfigurationError(msg)
-    if schema_version != 1:
+    if schema_version not in {1, 2}:
         msg = (
             f"Repo config {path} has unsupported schema_version {schema_version!r}. "
-            "Only schema_version: 1 is supported."
+            "Supported values are 1 and 2."
         )
         raise ConfigurationError(msg)
 
@@ -157,6 +169,8 @@ def load_repo_config(path: Path) -> RepoConfig:
         component=data.get("component"),
         component_kind=component_kind,
         version_from=data.get("version_from"),
+        product_version_from=data.get("product_version_from"),
+        component_version_from=data.get("component_version_from"),
     )
 
 
@@ -335,3 +349,69 @@ def resolve_identity(
         raise CRAEvidenceError(msg)
 
     return effective_product, effective_version, effective_component
+
+
+def resolve_upload_identity(
+    product: str | None,
+    version: str | None,
+    component: str | None,
+    component_version: str | None,
+) -> tuple[str, str, str | None, str | None]:
+    """Resolve upload identity, including an optional component release version."""
+    effective_product = product
+    effective_version = version
+    effective_component = component
+    effective_component_version = component_version
+
+    env_product = os.environ.get("CRA_EVIDENCE_PRODUCT")
+    env_version = os.environ.get("CRA_EVIDENCE_VERSION")
+    env_component = os.environ.get("CRA_EVIDENCE_COMPONENT")
+    env_component_version = os.environ.get("CRA_EVIDENCE_COMPONENT_VERSION")
+
+    if effective_product is None and env_product:
+        effective_product = env_product
+    if effective_version is None and env_version:
+        effective_version = env_version
+    if effective_component is None and env_component:
+        effective_component = env_component
+    if effective_component_version is None and env_component_version:
+        effective_component_version = env_component_version
+
+    config_path = find_repo_config()
+    repo_cfg: RepoConfig | None = None
+    if config_path is not None:
+        repo_cfg = load_repo_config(config_path)
+
+    if repo_cfg is not None:
+        if effective_product is None and repo_cfg.product:
+            effective_product = repo_cfg.product
+        if effective_component is None and repo_cfg.component:
+            effective_component = repo_cfg.component
+
+        if effective_version is None:
+            version_source = repo_cfg.product_version_from or repo_cfg.version_from
+            if version_source:
+                effective_version = resolve_version(version_source)
+        if effective_component_version is None and repo_cfg.component_version_from:
+            effective_component_version = resolve_version(repo_cfg.component_version_from)
+
+    if not effective_product:
+        msg = (
+            "Product is required. Pass --product, set CRA_EVIDENCE_PRODUCT, "
+            "or add 'product' to .cra/evidence.yaml."
+        )
+        raise CRAEvidenceError(msg)
+
+    if not effective_version:
+        msg = (
+            "Version is required. Pass --version, set CRA_EVIDENCE_VERSION, "
+            "or add 'version_from' or 'product_version_from' to .cra/evidence.yaml."
+        )
+        raise CRAEvidenceError(msg)
+
+    return (
+        effective_product,
+        effective_version,
+        effective_component,
+        effective_component_version,
+    )
