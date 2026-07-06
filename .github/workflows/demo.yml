@@ -2,8 +2,6 @@ name: Demo GIF
 
 on:
   workflow_dispatch:
-  release:
-    types: [published]
 
 # Regenerating the recording opens a pull request with the refreshed GIF, so
 # the change can be reviewed and the workflow does not need to push to a
