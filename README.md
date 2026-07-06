@@ -6,7 +6,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://github.com/craevidence/cli/blob/main/docs/installation.md)
 [![Docker pulls](https://img.shields.io/docker/pulls/craevidence/cli)](https://hub.docker.com/r/craevidence/cli)
 
-Command-line tools for CRA Evidence workflows and local software supply-chain checks.
+Command-line tools for [CRA Evidence](https://craevidence.com) workflows and local software supply-chain checks.
 
 ![craevidence check scans an SBOM and gates CI on known-exploited vulnerabilities](https://raw.githubusercontent.com/craevidence/cli/main/docs/demo.gif)
 
