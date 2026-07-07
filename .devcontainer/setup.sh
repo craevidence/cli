@@ -50,7 +50,7 @@ cat <<'EOF'
 
 CRA Evidence CLI is ready. Try a no-account local check:
 
-  craevidence check --sbom docs/demo-assets/sbom.cdx.json
+  craevidence check --sbom docs/demo-assets/sbom.demo.json
   craevidence check .
 
 EOF

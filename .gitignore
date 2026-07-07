@@ -12,4 +12,3 @@ build/
 .ruff_cache/
 workspace/
 sbom.cdx.json
-!docs/demo-assets/sbom.cdx.json

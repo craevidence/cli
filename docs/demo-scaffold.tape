@@ -10,7 +10,7 @@ Set Padding 20
 Set WindowBar Colorful
 Hide
 Type "export PS1='$ '" Enter
-Type "WORK=$(mktemp -d); cp docs/demo-assets/sbom.cdx.json $WORK/; cd $WORK" Enter
+Type "WORK=$(mktemp -d); cp docs/demo-assets/sbom.demo.json $WORK/sbom.cdx.json; cd $WORK" Enter
 Type "clear" Enter
 Show
 Sleep 800ms
