@@ -28,13 +28,6 @@ from dataclasses import dataclass, field
 
 # Public dataclasses
 
-_SHAPES = frozenset(
-    {
-        "default", "round", "stadium", "subroutine",
-        "datastore", "circle", "decision", "flag", "hexagon",
-    }
-)
-
 
 @dataclass
 class MermaidNode:

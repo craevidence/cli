@@ -189,6 +189,7 @@ class CRAEvidenceClient:
                     try:
                         retry_after = float(retry_after_header)
                     except ValueError:
+                        # Malformed Retry-After header; leave retry_after unset.
                         pass
 
             raise APIError(

@@ -212,4 +212,5 @@ def upload_diagram(
                 try:
                     parent.rmdir()
                 except OSError:
+                    # Directory not empty or already removed; nothing to clean.
                     pass

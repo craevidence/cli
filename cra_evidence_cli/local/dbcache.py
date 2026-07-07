@@ -53,7 +53,7 @@ def db_update_lock(cache_dir: str) -> Iterator[None]:
     """
     lock_path = Path(cache_dir) / LOCK_FILENAME
     # Open (or create) the lock file; the fd backs the advisory flock.
-    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o644)
+    fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
         try:

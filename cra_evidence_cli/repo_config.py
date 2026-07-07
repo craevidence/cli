@@ -100,6 +100,8 @@ def find_repo_config(start: Path | None = None) -> Path | None:
         if git_candidate.exists():
             return git_candidate
     except (subprocess.CalledProcessError, FileNotFoundError):
+        # Not inside a git repository, or git is not installed; no repo-level
+        # config file to discover.
         pass
 
     return None

@@ -22,10 +22,6 @@ class VexParseError(ValueError):
     """Raised when a VEX document is unparseable or in an unsupported format."""
 
 
-# Statuses that, when matched, cause a finding to be suppressed.
-_SUPPRESSING_STATUSES = {"not_affected", "fixed"}
-
-
 @dataclass
 class Suppression:
     """A record of a single finding suppressed by a VEX statement."""

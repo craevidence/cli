@@ -427,16 +427,12 @@ def _build_control_catalog(product: dict, org_name: str) -> dict:
 
 
 TEMPLATE_BUILDERS = {
-    "RiskCatalog": lambda product, org_name, components: (
-        _build_risk_catalog(product, org_name, components)
-    ),
+    "RiskCatalog": _build_risk_catalog,
     "Policy": lambda product, org_name, components: _build_policy(product, org_name),
     "GuidanceCatalog": lambda product, org_name, components: (
         _build_guidance_catalog(product, org_name)
     ),
-    "ThreatCatalog": lambda product, org_name, components: (
-        _build_threat_catalog(product, org_name, components)
-    ),
+    "ThreatCatalog": _build_threat_catalog,
     "ControlCatalog": lambda product, org_name, components: (
         _build_control_catalog(product, org_name)
     ),
@@ -709,12 +705,13 @@ def validate(ctx: click.Context, file_path: Path, remote: bool) -> None:
         try:
             valid, errors = _run_local_cue(file_path, gemara_type)
         except FileNotFoundError:
-            use_remote = True
+            # The cue binary disappeared between the which() check and the
+            # run; fall through to server-side validation below.
+            pass
         except subprocess.TimeoutExpired:
             err_console.print(
                 "[yellow]Local CUE validation timed out; falling back to server.[/yellow]"
             )
-            use_remote = True
         else:
             _print_validate_result(file_path, gemara_type, valid, errors)
             sys.exit(0 if valid else 1)

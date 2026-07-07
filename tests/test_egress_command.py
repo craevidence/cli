@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from click.testing import CliRunner
 
+from cra_evidence_cli.commands import egress as egress_mod
 from cra_evidence_cli.commands.egress import egress_check
 from cra_evidence_cli.config import CRAEvidenceConfig
 
@@ -178,8 +179,6 @@ def test_egress_check_directory_scans_source(tmp_path: Path, monkeypatch):
     _write_sbom(fake_sbom)
 
     fake_result = SimpleNamespace(file_path=fake_sbom)
-
-    import cra_evidence_cli.commands.egress as egress_mod
 
     monkeypatch.setattr(
         egress_mod,
