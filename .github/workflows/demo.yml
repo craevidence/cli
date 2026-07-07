@@ -3,16 +3,18 @@ name: Demo GIF
 on:
   workflow_dispatch:
 
-# Regenerating the recording opens a pull request with the refreshed GIF, so
-# the change can be reviewed and the workflow does not need to push to a
-# protected default branch directly.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   demo:
     runs-on: ubuntu-latest
+    # Regenerating the recording opens a pull request with the refreshed GIF,
+    # so the change can be reviewed and the workflow does not need to push to
+    # a protected default branch directly. Write access is scoped to this job.
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
         with:
