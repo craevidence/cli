@@ -37,4 +37,4 @@ development builds and are not itemized._
 
 [Unreleased]: https://github.com/craevidence/cli/compare/v3.6.1...HEAD
 [3.6.1]: https://github.com/craevidence/cli/compare/v3.6.0...v3.6.1
-[3.6.0]: https://github.com/craevidence/cli/compare/v3.5.0...v3.6.0
+[3.6.0]: https://github.com/craevidence/cli/releases/tag/v3.6.0
