@@ -32,8 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Return a clear error message when the API cannot be reached, instead of
   surfacing an unhandled network exception.
 
-_Releases before 3.6.0 are not itemized in this file; see the Git tags for
-earlier history._
+_The public release history starts at 3.6.0. Earlier versions were internal
+development builds and are not itemized._
 
 [Unreleased]: https://github.com/craevidence/cli/compare/v3.6.1...HEAD
 [3.6.1]: https://github.com/craevidence/cli/compare/v3.6.0...v3.6.1
