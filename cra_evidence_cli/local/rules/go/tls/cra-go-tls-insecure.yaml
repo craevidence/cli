@@ -1,0 +1,23 @@
+rules:
+  - id: cra-go-tls-insecure
+    message: >
+      tls.Config sets InsecureSkipVerify to true. This disables TLS certificate
+      verification and allows a person-in-the-middle to intercept or modify
+      traffic without detection. Remove InsecureSkipVerify or set it to false.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-295: Improper Certificate Validation"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+      category: security
+      technology:
+        - go
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [go]
+    pattern: "tls.Config{..., InsecureSkipVerify: true, ...}"

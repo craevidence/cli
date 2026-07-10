@@ -1,0 +1,23 @@
+rules:
+  - id: cra-javascript-eval
+    message: >
+      eval() executes the string it receives as JavaScript. When the string
+      includes untrusted input this allows code injection. Avoid eval(); use
+      JSON.parse() for data, or structured alternatives for dynamic dispatch.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/95.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology:
+        - javascript
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    languages: [javascript, typescript]
+    pattern: eval(...)

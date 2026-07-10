@@ -1,0 +1,41 @@
+rules:
+  - id: cra-python-taint-eval-exec
+    mode: taint
+    message: >
+      Untrusted input flows into eval() or exec(). These functions execute
+      their string argument as Python code, so injecting any controlled value
+      allows arbitrary code execution. Remove eval/exec or replace with a
+      safe structured alternative.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/95.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.values.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.headers.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: eval($CODE, ...)
+          - focus-metavariable: $CODE
+      - patterns:
+          - pattern: exec($CODE, ...)
+          - focus-metavariable: $CODE

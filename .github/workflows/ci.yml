@@ -41,11 +41,60 @@ jobs:
         run: pytest tests/ -v --tb=short
 
   # ---------------------------------------------------------------------------
-  # Job 2: Build Docker image, generate SBOM, upload to CRA Evidence
+  # Job 2: Rule pack structural gate + engine gate + dist content guard
+  # ---------------------------------------------------------------------------
+  rulepack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install build
+
+      - name: Read pinned opengrep version
+        id: opengrep-version
+        run: |
+          VERSION=$(python -c "from cra_evidence_cli.local.rules_pack import TESTED_OPENGREP_VERSION; print(TESTED_OPENGREP_VERSION)")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Install opengrep ${{ steps.opengrep-version.outputs.version }}
+        run: |
+          VERSION="${{ steps.opengrep-version.outputs.version }}"
+          ARCH="$(uname -m)"
+          # Map uname arch to the opengrep release asset name
+          case "$ARCH" in
+            x86_64)  OG_ASSET="opengrep_manylinux_x86" ;;
+            aarch64) OG_ASSET="opengrep_manylinux_aarch64" ;;
+            *)        echo "Unsupported arch: $ARCH" >&2; exit 1 ;;
+          esac
+          URL="https://github.com/opengrep/opengrep/releases/download/v${VERSION}/${OG_ASSET}"
+          curl -fsSL "$URL" -o /usr/local/bin/opengrep
+          chmod +x /usr/local/bin/opengrep
+          opengrep --version
+
+      - name: Structural gate (pyyaml)
+        run: pytest tests/test_rulepack.py -v --tb=short
+
+      - name: Engine gate (opengrep per-rule)
+        run: bash scripts/rulepack_gate.sh
+
+      - name: Dist content guard
+        run: python scripts/check_dist.py
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Build Docker image, generate SBOM, upload to CRA Evidence
   # ---------------------------------------------------------------------------
   build-and-sbom:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, rulepack]
     permissions:
       contents: read
       packages: write
@@ -254,7 +303,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-pypi:
     runs-on: ubuntu-latest
-    needs: [test, build-and-sbom]
+    needs: [test, rulepack, build-and-sbom]
     if: github.event_name == 'release'
     environment: pypi
     permissions:

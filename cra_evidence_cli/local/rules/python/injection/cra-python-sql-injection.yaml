@@ -1,0 +1,26 @@
+rules:
+  - id: cra-python-sql-injection
+    message: >
+      String formatting used to build a SQL query passed to execute(). This pattern
+      can allow SQL injection when the formatted value includes untrusted input.
+      Use parameterized queries instead (pass values as a second argument to execute()).
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology:
+        - python
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    languages: [python]
+    pattern-either:
+      - pattern: $CUR.execute($X % $Y)
+      - pattern: $CUR.execute($X.format(...))
+      - pattern: $CUR.execute(f"...")

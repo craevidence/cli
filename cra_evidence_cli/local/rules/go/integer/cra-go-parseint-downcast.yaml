@@ -1,0 +1,66 @@
+rules:
+  - id: cra-go-parseint-downcast
+    message: >
+      A value parsed as a 64-bit integer is downcast to int32 or uint32. If the
+      value can exceed the 32-bit range and is not bounds-checked before the
+      cast, it is silently truncated, which can cause integer overflow in
+      security-sensitive contexts such as array bounds, token validation, or
+      size checks. Parse with bitSize 32 to let strconv enforce the range, or
+      add an explicit bounds check before the cast.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-190: Integer Overflow or Wraparound"
+      owasp:
+        - "A04:2021 - Insecure Design"
+      references:
+        - https://cwe.mitre.org/data/definitions/190.html
+        - https://owasp.org/Top10/A04_2021-Insecure_Design/
+      category: security
+      technology:
+        - go
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+      origin: dgryski/semgrep-go rule parseint-downcast, MIT
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $X, ... = strconv.ParseInt(..., ..., 64)
+              ...
+              int32($X)
+          - pattern: |
+              $X, ... = strconv.ParseInt(..., ..., 64)
+              ...
+              uint32($X)
+          - pattern: |
+              $X, ... = strconv.ParseUint(..., ..., 64)
+              ...
+              int32($X)
+          - pattern: |
+              $X, ... = strconv.ParseUint(..., ..., 64)
+              ...
+              uint32($X)
+          - pattern: |
+              $X, $ERR = strconv.Atoi(...)
+              ...
+              int32($X)
+          - pattern: |
+              $X, $ERR = strconv.Atoi(...)
+              ...
+              uint32($X)
+      - pattern-not-inside: |
+          if <... math.MaxInt32 ...> { ... }
+      - pattern-not-inside: |
+          if <... math.MaxUint32 ...> { ... }
+      - pattern-not: |
+          $X, ... = $PARSE(...)
+          ...
+          if <... math.MaxInt32 ...> { ... }
+          ...
+      - pattern-not: |
+          $X, ... = $PARSE(...)
+          ...
+          if <... math.MaxUint32 ...> { ... }
+          ...

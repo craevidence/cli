@@ -1,0 +1,36 @@
+rules:
+  - id: cra-go-hmac-timing
+    message: >
+      MAC value compared with bytes.Equal(), which is not constant-time. A
+      timing side-channel allows an attacker to forge valid MACs by measuring
+      comparison time. Use hmac.Equal() instead.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-208: Observable Timing Discrepancy"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/208.html
+        - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+      category: security
+      technology:
+        - go
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+      origin: dgryski/semgrep-go rule use-hmac-equal, MIT
+    languages: [go]
+    pattern-either:
+      - pattern: |
+          $MAC = hmac.New(...)
+          ...
+          $H = $MAC.Sum(...)
+          ...
+          bytes.Equal($H, ...)
+      - pattern: |
+          $MAC = hmac.New(...)
+          ...
+          $H = $MAC.Sum(...)
+          ...
+          bytes.Equal(..., $H)

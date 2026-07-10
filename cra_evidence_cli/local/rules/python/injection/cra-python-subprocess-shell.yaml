@@ -1,0 +1,23 @@
+rules:
+  - id: cra-python-subprocess-shell
+    message: >
+      subprocess called with shell=True. When the command string includes
+      untrusted input this can allow OS command injection. Pass arguments as a
+      list and omit shell=True unless the shell is strictly required.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [python]
+    pattern: subprocess.$FUNC(..., shell=True, ...)

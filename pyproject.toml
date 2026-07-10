@@ -62,7 +62,7 @@ where = ["."]
 include = ["cra_evidence_cli*"]
 
 [tool.setuptools.package-data]
-cra_evidence_cli = ["assessment/templates/*.yaml", "local/rules/*.yaml", "local/rules/LICENSE", "local/rules/README.md"]
+cra_evidence_cli = ["assessment/templates/*.yaml", "local/rules/**/*.yaml", "local/rules/LICENSE", "local/rules/README.md"]
 
 [tool.black]
 line-length = 100
@@ -71,6 +71,9 @@ target-version = ['py312']
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+# Rule test fixtures are deliberately-vulnerable sample code; they are not
+# linted or shipped.
+extend-exclude = ["tests/rule_fixtures"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "S", "B", "A", "C4", "DTZ", "T10", "EM", "ISC", "ICN", "PT"]

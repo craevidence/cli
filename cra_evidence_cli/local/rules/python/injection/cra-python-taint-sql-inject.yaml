@@ -1,0 +1,40 @@
+rules:
+  - id: cra-python-taint-sql-inject
+    mode: taint
+    message: >
+      Untrusted input reaches a SQL execute() call as part of the query string.
+      This allows SQL injection. Use parameterized queries: pass values as a
+      second argument to execute() rather than embedding them in the query string.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.values.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.headers.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: input(...)
+    pattern-sanitizers:
+      - pattern: int(...)
+      - pattern: float(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $CUR.execute($QUERY)
+          - focus-metavariable: $QUERY

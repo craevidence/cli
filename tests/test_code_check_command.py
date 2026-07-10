@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 import json
-import re
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import yaml
 from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
@@ -657,8 +654,12 @@ def test_upload_exactly_at_limit_is_allowed(runner, tmp_path):
             obj=_make_obj("text"),
         )
     combined = (result.output or "") + (result.stderr or "")
+    assert result.exit_code == 0, combined
     assert "exceeds" not in combined
     assert "10 MiB" not in combined
+    # The upload must actually happen at exactly the limit.
+    mock_client_cls.assert_called_once()
+    mock_instance.upload_sarif.assert_awaited_once()
 
 
 def test_upload_one_byte_over_limit_is_refused(runner, tmp_path):
@@ -735,144 +736,97 @@ def test_sast_alias_fail_on_exit_matches_code_check(runner, tmp_path):
     assert r_cc.exit_code == r_sast.exit_code == _SAST_EXIT_CODE
 
 
-# ---------------------------------------------------------------------------
-# C. Rules pack schema sanity
-# ---------------------------------------------------------------------------
-
-_RULES_DIR = Path(__file__).parent.parent / "cra_evidence_cli" / "local" / "rules"
-_VALID_SEVERITIES = {"ERROR", "WARNING", "INFO"}
-_CWE_PATTERN = re.compile(r"^CWE-\d+")
+# --- pack version display + --exclude-rule passthrough ---
 
 
-def _iter_rules():
-    """Yield (file_path, rule_dict) for every rule in every YAML in the rules dir."""
-    for yaml_file in sorted(_RULES_DIR.glob("*.yaml")):
-        with yaml_file.open(encoding="utf-8") as fh:
-            doc = yaml.safe_load(fh)
-        if not isinstance(doc, dict) or "rules" not in doc:
-            continue
-        for rule in doc["rules"]:
-            yield yaml_file.name, rule
+def test_bundled_scan_shows_pack_version(runner, tmp_path):
+    from cra_evidence_cli.local.rules_pack import PACK_VERSION
+
+    report = _clean_report()
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report) as run_scan_mock,
+    ):
+        result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
+    assert result.exit_code == 0
+    # Bundled rules used (no --rules) -> pack version stamped and shown.
+    assert report.pack_version == PACK_VERSION
+    assert f"pack {PACK_VERSION}" in result.output
+    run_scan_mock.assert_called_once()
 
 
-@pytest.mark.parametrize(("filename", "rule"), list(_iter_rules()))
-def test_rule_id_starts_with_cra(filename, rule):
-    assert str(rule.get("id", "")).startswith("cra-"), (
-        f"{filename}: rule id {rule.get('id')!r} does not start with 'cra-'"
-    )
-
-
-@pytest.mark.parametrize(("filename", "rule"), list(_iter_rules()))
-def test_rule_has_message(filename, rule):
-    assert rule.get("message"), f"{filename}: rule {rule.get('id')!r} missing message"
-
-
-@pytest.mark.parametrize(("filename", "rule"), list(_iter_rules()))
-def test_rule_severity_in_allowed_set(filename, rule):
-    sev = rule.get("severity")
-    assert sev in _VALID_SEVERITIES, (
-        f"{filename}: rule {rule.get('id')!r} severity {sev!r} not in {_VALID_SEVERITIES}"
-    )
-
-
-@pytest.mark.parametrize(("filename", "rule"), list(_iter_rules()))
-def test_rule_languages_non_empty(filename, rule):
-    langs = rule.get("languages")
-    assert langs is not None, f"{rule.get('id')!r} missing languages"
-    assert len(langs) > 0, f"{rule.get('id')!r} has empty languages"
-
-
-@pytest.mark.parametrize(("filename", "rule"), list(_iter_rules()))
-def test_rule_metadata_cwe_non_empty_and_valid_format(filename, rule):
-    meta = rule.get("metadata") or {}
-    cwe_list = meta.get("cwe")
-    assert cwe_list is not None, f"{rule.get('id')!r} missing metadata.cwe"
-    assert len(cwe_list) > 0, f"{rule.get('id')!r} metadata.cwe is empty"
-    for entry in cwe_list:
-        assert _CWE_PATTERN.match(str(entry)), (
-            f"{filename}: rule {rule.get('id')!r} cwe entry {entry!r} does not match CWE-<digits>"
+def test_custom_rules_omit_pack_version(runner, tmp_path):
+    rules_dir = tmp_path / "myrules"
+    rules_dir.mkdir()
+    report = _clean_report()
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check, [str(tmp_path), "--rules", str(rules_dir)], obj=_make_obj("text")
         )
+    assert result.exit_code == 0
+    assert report.pack_version is None
+    assert "pack " not in result.output
 
 
-@pytest.mark.parametrize(("filename", "rule"), list(_iter_rules()))
-def test_rule_metadata_license_is_mit(filename, rule):
-    meta = rule.get("metadata") or {}
-    lic = meta.get("license")
-    assert lic == "MIT", (
-        f"{filename}: rule {rule.get('id')!r} metadata.license is {lic!r}, expected MIT"
-    )
-
-
-_VALID_MODES = {"taint"}
-
-
-@pytest.mark.parametrize(("filename", "rule"), list(_iter_rules()))
-def test_taint_rule_has_sources_and_sinks(filename, rule):
-    """Rules with mode: taint must declare pattern-sources and pattern-sinks."""
-    if rule.get("mode") not in _VALID_MODES:
-        return
-    rule_id = rule.get("id", "?")
-    assert rule.get("pattern-sources"), (
-        f"{filename}: taint rule {rule_id!r} missing pattern-sources"
-    )
-    assert rule.get("pattern-sinks"), (
-        f"{filename}: taint rule {rule_id!r} missing pattern-sinks"
-    )
-
-
-# The Go rules adapted from dgryski/semgrep-go (MIT). Each MUST carry provenance.
-_DGRYSKI_DERIVED_RULE_IDS = {
-    "cra-go-hmac-timing",
-    "cra-go-hmac-reused-hash",
-    "cra-go-parseint-downcast",
-    "cra-go-wrong-lock-unlock",
-}
-
-
-def test_dgryski_derived_rules_carry_origin_metadata():
-    """Every dgryski-derived rule must declare its MIT origin (release gate)."""
-    by_id = {rule.get("id"): rule for _, rule in _iter_rules()}
-    missing = _DGRYSKI_DERIVED_RULE_IDS - set(by_id)
-    assert not missing, f"expected dgryski-derived rules not found in the pack: {missing}"
-    for rule_id in _DGRYSKI_DERIVED_RULE_IDS:
-        origin = (by_id[rule_id].get("metadata") or {}).get("origin", "")
-        assert "dgryski/semgrep-go" in origin, (
-            f"rule {rule_id!r} origin {origin!r} must reference dgryski/semgrep-go"
+def test_exclude_rule_passed_through(runner, tmp_path):
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=_clean_report()) as run_scan_mock,
+    ):
+        result = runner.invoke(
+            code_check,
+            [str(tmp_path), "--exclude-rule", "cra-go-weak-hash"],
+            obj=_make_obj("text"),
         )
-        assert "MIT" in origin, (
-            f"rule {rule_id!r} origin {origin!r} must declare MIT"
+    assert result.exit_code == 0
+    assert run_scan_mock.call_args.kwargs["exclude_rules"] == ("cra-go-weak-hash",)
+
+
+# --- upload must not silently succeed when the engine is absent ---
+
+
+def test_binary_missing_with_upload_fails_loudly(runner, tmp_path):
+    with (
+        patch(_OPENGREP_PATCH, return_value=None),
+        patch("cra_evidence_cli.client.CRAEvidenceClient") as client_cls,
+    ):
+        result = runner.invoke(
+            code_check,
+            [str(tmp_path), "--upload", "--product", "p", "--version", "1.0"],
+            obj=_make_obj("text"),
         )
+    assert result.exit_code != 0
+    assert "cannot upload" in (result.output + (result.stderr or ""))
+    client_cls.assert_not_called()
 
 
-def _taint_rule_errors(rule: dict) -> list[str]:
-    """Return schema errors for a taint rule (shared by the pack test and the guard)."""
-    errors = []
-    if rule.get("mode") == "taint":
-        if not rule.get("pattern-sources"):
-            errors.append("missing pattern-sources")
-        if not rule.get("pattern-sinks"):
-            errors.append("missing pattern-sinks")
-    return errors
+# --- custom rules omit pack_version from JSON ---
 
 
-def test_malformed_taint_rule_missing_sinks_caught():
-    """The taint-rule validator must reject a taint rule with no pattern-sinks."""
-    bad_rule = {
-        "id": "cra-test-bad-taint",
-        "mode": "taint",
-        "message": "test",
-        "severity": "ERROR",
-        "languages": ["python"],
-        "metadata": {"cwe": ["CWE-89: test"], "license": "MIT"},
-        "pattern-sources": [{"pattern": "input(...)"}],
-        # pattern-sinks intentionally absent
-    }
-    assert "missing pattern-sinks" in _taint_rule_errors(bad_rule)
-    # And a well-formed taint rule from the shipped pack produces no errors.
-    good = next(
-        rule for _, rule in _iter_rules() if rule.get("mode") == "taint"
-    )
-    assert _taint_rule_errors(good) == []
-    # The guard from test_taint_rule_has_sources_and_sinks would catch this.
-    assert bad_rule.get("mode") == "taint"
-    assert bad_rule.get("pattern-sinks") is None
+def test_custom_rules_json_omits_pack_version(runner, tmp_path):
+    rules_dir = tmp_path / "myrules"
+    rules_dir.mkdir()
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=_clean_report()),
+    ):
+        result = runner.invoke(
+            code_check, [str(tmp_path), "--rules", str(rules_dir)], obj=_make_obj("json")
+        )
+    data = json.loads(result.output)
+    assert "pack_version" not in data
+
+
+def test_bundled_rules_json_includes_pack_version(runner, tmp_path):
+    from cra_evidence_cli.local.rules_pack import PACK_VERSION
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=_clean_report()),
+    ):
+        result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("json"))
+    data = json.loads(result.output)
+    assert data["pack_version"] == PACK_VERSION

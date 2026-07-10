@@ -19,6 +19,7 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.exceptions import CRAEvidenceError
 from cra_evidence_cli.local.disclaimer import advisory_block
+from cra_evidence_cli.local.rules_pack import PACK_VERSION
 from cra_evidence_cli.local.sast_scanner import (
     OPENGREP_INSTALL_HINT,
     SASTReport,
@@ -52,7 +53,10 @@ def _severity_label(level: str) -> str:
 def _render_text(report: SASTReport, verbose: bool = False) -> str:
     lines = ["Source code security check"]
     lines.append(f"Engine: Opengrep {report.engine_version}")
-    lines.append(f"Rules: {report.rules_path} ({report.rule_count} rules)")
+    rules_line = f"Rules: {report.rules_path} ({report.rule_count} rules)"
+    if report.pack_version:
+        rules_line += f", pack {report.pack_version}"
+    lines.append(rules_line)
 
     if report.scan_failed:
         lines.append(f"Scan failed: {report.failure_reason}")
@@ -96,12 +100,18 @@ def _render_text(report: SASTReport, verbose: bool = False) -> str:
 
 
 def _render_json(report: SASTReport) -> str:
+    payload = {
+        "schema_version": "craevidence.code_check.v1",
+        "engine": f"Opengrep {report.engine_version}",
+        "rules_path": report.rules_path,
+        "rule_count": report.rule_count,
+    }
+    # The bundled pack version is only meaningful for the bundled rules.
+    if report.pack_version:
+        payload["pack_version"] = report.pack_version
     return json.dumps(
         {
-            "schema_version": "craevidence.code_check.v1",
-            "engine": f"Opengrep {report.engine_version}",
-            "rules_path": report.rules_path,
-            "rule_count": report.rule_count,
+            **payload,
             "scan_failed": report.scan_failed,
             "failure_reason": report.failure_reason,
             "finding_count": len(report.findings),
@@ -183,6 +193,12 @@ _UPLOAD_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MiB
     ),
 )
 @click.option(
+    "--exclude-rule",
+    "exclude_rules",
+    multiple=True,
+    help="Rule id to skip (passed to --exclude-rule). Repeatable.",
+)
+@click.option(
     "--upload",
     "upload",
     is_flag=True,
@@ -224,6 +240,7 @@ def code_check(
     fail_on: str | None,
     timeout: int,
     excludes: tuple[str, ...],
+    exclude_rules: tuple[str, ...],
     upload: bool,
     product: str | None,
     version_number: str | None,
@@ -270,6 +287,10 @@ def code_check(
                 "cannot evaluate the --fail-on gate: opengrep is not installed"
             )
             raise click.ClickException(message)
+        if upload:
+            # An explicit upload cannot deliver evidence with no scan to upload.
+            message = "cannot upload: opengrep is not installed, so no scan ran"
+            raise click.ClickException(message)
         click.echo("Skipping source code check (opengrep not installed).")
         return
 
@@ -280,7 +301,11 @@ def code_check(
         rules=effective_rules,
         timeout=timeout,
         excludes=effective_excludes,
+        exclude_rules=exclude_rules,
     )
+    # Show the bundled pack version when the bundled rules were used.
+    if rules_path is None:
+        report.pack_version = PACK_VERSION
 
     if output_format == "json":
         rendered = _render_json(report)

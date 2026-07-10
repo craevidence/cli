@@ -1,0 +1,26 @@
+rules:
+  - id: cra-python-pickle-loads
+    message: >
+      pickle.loads() (or pickle.load()) deserializes arbitrary Python objects.
+      Loading pickled data from an untrusted source allows remote code execution.
+      Avoid deserializing pickle data from untrusted inputs; use a safe format
+      such as JSON instead.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [python]
+    pattern-either:
+      - pattern: pickle.loads(...)
+      - pattern: pickle.load(...)

@@ -1,0 +1,37 @@
+rules:
+  - id: cra-go-wrong-lock-unlock
+    message: >
+      The lock and deferred unlock calls do not match. Mismatched pairs
+      (Lock/RUnlock or RLock/Unlock) will deadlock or leave the mutex in an
+      inconsistent state, which can be exploited to cause a denial of service.
+      Pair Lock() with Unlock() and RLock() with RUnlock().
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-667: Improper Locking"
+      owasp:
+        - "A04:2021 - Insecure Design"
+      references:
+        - https://cwe.mitre.org/data/definitions/667.html
+        - https://owasp.org/Top10/A04_2021-Insecure_Design/
+      category: security
+      technology:
+        - go
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+      origin: dgryski/semgrep-go rule wrong-lock-unlock, MIT
+    languages: [go]
+    pattern-either:
+      - pattern: |
+          $M.Lock()
+          defer $M.RUnlock()
+      - pattern: |
+          $M.RLock()
+          defer $M.Unlock()
+      - pattern: |
+          $M.Lock()
+          defer $M.Lock()
+      - pattern: |
+          $M.RLock()
+          defer $M.RLock()

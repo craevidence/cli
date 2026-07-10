@@ -1,0 +1,38 @@
+rules:
+  - id: cra-python-taint-subprocess-shell
+    mode: taint
+    message: >
+      Untrusted input flows into a subprocess call with shell=True. This
+      allows OS command injection. Pass arguments as a list and remove
+      shell=True, or sanitize the input strictly before constructing the
+      command string.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.values.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.headers.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+          - focus-metavariable: $CMD

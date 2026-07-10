@@ -5,16 +5,17 @@ A starter set of Opengrep rules for the `code-check` command.
 ## Scope
 
 These rules detect a narrow set of high-signal patterns in Python, JavaScript,
-TypeScript, and Go source files.
+TypeScript, and Go source files. Each rule lives in its own file under
+`<language>/<subcategory>/<rule-id>.yaml`.
 
-### Python (`python.yaml`) -- structural patterns
+### Python (`python/`) -- structural patterns
 
 - SQL injection via string formatting in `execute()`
 - `subprocess` called with `shell=True`
 - `yaml.load()` without an explicit Loader
 - `pickle.loads()` / `pickle.load()`
 
-### Python (`python-taint.yaml`) -- intrafile taint tracking
+### Python (`python/injection/`) -- intrafile taint tracking
 
 These rules use Opengrep taint mode to follow untrusted input (Flask
 `request.*` and `input()`) through local variables to dangerous sinks:
@@ -23,12 +24,12 @@ These rules use Opengrep taint mode to follow untrusted input (Flask
 - Untrusted input reaching `subprocess` with `shell=True` (CWE-78)
 - Untrusted input reaching `eval()` or `exec()` (CWE-95)
 
-### JavaScript / TypeScript (`javascript.yaml`)
+### JavaScript / TypeScript (`javascript/`)
 
 - `eval()` called with any argument
 - `child_process.exec` / `execSync` called with a concatenated command string
 
-### Go (`go.yaml`)
+### Go (`go/`)
 
 - MD5 or SHA-1 used for security purposes (CWE-327)
 - `tls.Config` with `InsecureSkipVerify: true` (CWE-295)

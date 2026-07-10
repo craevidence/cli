@@ -1,0 +1,39 @@
+rules:
+  - id: cra-go-hmac-reused-hash
+    message: >
+      hmac.New() receives a function that returns a shared hash instance
+      rather than creating a fresh one on each call. The HMAC implementation
+      calls the function to obtain a hash and then resets it; returning an
+      existing instance means all HMAC operations share state, producing
+      incorrect and potentially predictable output. Pass a constructor such
+      as sha256.New, not a closure returning a pre-created hash.
+    severity: ERROR
+    metadata:
+      cwe:
+        - "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/327.html
+        - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+      category: security
+      technology:
+        - go
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+      origin: dgryski/semgrep-go rule hmac-needs-new, MIT
+    languages: [go]
+    pattern-either:
+      - pattern: |
+          $H := $HASH.New()
+          ...
+          $FUNC := func() hash.Hash { return $H }
+          ...
+          hmac.New($FUNC, ...)
+      - pattern: |
+          $H := $HASH.New()
+          ...
+          hmac.New(func() hash.Hash { return $H }, ...)
+      - pattern: |
+          hmac.New(func() hash.Hash { return ($H : hash.Hash) }, ...)

@@ -90,6 +90,7 @@ class SASTReport:
     scan_failed: bool
     failure_reason: str | None
     sarif_raw: dict | None
+    pack_version: str | None = None
 
     def findings_at_or_above(self, level: str) -> list[SASTFinding]:
         threshold = _LEVEL_ORDER.get(level.lower(), 1)
@@ -174,6 +175,7 @@ def run_scan(
     rules: Path,
     timeout: int = 300,
     excludes: tuple[str, ...] | None = None,
+    exclude_rules: tuple[str, ...] = (),
 ) -> SASTReport:
     """Run an Opengrep scan and return a SASTReport."""
     binary = opengrep_path()
@@ -212,6 +214,8 @@ def run_scan(
     ]
     for exc in effective_excludes:
         cmd += ["--exclude", exc]
+    for rule_id in exclude_rules:
+        cmd += ["--exclude-rule", rule_id]
     cmd.append(str(path))
 
     sarif_path = Path(sarif_out)

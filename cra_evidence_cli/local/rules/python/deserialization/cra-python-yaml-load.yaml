@@ -1,0 +1,23 @@
+rules:
+  - id: cra-python-yaml-load
+    message: >
+      yaml.load() without an explicit Loader can deserialize arbitrary Python
+      objects when given untrusted YAML input. Use yaml.safe_load() or pass
+      Loader=yaml.SafeLoader to restrict deserialization.
+    severity: WARNING
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://owasp.org/Top10/A08_2021-Software_and_Data_Integrity_Failures/
+      category: security
+      technology:
+        - python
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [python]
+    pattern: yaml.load($X)
