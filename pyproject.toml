@@ -62,7 +62,7 @@ where = ["."]
 include = ["cra_evidence_cli*"]
 
 [tool.setuptools.package-data]
-cra_evidence_cli = ["assessment/templates/*.yaml"]
+cra_evidence_cli = ["assessment/templates/*.yaml", "local/rules/*.yaml", "local/rules/LICENSE", "local/rules/README.md"]
 
 [tool.black]
 line-length = 100

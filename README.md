@@ -46,7 +46,7 @@ covered in the [installation guide](https://github.com/craevidence/cli/blob/main
 
 | Page | Contents |
 |---|---|
-| [Local commands](https://github.com/craevidence/cli/blob/main/docs/local-commands.md) | `check`, `eol-check`, `egress-check`, `secrets-check`, `config-check`, `draft`, `assessment`, `db`, and the offline template scaffold. |
+| [Local commands](https://github.com/craevidence/cli/blob/main/docs/local-commands.md) | `check`, `eol-check`, `egress-check`, `secrets-check`, `config-check`, `code-check`, `draft`, `assessment`, `db`, and the offline template scaffold. |
 | [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Uploads, scan, status, release lifecycle, distributor, profiles, validation, and verification. |
 | [CI/CD integration](https://github.com/craevidence/cli/blob/main/docs/ci-cd.md) | GitHub Action, GitLab Component, Docker, Jenkins, OpenSSF Scorecard, and complyctl. |
 | [Installation](https://github.com/craevidence/cli/blob/main/docs/installation.md) | PyPI, Docker, container registries, and from source. |
@@ -85,6 +85,7 @@ These commands do not need `CRA_EVIDENCE_API_KEY`:
 | `egress-check` | Inventory external interfaces and data-egress indicators. |
 | `secrets-check` | Scan the working tree for candidate hard-coded secrets. |
 | `config-check` | Audit Dockerfile, Terraform, and Kubernetes files for insecure defaults. |
+| `code-check` | Scan source code for potential security weaknesses using Opengrep (requires separate install). |
 | `draft` | Scaffold VEX, security.txt, advisory, risk-assessment, and threat-model drafts for review. |
 | `compliance-as-code template --offline` | Create starter YAML from local input without an API key. |
 | `assessment` | Scaffold an Annex I applicability matrix and gate CI on structured gaps. |

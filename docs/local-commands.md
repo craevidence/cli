@@ -1,8 +1,10 @@
 # Local commands (no account, no API key)
 
 The commands below run fully client-side. They do not require a CRA Evidence
-account or an API key, and the `check`-family commands never contact CRA Evidence.
-They use the network for vulnerability data and public datasets.
+account or an API key, and the `check`-family commands never contact CRA Evidence
+unless you pass an explicit opt-in flag (`code-check --upload` is the one
+exception: it sends the scan results to your CRA Evidence account and needs an
+API key). They use the network for vulnerability data and public datasets.
 
 Back to the [README](../README.md).
 
@@ -380,6 +382,80 @@ back to `text`.
   configuration.
 - Use the results to review secure defaults and attack-surface exposure. Static
   scanning cannot observe every runtime or organisational control.
+
+## `code-check` (alias: `sast`)
+
+Scan source code for potential security weaknesses using
+[Opengrep](https://github.com/opengrep/opengrep). **Local by default: no
+network, no API key, and code never leaves the machine unless you pass
+`--upload`** (which sends the scan results to your CRA Evidence account and
+needs an API key). Advisory by default (it exits 0 even when findings are
+reported); pass `--fail-on` to gate a CI job (exit code 27).
+
+```
+craevidence [--output text|json|sarif] code-check [PATH]
+  [--rules <rules-dir-or-file>]
+  [--fail-on note|warning|error]
+  [--timeout <seconds>]
+  [--exclude <pattern>]...
+  [--upload [--product <slug> --version <number>]]
+  [-o <path>]
+```
+
+`markdown` is not supported; passing `--output markdown` prints a notice to stderr and falls
+back to `text`.
+
+- Opengrep must be installed separately. If it is not found on `PATH`, the
+  command prints an install hint and exits 0 (advisory). It does not install
+  Opengrep automatically.
+- A bundled rule pack covers SQL injection (structural and intrafile taint),
+  OS command injection (structural and intrafile taint), unsafe deserialization
+  (`pickle`, `yaml.load` without a Loader), code injection via `eval`/`exec`
+  (intrafile taint), weak cryptographic algorithms (MD5, SHA-1), disabled TLS
+  certificate verification, HMAC timing side-channels, HMAC shared-hash misuse,
+  integer downcast after 64-bit parse, and mismatched mutex lock/unlock pairs
+  for Python, JavaScript/TypeScript, and Go. Pass `--rules` to use your own
+  rules instead.
+- Default excludes: `tests`, `test`, `__tests__`, `vendor`, `node_modules`,
+  `.git`, `dist`, `build`. Pass one or more `--exclude` flags to override.
+- `--fail-on error` exits 27 when any `error`-level finding is found. `--fail-on
+  warning` exits 27 on any `warning` or `error` finding. `--fail-on note` exits
+  27 on any finding. Advisory (exit 0) by default. When `--fail-on` is set and
+  the scan itself fails (engine error or timeout), the command exits 1 instead
+  of passing the gate.
+- `--upload` uploads the SARIF result to CRA Evidence after a successful scan.
+  Pass `--product` and `--version` (or rely on `.cra/evidence.yaml`). Upload is
+  refused when the scan did not complete and when the SARIF output exceeds 10 MiB.
+- Findings are **potential weaknesses to review**, not a determination. A clean
+  result does not prove the absence of vulnerabilities.
+- This command does not scan for secrets (use `secrets-check`) or
+  infrastructure-as-code misconfigurations (use `config-check`). Code is never
+  sent to CRA Evidence unless `--upload` is passed.
+
+Run it in CI without an account. Install Opengrep in a prior step:
+
+```yaml
+# GitHub Actions - no API key needed
+jobs:
+  cra-code-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Opengrep
+        run: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | sh
+      - run: pipx install craevidence
+      - run: craevidence code-check . --fail-on error
+```
+
+```yaml
+# GitLab CI - no API key needed
+cra-code-check:
+  image: python:3.12-slim
+  script:
+    - curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | sh
+    - pip install craevidence
+    - craevidence code-check . --fail-on error
+```
 
 ## `compliance-as-code template --offline`
 

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `code-check` command (alias `sast`) to scan first-party source code for
+  potential security weaknesses using Opengrep. Advisory by default with a
+  `--fail-on` gate (exit 27). Ships a bundled MIT rule pack for Python,
+  JavaScript/TypeScript, and Go covering SQL injection (structural and intrafile
+  taint), OS command injection (structural and intrafile taint), code injection
+  via `eval`/`exec`, unsafe deserialization, weak hashes, disabled TLS
+  verification, HMAC timing side-channels, HMAC shared-hash misuse, integer
+  downcast after a 64-bit parse, and mismatched mutex lock/unlock (the Go rules
+  are adapted from dgryski/semgrep-go, MIT). Detects the engine on `PATH` and
+  never bundles or downloads it; results upload to CRA Evidence only with an
+  explicit `--upload`.
+
 ## [3.6.1] - 2026-07-06
 
 ### Changed

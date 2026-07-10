@@ -1,0 +1,92 @@
+rules:
+  - id: cra-python-taint-sql-inject
+    mode: taint
+    message: >
+      Untrusted input reaches a SQL execute() call as part of the query string.
+      This allows SQL injection. Use parameterized queries: pass values as a
+      second argument to execute() rather than embedding them in the query string.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.values.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.headers.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: input(...)
+    pattern-sanitizers:
+      - pattern: int(...)
+      - pattern: float(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $CUR.execute($QUERY)
+          - focus-metavariable: $QUERY
+
+  - id: cra-python-taint-subprocess-shell
+    mode: taint
+    message: >
+      Untrusted input flows into a subprocess call with shell=True. This
+      allows OS command injection. Pass arguments as a list and remove
+      shell=True, or sanitize the input strictly before constructing the
+      command string.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.values.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.headers.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+          - focus-metavariable: $CMD
+
+  - id: cra-python-taint-eval-exec
+    mode: taint
+    message: >
+      Untrusted input flows into eval() or exec(). These functions execute
+      their string argument as Python code, so injecting any controlled value
+      allows arbitrary code execution. Remove eval/exec or replace with a
+      safe structured alternative.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.values.get(...)
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.headers.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: input(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: eval($CODE, ...)
+          - focus-metavariable: $CODE
+      - patterns:
+          - pattern: exec($CODE, ...)
+          - focus-metavariable: $CODE

@@ -11,6 +11,7 @@ from cra_evidence_cli import __version__
 from cra_evidence_cli.commands import (
     assessment,
     check,
+    code_check,
     compare,
     components,
     config_check,
@@ -106,6 +107,8 @@ def cli(
         if ctx.invoked_subcommand in (
             "assessment",
             "check",
+            "code-check",
+            "sast",
             "db",
             "draft",
             "eol-check",
@@ -157,6 +160,8 @@ cli.add_command(eol.eol_check)
 cli.add_command(egress.egress_check)
 cli.add_command(secrets.secrets_check)
 cli.add_command(config_check.config_check)
+cli.add_command(code_check.code_check)
+cli.add_command(code_check.code_check, name="sast")
 
 cli.add_command(export.export)
 cli.add_command(compare.compare)
