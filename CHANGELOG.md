@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are adapted from dgryski/semgrep-go, MIT). Detects the engine on `PATH` and
   never bundles or downloads it; results upload to CRA Evidence only with an
   explicit `--upload`.
+- `config-check`: flag Dockerfile `ARG`/`ENV` whose name matches a credential-like
+  pattern (`dockerfile-secret-arg`), and three GitHub Actions workflow checks:
+  untrusted event data interpolated into shell steps (`workflow-script-injection`),
+  the `pull_request_target` trigger (`workflow-pull-request-target`), and deprecated
+  `::set-output`/`::save-state` commands (`workflow-set-output-deprecated`).
+  Workflow files under `.github/workflows` are now scanned; other dotdirs remain
+  skipped.
 
 ## [3.6.1] - 2026-07-06
 

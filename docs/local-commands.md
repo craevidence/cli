@@ -372,10 +372,23 @@ craevidence [--output text|json|sarif] config-check [PATH]
 `markdown` is not supported; passing `--output markdown` prints a notice to stderr and falls
 back to `text`.
 
-- It checks for things like containers running as root (no `USER`, or `USER
+- **Dockerfile and IaC checks:** containers running as root (no `USER`, or `USER
   root`), `privileged`/`hostNetwork` pods, `allowPrivilegeEscalation`, broad Linux
-  capabilities, binding to `0.0.0.0`, world-open ingress (`0.0.0.0/0`), and public
-  storage ACLs.
+  capabilities, binding to `0.0.0.0`, world-open ingress (`0.0.0.0/0`), public
+  storage ACLs, and `ARG`/`ENV` names that match a credential-like pattern
+  (password, secret, token, api_key, private_key, credential). The credential-name
+  check flags the variable NAME only and may fire on non-secret identifiers such as
+  `TOKEN_ENDPOINT_URL`; confirm before acting. If a flagged variable carries a real
+  secret, use a BuildKit secret mount (`RUN --mount=type=secret`) or inject the
+  value at runtime.
+- **GitHub Actions workflow checks** (`.github/workflows/*.yml|yaml`): direct
+  interpolation of untrusted event data (`${{ github.event.issue.title }}` etc.)
+  into shell scripts (script injection), use of the `pull_request_target` trigger
+  (runs with write permissions and secrets even for forks), and deprecated
+  `::set-output`/`::save-state` workflow commands (deprecated, replace with
+  `GITHUB_OUTPUT`/`GITHUB_STATE`). This is **not a full workflow
+  linter**; use [actionlint](https://github.com/rhysd/actionlint) for complete
+  coverage.
 - It is **deliberately narrow and not a Checkov/KICS/hadolint replacement**: use
   those for full coverage. Findings are **candidates to review**, not a
   determination, and a clean result does not prove a secure-by-default
