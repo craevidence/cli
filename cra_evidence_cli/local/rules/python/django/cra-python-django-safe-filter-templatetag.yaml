@@ -1,0 +1,58 @@
+rules:
+  - id: cra-python-django-safe-filter-templatetag
+    message: >
+      A custom template filter or tag calls mark_safe() on an interpolated string.
+      mark_safe() disables autoescaping, so building the output by interpolation can
+      allow XSS when the value contains HTML. Build the output with format_html() so
+      the value is escaped, instead of marking hand-built HTML safe.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.djangoproject.com/en/5.1/howto/custom-template-tags/
+        - https://docs.djangoproject.com/en/5.1/topics/security/
+        - https://cwe.mitre.org/data/definitions/79.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: LOW
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              @register.filter(...)
+              def $F(...):
+                  ...
+          - pattern-inside: |
+              @register.filter
+              def $F(...):
+                  ...
+          - pattern-inside: |
+              @register.simple_tag(...)
+              def $F(...):
+                  ...
+          - pattern-inside: |
+              @register.simple_tag
+              def $F(...):
+                  ...
+      - pattern: mark_safe($FMT)
+      - focus-metavariable: $FMT
+      - metavariable-pattern:
+          metavariable: $FMT
+          patterns:
+            - pattern-either:
+                - pattern: f"...{$X}..."
+                - pattern: "\"...\" % $V"
+                - pattern: "\"...\".format(...)"
+                - pattern: "\"...\" + $V"
+            # Do not flag a value that is escaped before interpolation.
+            - pattern-not: $S.format(escape(...))
+            - pattern-not: $S.format(html.escape(...))
+            - pattern-not: $S.format(conditional_escape(...))
+            - pattern-not: $S.format(django.utils.html.escape(...))

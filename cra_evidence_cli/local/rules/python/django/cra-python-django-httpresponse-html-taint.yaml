@@ -1,0 +1,56 @@
+rules:
+  - id: cra-python-django-httpresponse-html-taint
+    mode: taint
+    message: >
+      Request-derived data flows into a formatted first argument of HttpResponse().
+      A view that builds a response body by hand bypasses template autoescaping and
+      can allow XSS. Render user data through a Django template, or wrap it in
+      escape() before placing it in the response body.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/request-response/
+        - https://docs.djangoproject.com/en/5.1/topics/security/
+        - https://cwe.mitre.org/data/definitions/79.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.GET
+      - pattern: request.POST
+      - pattern: request.body
+      - pattern: request.data
+      - pattern: request.query_params
+      - pattern: request.COOKIES
+      - pattern: request.headers
+      - pattern: request.META[...]
+      - pattern: $F.cleaned_data
+    pattern-sanitizers:
+      - pattern: escape(...)
+      - pattern: html.escape(...)
+      - pattern: django.utils.html.escape(...)
+      - pattern: escapejs(...)
+      - pattern: format_html($FMT, $ARG, ...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: HttpResponse($FMT, ...)
+              - pattern: HttpResponseBadRequest($FMT, ...)
+          - focus-metavariable: $FMT
+          - metavariable-pattern:
+              metavariable: $FMT
+              patterns:
+                - pattern-either:
+                    - pattern: f"..."
+                    - pattern: "\"...\" % $V"
+                    - pattern: "\"...\".format(...)"
+                    - pattern: "\"...\" + $V"

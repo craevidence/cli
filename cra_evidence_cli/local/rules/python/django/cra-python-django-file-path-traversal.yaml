@@ -1,0 +1,45 @@
+rules:
+  - id: cra-python-django-file-path-traversal
+    mode: taint
+    message: >
+      Request input flows into a filesystem path used to open or serve a file.
+      A crafted name containing path segments can allow reading files outside
+      the intended directory. Restrict the name with os.path.basename() or
+      django.utils._os.safe_join() so the resolved path cannot escape the base
+      directory.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/request-response/
+        - https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+        - https://cwe.mitre.org/data/definitions/22.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.query_params.get(...)
+      - pattern: request.query_params[...]
+    pattern-sanitizers:
+      - pattern: os.path.basename(...)
+      - pattern: safe_join(...)
+      - pattern: django.utils._os.safe_join(...)
+      - pattern: secure_filename(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($PATH, ...)
+              - pattern: open($PATH)
+          - focus-metavariable: $PATH

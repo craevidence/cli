@@ -1,0 +1,36 @@
+rules:
+  - id: cra-python-django-format-html-interpolated
+    message: >
+      format_html() is called with a format string that is itself built by
+      interpolation (f-string, %, str.format, or concatenation). Django escapes only
+      the trailing arguments, not the format string, so interpolating data into it
+      can allow XSS. Keep the format string a static literal with {} placeholders and
+      pass all dynamic values as trailing arguments so they are escaped.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/utils/
+        - https://cwe.mitre.org/data/definitions/79.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern: format_html($FMT, ...)
+      - focus-metavariable: $FMT
+      - metavariable-pattern:
+          metavariable: $FMT
+          patterns:
+            - pattern-either:
+                - pattern: f"..."
+                - pattern: "\"...\" % $V"
+                - pattern: "\"...\".format(...)"
+                - pattern: "\"...\" + $V"

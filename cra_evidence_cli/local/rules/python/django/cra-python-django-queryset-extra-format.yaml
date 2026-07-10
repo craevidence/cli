@@ -1,0 +1,45 @@
+rules:
+  - id: cra-python-django-queryset-extra-format
+    message: >
+      A where, select, tables, or order_by clause passed to QuerySet.extra() is
+      built with an f-string, %, str.format(), or concatenation. This can allow SQL
+      injection when the interpolated value includes untrusted input. Use %s
+      placeholders in the extra() where clause and pass user values via the params
+      argument, or migrate to standard ORM filters.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/models/querysets/
+        - https://docs.djangoproject.com/en/5.1/topics/security/
+        - https://cwe.mitre.org/data/definitions/89.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern-either:
+          - pattern: $M.extra(..., where=$W, ...)
+          - pattern: $M.extra(..., select=$W, ...)
+          - pattern: $M.extra(..., tables=$W, ...)
+          - pattern: $M.extra(..., order_by=$W, ...)
+      - metavariable-pattern:
+          metavariable: $W
+          patterns:
+            - pattern-either:
+                - pattern: "[..., f\"...{$X}...\", ...]"
+                - pattern: "[..., $A % $B, ...]"
+                - pattern: "[..., $A.format(...), ...]"
+                - pattern: "[..., $A + $B, ...]"
+                - pattern: "{..., $K: f\"...{$X}...\", ...}"
+                - pattern: "{..., $K: $A % $B, ...}"
+                - pattern: "{..., $K: $A.format(...), ...}"
+                - pattern: "{..., $K: $A + $B, ...}"
+      - focus-metavariable: $W

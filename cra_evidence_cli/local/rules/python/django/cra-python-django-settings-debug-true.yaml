@@ -1,0 +1,27 @@
+rules:
+  - id: cra-python-django-settings-debug-true
+    message: >
+      DEBUG is set to the literal True in a Django settings module. In production
+      this renders detailed error pages that can expose settings, stack traces, and
+      environment data to any visitor. Drive DEBUG from an environment variable that
+      defaults to False so production never runs with debug enabled.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-489: Active Debug Code"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/settings/
+        - https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
+        - https://cwe.mitre.org/data/definitions/489.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern: DEBUG = True

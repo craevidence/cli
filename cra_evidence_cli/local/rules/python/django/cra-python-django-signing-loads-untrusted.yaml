@@ -1,0 +1,36 @@
+rules:
+  - id: cra-python-django-signing-loads-untrusted
+    message: >
+      A django.core.signing deserialization call (signing.loads or a signer's
+      unsign_object) is configured with a pickle-based serializer. If the signing
+      key is ever exposed, unsigning attacker-supplied data can deserialize
+      arbitrary objects and lead to code execution. Use the default JSON
+      serializer so a key compromise cannot escalate to deserialization of
+      untrusted data.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-502: Deserialization of Untrusted Data"
+      owasp:
+        - "A08:2021 - Software and Data Integrity Failures"
+      references:
+        - https://docs.djangoproject.com/en/5.1/topics/signing/
+        - https://docs.djangoproject.com/en/5.1/topics/http/sessions/
+        - https://cwe.mitre.org/data/definitions/502.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern-either:
+          - pattern: signing.loads(..., serializer=$S, ...)
+          - pattern: signing.loads(..., serializer=$S(...), ...)
+          - pattern: $SIGNER.unsign_object(..., serializer=$S, ...)
+          - pattern: $SIGNER.unsign_object(..., serializer=$S(...), ...)
+      - metavariable-regex:
+          metavariable: $S
+          regex: (?i).*pickle.*

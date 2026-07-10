@@ -1,0 +1,56 @@
+rules:
+  - id: cra-python-jwt-decode-alg-none
+    message: >
+      This decode() call lists the 'none' JWT algorithm in its accepted algorithms.
+      Allowing 'none' is meant to accept unsigned tokens: in libraries and versions
+      that honor it (for example PyJWT 1.x), an attacker can strip the signature and
+      set the header to alg=none to forge a token. Current PyJWT rejects 'none' when
+      signature verification is enabled, but it should never appear in an allowlist.
+      Remove 'none' so unsigned tokens are always rejected.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-347: Improper Verification of Cryptographic Signature"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://pyjwt.readthedocs.io/en/stable/api.html
+        - https://cwe.mitre.org/data/definitions/347.html
+        - https://portswigger.net/web-security/jwt
+      category: security
+      technology:
+        - python
+        - jwt
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: jwt.decode(..., algorithms=$ALGS, ...)
+              - pattern: jose.jwt.decode(..., algorithms=$ALGS, ...)
+          - metavariable-pattern:
+              metavariable: $ALGS
+              patterns:
+                - pattern: "[..., $S, ...]"
+                - metavariable-pattern:
+                    metavariable: $S
+                    patterns:
+                      - pattern: "\"$STR\""
+                      - metavariable-regex:
+                          metavariable: $STR
+                          regex: (?i)^none$
+          - focus-metavariable: $ALGS
+      - patterns:
+          - pattern-either:
+              - pattern: jwt.decode(..., algorithms=$BARE, ...)
+              - pattern: jose.jwt.decode(..., algorithms=$BARE, ...)
+          - metavariable-pattern:
+              metavariable: $BARE
+              patterns:
+                - pattern: "\"$STR\""
+                - metavariable-regex:
+                    metavariable: $STR
+                    regex: (?i)^none$
+          - focus-metavariable: $BARE

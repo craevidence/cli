@@ -1,0 +1,38 @@
+rules:
+  - id: cra-python-django-raw-sql-format
+    message: >
+      A query string built with an f-string, %, str.format(), or concatenation is
+      passed to QuerySet.raw(). This can allow SQL injection when the interpolated
+      value includes untrusted input. Pass a static SQL string with %s placeholders
+      to raw() and supply values through the params argument so the database driver
+      escapes them.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.djangoproject.com/en/5.1/topics/db/sql/
+        - https://docs.djangoproject.com/en/5.1/topics/security/
+        - https://cwe.mitre.org/data/definitions/89.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern: $M.raw($Q, ...)
+          - pattern: $M.raw(f"...{$X}...", ...)
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern: $M.raw($Q, ...)
+          - pattern-either:
+              - pattern: $M.raw($A % $B, ...)
+              - pattern: $M.raw($A.format(...), ...)
+              - pattern: $M.raw($A + $B, ...)
+          - focus-metavariable: $Q

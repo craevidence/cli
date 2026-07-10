@@ -1,0 +1,45 @@
+rules:
+  - id: cra-python-flask-send-file-path-traversal
+    mode: taint
+    message: >
+      Untrusted request input reaches the path argument of send_file(). A crafted
+      filename can escape the intended directory and may allow reading arbitrary
+      files. Use send_from_directory with a fixed base directory, or validate the
+      path with safe_join, so a crafted filename cannot escape the intended
+      directory.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://werkzeug.palletsprojects.com/en/stable/utils/
+        - https://flask.palletsprojects.com/en/stable/api/
+        - https://cwe.mitre.org/data/definitions/22.html
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.json
+      - pattern: request.view_args
+      - pattern: request.path
+    pattern-sanitizers:
+      - pattern: safe_join(...)
+      - pattern: werkzeug.utils.safe_join(...)
+      - pattern: secure_filename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: send_file($PATH, ...)
+              - pattern: flask.send_file($PATH, ...)
+          - focus-metavariable: $PATH

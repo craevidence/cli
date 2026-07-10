@@ -1,0 +1,27 @@
+rules:
+  - id: cra-python-django-allowed-hosts-wildcard
+    message: >
+      ALLOWED_HOSTS contains the wildcard '*', which disables Django's Host header
+      validation. This can allow forged Host headers used in cache-poisoning and
+      password-reset attacks. List the specific hostnames the site serves so Django
+      rejects requests with unexpected Host headers.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-16: Configuration"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/settings/
+        - https://docs.djangoproject.com/en/5.1/topics/security/
+        - https://cwe.mitre.org/data/definitions/16.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern: ALLOWED_HOSTS = [..., "*", ...]

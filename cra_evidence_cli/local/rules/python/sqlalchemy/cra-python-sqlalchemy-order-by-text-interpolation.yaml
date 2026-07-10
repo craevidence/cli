@@ -1,0 +1,36 @@
+rules:
+  - id: cra-python-sqlalchemy-order-by-text-interpolation
+    message: >
+      order_by() or group_by() passed a bare interpolated string (f-string or
+      concatenation with a non-literal). ORDER BY and GROUP BY identifiers cannot
+      be bound parameters, so interpolating a value here can allow SQL injection.
+      Map user-supplied sort keys to a fixed dictionary of column expressions
+      instead of building the clause from a formatted string.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.sqlalchemy.org/en/20/orm/queryguide/select.html
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://owasp.org/www-project-web-security-testing-guide/
+      category: security
+      technology:
+        - python
+        - sqlalchemy
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern-either:
+          - pattern: $Q.order_by(f"...{$X}...")
+          - pattern: $Q.order_by("..." + $X)
+          - pattern: $Q.order_by($X + "...")
+          - pattern: $Q.group_by(f"...{$X}...")
+          - pattern: $Q.group_by("..." + $X)
+          - pattern: $Q.group_by($X + "...")
+      - pattern-not: $Q.order_by("..." + "...")
+      - pattern-not: $Q.group_by("..." + "...")

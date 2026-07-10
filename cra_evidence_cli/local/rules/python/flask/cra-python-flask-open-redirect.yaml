@@ -1,0 +1,42 @@
+rules:
+  - id: cra-python-flask-open-redirect
+    mode: taint
+    message: >
+      Untrusted request input reaches the location argument of redirect(). An
+      attacker who controls the redirect target can send victims to an external
+      phishing site. Redirect only to URLs derived from url_for or validated
+      against an allowlist of internal paths rather than passing a
+      request-supplied URL straight to redirect.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://cwe.mitre.org/data/definitions/601.html
+        - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+        - https://flask.palletsprojects.com/en/stable/api/
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.referrer
+      - pattern: request.headers
+    pattern-sanitizers:
+      - pattern: url_for(...)
+      - pattern: flask.url_for(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: redirect($LOCATION, ...)
+              - pattern: flask.redirect($LOCATION, ...)
+          - focus-metavariable: $LOCATION

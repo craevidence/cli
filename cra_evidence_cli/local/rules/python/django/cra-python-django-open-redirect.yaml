@@ -1,0 +1,52 @@
+rules:
+  - id: cra-python-django-open-redirect
+    mode: taint
+    message: >
+      A redirect target derived from request input reaches redirect() or
+      HttpResponseRedirect() without validation. This can allow an open redirect
+      that sends users to an attacker-controlled site. Validate the target with
+      django.utils.http.url_has_allowed_host_and_scheme() before redirecting, or
+      redirect only to server-controlled view names.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://docs.djangoproject.com/en/5.1/topics/http/shortcuts/
+        - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+        - https://cwe.mitre.org/data/definitions/601.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.query_params.get(...)
+      - pattern: request.query_params[...]
+      - pattern: request.headers.get(...)
+      - pattern: request.headers[...]
+      - pattern: request.META.get(...)
+      - pattern: request.META[...]
+    pattern-sanitizers:
+      - pattern: reverse(...)
+      - patterns:
+          - pattern: $V
+          - pattern-inside: |
+              if url_has_allowed_host_and_scheme($V, ...):
+                  ...
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: redirect($TARGET, ...)
+              - pattern: HttpResponseRedirect($TARGET, ...)
+              - pattern: HttpResponsePermanentRedirect($TARGET, ...)
+          - focus-metavariable: $TARGET

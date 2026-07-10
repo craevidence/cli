@@ -1,0 +1,46 @@
+rules:
+  - id: cra-python-django-mark-safe-request
+    mode: taint
+    message: >
+      Request-derived data reaches mark_safe(), which disables autoescaping for that
+      string. This can allow reflected or stored XSS when the value contains HTML.
+      Build HTML with format_html() so user values are escaped, and reserve mark_safe()
+      for strings you fully control.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/utils/
+        - https://docs.djangoproject.com/en/5.1/topics/security/
+        - https://cwe.mitre.org/data/definitions/79.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.GET
+      - pattern: request.POST
+      - pattern: request.body
+      - pattern: request.data
+      - pattern: request.query_params
+      - pattern: request.COOKIES
+      - pattern: request.headers
+      - pattern: request.META[...]
+      - pattern: $F.cleaned_data
+    pattern-sanitizers:
+      - pattern: escape(...)
+      - pattern: html.escape(...)
+      - pattern: django.utils.html.escape(...)
+      - pattern: format_html($FMT, $ARG, ...)
+      - pattern: bleach.clean(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: mark_safe($ARG)
+          - focus-metavariable: $ARG

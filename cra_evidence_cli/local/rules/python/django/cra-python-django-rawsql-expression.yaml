@@ -1,0 +1,37 @@
+rules:
+  - id: cra-python-django-rawsql-expression
+    message: >
+      A SQL string built with an f-string, %, str.format(), or concatenation is
+      passed to a RawSQL expression. This can allow SQL injection when the
+      interpolated value includes untrusted input. Keep the RawSQL sql string
+      static with %s placeholders and pass user values through its params argument.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.djangoproject.com/en/5.1/topics/db/sql/
+        - https://docs.djangoproject.com/en/5.1/ref/models/expressions/
+        - https://cwe.mitre.org/data/definitions/89.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern: RawSQL($Q, ...)
+          - pattern: RawSQL(f"...{$X}...", ...)
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern: RawSQL($Q, ...)
+          - pattern-either:
+              - pattern: RawSQL($A % $B, ...)
+              - pattern: RawSQL($A.format(...), ...)
+              - pattern: RawSQL($A + $B, ...)
+          - focus-metavariable: $Q

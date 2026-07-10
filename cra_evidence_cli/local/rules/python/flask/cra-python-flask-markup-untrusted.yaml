@@ -1,0 +1,53 @@
+rules:
+  - id: cra-python-flask-markup-untrusted
+    mode: taint
+    message: >
+      Untrusted request input reaches markupsafe.Markup(), which marks the
+      string as safe HTML and disables Jinja2 autoescaping. This can allow
+      reflected or stored cross-site scripting. Do not wrap untrusted input in
+      Markup; render it through normal autoescaped templating, or escape it
+      first with markupsafe.escape() so it is treated as text rather than HTML.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://markupsafe.palletsprojects.com/en/stable/escaping/
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://owasp.org/www-community/attacks/xss/
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.cookies
+      - pattern: request.args.get(...)
+      - pattern: request.form.get(...)
+      - pattern: request.values.get(...)
+      - pattern: request.cookies.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form[...]
+      - pattern: request.values[...]
+      - pattern: request.cookies[...]
+    pattern-sanitizers:
+      - pattern: markupsafe.escape(...)
+      - pattern: escape(...)
+      - pattern: Markup.escape(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: Markup($X)
+              - pattern: markupsafe.Markup($X)
+              - pattern: flask.Markup($X)
+          - focus-metavariable: $X

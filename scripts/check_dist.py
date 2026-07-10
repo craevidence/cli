@@ -1,7 +1,7 @@
 """Distribution content guard.
 
 Builds the sdist and wheel and verifies:
-  - All 15 rule YAML files are present in each artifact.
+  - Exactly EXPECTED_RULE_COUNT rule YAML files are present in each artifact.
   - No .py or fixture files appear under local/rules/ in either artifact.
   - No rule_fixtures path appears in either artifact.
 
@@ -24,7 +24,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent
 RULES_ROOT = REPO_ROOT / "cra_evidence_cli" / "local" / "rules"
 
-EXPECTED_RULE_COUNT = 15
+EXPECTED_RULE_COUNT = 51
 
 
 def _build_dist(dist_dir: Path) -> tuple[Path, Path]:

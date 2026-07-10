@@ -1,0 +1,37 @@
+rules:
+  - id: cra-python-jwt-decode-verify-disabled
+    message: >
+      JWT signature verification is disabled in this decode() call via
+      options={'verify_signature': False}. A token whose signature is never
+      checked can be forged, so any claims read from it cannot be trusted. Remove
+      verify_signature=False so the signature is checked, and only decode without
+      verification for non-security uses such as inspecting a token you will
+      verify separately.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-347: Improper Verification of Cryptographic Signature"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://pyjwt.readthedocs.io/en/stable/api.html
+        - https://cwe.mitre.org/data/definitions/347.html
+        - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+      category: security
+      technology:
+        - python
+        - jwt
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern-either:
+              - pattern: jwt.decode(..., options=$OPTS, ...)
+              - pattern: jose.jwt.decode(..., options=$OPTS, ...)
+              - pattern: decode(..., options=$OPTS, ...)
+          - metavariable-pattern:
+              metavariable: $OPTS
+              pattern: "{..., 'verify_signature': False, ...}"
+          - focus-metavariable: $OPTS

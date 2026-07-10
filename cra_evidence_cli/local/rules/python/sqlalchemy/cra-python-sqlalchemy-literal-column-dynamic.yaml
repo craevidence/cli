@@ -1,0 +1,41 @@
+rules:
+  - id: cra-python-sqlalchemy-literal-column-dynamic
+    message: >
+      SQLAlchemy literal_column() built from an interpolated string (f-string,
+      str.format, %-format, or concatenation). literal_column() renders its
+      argument as an exact SQL expression with no quoting or escaping, so a
+      dynamic value emitted here can allow SQL injection. Reference columns
+      through mapped attributes or Table.c[name], which quotes identifiers, and
+      reserve literal_column() for static trusted SQL fragments only.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://docs.sqlalchemy.org/en/20/core/sqlelement.html
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology:
+        - python
+        - sqlalchemy
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern-either:
+          - pattern: literal_column(f"...{$X}...")
+          - pattern: literal_column("...".format(...))
+          - pattern: literal_column("..." % $X)
+          - pattern: literal_column("..." + $X)
+          - pattern: literal_column($X + "...")
+          - pattern: sqlalchemy.literal_column(f"...{$X}...")
+          - pattern: sqlalchemy.literal_column("...".format(...))
+          - pattern: sqlalchemy.literal_column("..." % $X)
+          - pattern: sqlalchemy.literal_column("..." + $X)
+          - pattern: sqlalchemy.literal_column($X + "...")
+      - pattern-not: literal_column("..." + "...")
+      - pattern-not: sqlalchemy.literal_column("..." + "...")

@@ -1,0 +1,38 @@
+rules:
+  - id: cra-python-flask-wtf-csrf-disabled
+    message: >
+      Flask-WTF CSRF protection is turned off by setting WTF_CSRF_ENABLED to
+      False. This can leave state-changing POST endpoints open to cross-site
+      request forgery. Keep WTF_CSRF_ENABLED at its default of True and register
+      CSRFProtect so form submissions are validated.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-352: Cross-Site Request Forgery (CSRF)"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://flask-wtf.readthedocs.io/en/1.2.x/csrf/
+        - https://cwe.mitre.org/data/definitions/352.html
+        - https://owasp.org/www-community/attacks/csrf
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern: $APP.config['WTF_CSRF_ENABLED'] = $V
+          - metavariable-pattern:
+              metavariable: $V
+              pattern: "False"
+          - focus-metavariable: $V
+      - patterns:
+          - pattern: $APP.config.update(..., WTF_CSRF_ENABLED=$V, ...)
+          - metavariable-pattern:
+              metavariable: $V
+              pattern: "False"
+          - focus-metavariable: $V

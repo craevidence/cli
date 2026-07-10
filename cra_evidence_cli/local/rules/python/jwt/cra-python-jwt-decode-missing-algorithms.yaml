@@ -1,0 +1,34 @@
+rules:
+  - id: cra-python-jwt-decode-missing-algorithms
+    message: >
+      This PyJWT decode() call passes a signing key but no algorithms allowlist. Without
+      a pinned algorithm, a token signed with the wrong scheme (for example an HS256
+      token signed using an RSA public key as the HMAC secret) may be accepted, enabling
+      key-confusion attacks. Pass an explicit algorithms allowlist to decode() so only
+      the algorithm you issue tokens with is accepted. Modern PyJWT raises when
+      algorithms is omitted, so some matches may already be safe by exception.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-347: Improper Verification of Cryptographic Signature"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://pyjwt.readthedocs.io/en/stable/api.html
+        - https://cwe.mitre.org/data/definitions/347.html
+        - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+      category: security
+      technology:
+        - python
+        - jwt
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern-either:
+          - pattern: jwt.decode($T, $K, ...)
+          - pattern: jwt.decode($T, key=$K, ...)
+      - pattern-not: jwt.decode(..., algorithms=$A, ...)
+      - pattern-not: jwt.decode(..., algorithms=$A)
+      - pattern-not: "jwt.decode(..., options={..., 'verify_signature': False, ...}, ...)"

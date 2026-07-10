@@ -1,0 +1,51 @@
+rules:
+  - id: cra-python-flask-debug-true
+    message: >
+      Flask debug mode is enabled with a literal True. The interactive debugger
+      exposes a console that can allow arbitrary code execution and should never be
+      on in production. Drive debug mode from an environment variable or a
+      per-environment config value that is False in production instead of
+      hardcoding debug=True.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-489: Active Debug Code"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      references:
+        - https://flask.palletsprojects.com/en/stable/config/
+        - https://cwe.mitre.org/data/definitions/489.html
+        - https://owasp.org/Top10/A05_2021-Security_Misconfiguration/
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern: $APP.run(..., debug=$DEBUG, ...)
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - focus-metavariable: $DEBUG
+      - patterns:
+          - pattern: $APP.config['DEBUG'] = $DEBUG
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - focus-metavariable: $DEBUG
+      - patterns:
+          - pattern: $APP.config.update(..., DEBUG=$DEBUG, ...)
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - focus-metavariable: $DEBUG
+      - patterns:
+          - pattern: $APP.debug = $DEBUG
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - focus-metavariable: $DEBUG

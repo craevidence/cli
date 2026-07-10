@@ -1,0 +1,28 @@
+rules:
+  - id: cra-python-django-session-cookie-insecure
+    message: >
+      SESSION_COOKIE_SECURE or CSRF_COOKIE_SECURE is set to the literal False, which
+      lets the session or CSRF cookie be sent over plaintext HTTP where a network
+      attacker can capture it. Set these to True in production so the cookies are
+      only transmitted over HTTPS.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/settings/
+        - https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
+        - https://cwe.mitre.org/data/definitions/614.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - pattern: SESSION_COOKIE_SECURE = False
+      - pattern: CSRF_COOKIE_SECURE = False

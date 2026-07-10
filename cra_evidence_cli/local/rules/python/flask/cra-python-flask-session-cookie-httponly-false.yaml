@@ -1,0 +1,38 @@
+rules:
+  - id: cra-python-flask-session-cookie-httponly-false
+    message: >
+      SESSION_COOKIE_HTTPONLY is explicitly set to False. Disabling HttpOnly lets
+      client-side JavaScript read the session cookie, which can make session theft
+      via cross-site scripting easier. Leave SESSION_COOKIE_HTTPONLY at its secure
+      default of True so the session cookie is not exposed to JavaScript.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-1004: Sensitive Cookie Without 'HttpOnly' Flag"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      references:
+        - https://flask.palletsprojects.com/en/stable/config/
+        - https://cwe.mitre.org/data/definitions/1004.html
+        - https://owasp.org/www-community/HttpOnly
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern: $APP.config['SESSION_COOKIE_HTTPONLY'] = $VAL
+          - metavariable-pattern:
+              metavariable: $VAL
+              pattern: "False"
+          - focus-metavariable: $VAL
+      - patterns:
+          - pattern: $APP.config.update(..., SESSION_COOKIE_HTTPONLY=$VAL, ...)
+          - metavariable-pattern:
+              metavariable: $VAL
+              pattern: "False"
+          - focus-metavariable: $VAL

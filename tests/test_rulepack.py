@@ -268,14 +268,19 @@ def test_rule_ids_unique() -> None:
 # ---------------------------------------------------------------------------
 
 def _compute_pack_hash() -> str:
-    """Stable hash over sorted rule ids + detection bodies."""
+    """Stable hash over sorted rule ids + full rule bodies.
+
+    The whole rule dict is hashed (not just the detection keys), so any
+    user-visible change -- message, severity, confidence, metadata, references,
+    or detection logic -- changes the hash and therefore requires a
+    PACK_VERSION bump plus a new ledger entry.
+    """
     entries: list[tuple[str, str]] = []
     for f in _rule_files:
         data = _load_rule(f)
         r = data["rules"][0]
         rule_id = r["id"]
-        body = {k: v for k, v in r.items() if k in DETECTION_KEYS}
-        body_str = json.dumps(body, sort_keys=True)
+        body_str = json.dumps(r, sort_keys=True)
         entries.append((rule_id, body_str))
     entries.sort(key=lambda x: x[0])
     h = hashlib.sha256()

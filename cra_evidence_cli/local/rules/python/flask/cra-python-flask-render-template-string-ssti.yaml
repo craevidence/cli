@@ -1,0 +1,42 @@
+rules:
+  - id: cra-python-flask-render-template-string-ssti
+    mode: taint
+    message: >
+      Untrusted request input reaches the template-string argument of
+      render_template_string(). This can allow server-side template injection,
+      where {{ ... }} expressions in attacker input are evaluated and may lead to
+      remote code execution. Pass a fixed template string and supply untrusted
+      values only as render context variables, or use render_template with a
+      static template file, so user input is data rather than template source.
+    severity: ERROR
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
+      owasp:
+        - "A03:2021 - Injection"
+      references:
+        - https://cwe.mitre.org/data/definitions/1336.html
+        - https://flask.palletsprojects.com/en/stable/api/
+        - https://portswigger.net/web-security/server-side-template-injection
+      category: security
+      technology:
+        - python
+        - flask
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-sources:
+      - pattern: request.args
+      - pattern: request.form
+      - pattern: request.values
+      - pattern: request.json
+      - pattern: request.data
+      - pattern: request.cookies
+      - pattern: request.headers
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: render_template_string($TEMPLATE, ...)
+              - pattern: flask.render_template_string($TEMPLATE, ...)
+          - focus-metavariable: $TEMPLATE

@@ -1,0 +1,27 @@
+rules:
+  - id: cra-python-django-ssl-redirect-disabled
+    message: >
+      SECURE_SSL_REDIRECT is set to the literal False, so Django serves plaintext
+      HTTP requests instead of upgrading them to HTTPS. Set SECURE_SSL_REDIRECT to
+      True, or terminate TLS and redirect at the proxy, so users are moved from HTTP
+      to HTTPS.
+    severity: INFO
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-319: Cleartext Transmission of Sensitive Information"
+      owasp:
+        - "A05:2021 - Security Misconfiguration"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/settings/
+        - https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
+        - https://cwe.mitre.org/data/definitions/319.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: MEDIUM
+      license: MIT
+      author: CRA Evidence
+    patterns:
+      - pattern: SECURE_SSL_REDIRECT = False

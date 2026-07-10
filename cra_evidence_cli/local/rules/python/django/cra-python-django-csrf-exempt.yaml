@@ -1,0 +1,40 @@
+rules:
+  - id: cra-python-django-csrf-exempt
+    message: >
+      This view is marked with @csrf_exempt, which removes Django's cross-site
+      request forgery protection. A state-changing endpoint without CSRF protection
+      can allow a forged cross-site request to act on behalf of a logged-in user.
+      Remove csrf_exempt unless the endpoint uses an alternative anti-forgery
+      mechanism such as a verified signature or token, and document why it is safe.
+    severity: WARNING
+    languages: [python]
+    metadata:
+      cwe:
+        - "CWE-352: Cross-Site Request Forgery (CSRF)"
+      owasp:
+        - "A01:2021 - Broken Access Control"
+      references:
+        - https://docs.djangoproject.com/en/5.1/ref/csrf/
+        - https://docs.djangoproject.com/en/5.1/topics/security/
+        - https://cwe.mitre.org/data/definitions/352.html
+      category: security
+      technology:
+        - python
+        - django
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    pattern-either:
+      - patterns:
+          - pattern: |
+              @csrf_exempt
+              def $VIEW(...): ...
+          - focus-metavariable: $VIEW
+      - patterns:
+          - pattern: |
+              @method_decorator(csrf_exempt, ...)
+              class $VIEW(...): ...
+          - focus-metavariable: $VIEW
+      - patterns:
+          - pattern: csrf_exempt($VIEW)
+          - focus-metavariable: $VIEW

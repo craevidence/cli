@@ -20,6 +20,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are adapted from dgryski/semgrep-go, MIT). Detects the engine on `PATH` and
   never bundles or downloads it; results upload to CRA Evidence only with an
   explicit `--upload`.
+- Framework rules for the bundled `code-check` pack (Python), authored from CWE,
+  OWASP, and framework documentation, each with an engine-proven fixture. Flask:
+  server-side template injection, `send_file` path traversal, open redirect,
+  debug mode, hardcoded `SECRET_KEY`, insecure session cookies, permissive CORS
+  with credentials, disabled CSRF, `Markup` XSS, plaintext password comparison,
+  and whole-object request reflection. Django: raw SQL via
+  `raw()`/`RawSQL`/`.extra()`, `mark_safe`/`format_html` XSS, `HttpResponse`
+  body, open redirect, file path traversal, pickle signing, `csrf_exempt`, and
+  settings hardening. SQLAlchemy: interpolated
+  `text()`/`exec_driver_sql()`/`literal_column()`/`order_by()`. JWT: signature
+  verification disabled, the `none` algorithm, a missing `algorithms` allowlist,
+  and hardcoded keys.
 - `config-check`: flag Dockerfile `ARG`/`ENV` whose name matches a credential-like
   pattern (`dockerfile-secret-arg`), and three GitHub Actions workflow checks:
   untrusted event data interpolated into shell steps (`workflow-script-injection`),
