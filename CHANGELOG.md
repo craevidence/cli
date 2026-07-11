@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   default environment rules classify them as production. The CI/CD guide now
   documents the split between branch check jobs and release upload jobs.
 
+### Changed
+
+- Updated the container base images to the current Docker Hardened Images
+  digests.
+
 ## [3.6.1] - 2026-07-06
 
 ### Changed
