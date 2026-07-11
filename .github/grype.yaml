@@ -36,6 +36,16 @@ ignore:
       name: stdlib
       version: go1.26.3
     reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3. Re-evaluate when upstream rebuilds with Go 1.26.4 or 1.25.11."
+  - vulnerability: GO-2026-4970
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3; the fix ships in Go 1.26.5 and 1.25.12 and no rebuilt upstream release exists yet (checked 2026-07-11). The os.Root symlink issue requires the binary to open attacker-controlled paths ending in a slash inside an os.Root. Re-evaluate when upstream rebuilds with Go 1.26.5 or 1.25.12."
+  - vulnerability: GO-2026-5856
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Pinned upstream Syft 1.46.0 and Grype 0.115.0 binaries are built with Go 1.26.3; the fix ships in Go 1.26.5 and 1.25.12 and no rebuilt upstream release exists yet (checked 2026-07-11). The TLS Encrypted Client Hello disclosure does not apply to the CLI's HTTPS client use against CRA Evidence. Re-evaluate when upstream rebuilds with Go 1.26.5 or 1.25.12."
   - vulnerability: GHSA-x744-4wpc-v9h2
     package:
       name: github.com/docker/docker
