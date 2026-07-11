@@ -153,8 +153,13 @@ jobs:
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # v0
 
       - name: Generate SBOM (CycloneDX)
+        # The hardened base ships the dpkg database in both the classic
+        # /var/lib/dpkg/status format and the distroless-style status.d
+        # directory, so Syft catalogs every Debian package twice. Exclude the
+        # status.d copy to keep one entry per package.
         run: |
           syft craevidence:${{ steps.version.outputs.version }} \
+            --exclude '/var/lib/dpkg/status.d/**' \
             -o cyclonedx-json=sbom.cdx.json
 
       - name: Upload SBOM to CRA Evidence
