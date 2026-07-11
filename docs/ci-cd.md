@@ -9,6 +9,23 @@ CRA Evidence and require `CRA_EVIDENCE_API_KEY` (and optionally
 
 Back to the [README](../README.md).
 
+## Branch and release jobs
+
+Use separate jobs for checks and release evidence:
+
+| Pipeline | Command | Result |
+|---|---|---|
+| Pull request or branch | `craevidence check` | Runs locally. No CRA Evidence product or version is created. |
+| Release or tag | `craevidence upload-*` | Uploads evidence to the release version and can create that version. |
+| Intentional development evidence | `craevidence upload-* --environment development` | Uploads to a controlled development version. |
+
+SBOM, HBOM, and document uploads create missing versions by default. Do not
+pass a raw branch name as `--version` unless you intentionally want that
+version record. In GitHub Actions, `${{ github.ref_name }}` is the tag name in
+a tag-triggered job and the branch name in a branch-triggered job. Docker runs
+the same CLI, so Docker upload commands have the same version creation
+behavior.
+
 ## Usage in CI/CD
 
 ### GitHub Action
@@ -17,6 +34,13 @@ The packaged action installs this Python CLI and calls the same
 `craevidence upload-*` commands as direct CLI usage.
 
 ```yaml
+name: release-evidence
+
+on:
+  push:
+    tags:
+      - "v*"
+
 jobs:
   release-evidence:
     runs-on: ubuntu-latest
@@ -78,6 +102,10 @@ The component requests GitLab's `SIGSTORE_ID_TOKEN` with audience `sigstore`
 for the upload job. Teams that already create their own bundle can use
 `signature-on: true` or `signature-bundle: path/to/bundle.sigstore.json`
 instead of `sign: true`.
+
+The catalog upload job runs automatically on tags. If you extend
+`.cra-evidence-upload` directly, add your own `rules:` so branch pipelines do
+not upload release evidence unless that is intentional.
 
 ### GitHub Actions (Docker)
 

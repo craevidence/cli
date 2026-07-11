@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `::set-output`/`::save-state` commands (`workflow-set-output-deprecated`).
   Workflow files under `.github/workflows` are now scanned; other dotdirs remain
   skipped.
+- The GitHub Action warns when an upload runs on a branch ref with the branch
+  name as the version, since SBOM, HBOM, and document uploads create that
+  version record. Branch names such as `main` get a second warning that the
+  default environment rules classify them as production. The CI/CD guide now
+  documents the split between branch check jobs and release upload jobs.
 
 ## [3.6.1] - 2026-07-06
 

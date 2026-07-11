@@ -15,6 +15,9 @@
 #       fail-on: high
 #       sign: true
 #
+# Use upload mode from tag or release workflows. For branch and pull request
+# workflows, use command=check to avoid creating branch-named versions.
+#
 # For keyless signing with sign: true, the caller workflow or job must grant:
 #   permissions:
 #     id-token: write
@@ -452,6 +455,20 @@ runs:
         fi
         if [ "${INPUT_CREATE_PRODUCT}" = "true" ] && [ -z "${INPUT_TARGET_MARKETS}" ]; then
           echo "::notice::create-product=true without target-markets is only safe when the product already exists. New products require target-markets such as DE,FR,ES."
+        fi
+        CAN_CREATE_VERSION="false"
+        case "${INPUT_ARTIFACT_TYPE}" in
+          sbom|hbom|document)
+            CAN_CREATE_VERSION="true"
+            ;;
+        esac
+        if [ "${CAN_CREATE_VERSION}" = "true" ] && [ "${INPUT_CREATE_VERSION}" = "true" ] && [ "${GITHUB_REF_TYPE_VAL:-}" = "branch" ] && [ -n "${INPUT_VERSION}" ] && [ "${INPUT_VERSION}" = "${GITHUB_REF_NAME_VAL:-}" ]; then
+          echo "::warning::This upload is using the branch name '${INPUT_VERSION}' as the CRA Evidence version. Branch and pull request workflows should use command=check unless they intentionally upload evidence. Use a tag or release ref for release evidence uploads."
+          case "${INPUT_VERSION}" in
+            main|master|release/*)
+              echo "::warning::Default environment rules classify '${INPUT_VERSION}' as production. Use a release tag as the version, or pass a controlled version and environment intentionally."
+              ;;
+          esac
         fi
 
         case "${INPUT_ARTIFACT_TYPE}" in

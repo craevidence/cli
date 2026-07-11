@@ -39,6 +39,20 @@ def test_github_action_uses_cli_signing_path():
     assert "curl -s" not in action_text
 
 
+def test_github_action_warns_on_branch_named_versions():
+    action_path = REPO_ROOT / "action.yml"
+    action_text = action_path.read_text(encoding="utf-8")
+
+    assert "This upload is using the branch name" in action_text
+    assert "Default environment rules classify" in action_text
+    # Warn only for artifact types that create version records, on branch
+    # refs, when the version equals the branch name.
+    assert "sbom|hbom|document)" in action_text
+    assert '[ "${GITHUB_REF_TYPE_VAL:-}" = "branch" ]' in action_text
+    assert '[ "${INPUT_VERSION}" = "${GITHUB_REF_NAME_VAL:-}" ]' in action_text
+    assert "main|master|release/*)" in action_text
+
+
 def test_gitlab_component_uses_cli_signing_path():
     component_path = REPO_ROOT / "gitlab-ci-component.yml"
     component_text = component_path.read_text(encoding="utf-8")
