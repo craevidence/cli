@@ -171,6 +171,7 @@ jobs:
             craevidence:${{ steps.version.outputs.version }} \
             upload-sbom \
               --product cra-evidence-cli \
+              --component cli \
               --version ${{ steps.version.outputs.version }} \
               --file /workspace/sbom.cdx.json \
               --no-create-product \
