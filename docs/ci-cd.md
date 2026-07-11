@@ -78,7 +78,7 @@ component:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.6.0/gitlab-ci-component.yml'
+  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.7.0/gitlab-ci-component.yml'
     inputs:
       product: $CI_PROJECT_NAME
       version: $CI_COMMIT_TAG
@@ -93,7 +93,7 @@ include:
       fail-untrusted: true
 ```
 
-After the v3.6.0 release is published to the GitLab CI/CD Catalog, you can also
+Once the component is published to the GitLab CI/CD Catalog, you can also
 use the catalog include form instead of the raw URL. The component provides
 separate `.cra-evidence-upload` and `.cra-evidence-check` job templates; extend
 the one you need (or include both).
