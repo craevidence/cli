@@ -34,6 +34,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.github/grype-watchlist.yaml` inventory, where a future fix release
   surfaces them through the gate instead of staying hidden behind a
   suppression.
+- Release, main, and manually dispatched builds fail closed when the DHI
+  registry login fails, instead of silently building from public fallback
+  base images under hardened-image labels. Pull requests keep the fallback
+  build, and their vulnerability scan becomes informational when DHI
+  credentials are unavailable.
+- Image labels record the base image actually used: fallback builds no longer
+  claim `eu.cra.security.hardened`, `no-shell`, or `no-package-manager`, and
+  CI asserts that the labels and the shell surface match the built base.
+- `scripts/check-dhi-base.sh` gains a `--strict` mode with classified
+  failures (authentication, network, unresolvable tag, removed digest, moved
+  tag) instead of skipping on registry errors. Publishing builds verify in CI
+  that the pinned DHI digests are still the current tag digests before
+  building; the lenient default for contributors is unchanged.
+
+### Fixed
+
+- The Docker installation guide no longer describes the public-base fallback
+  image as functionally identical to the hardened image; the fallback keeps
+  the CLI functionality but includes a shell and a package manager.
 
 ## [3.7.0] - 2026-07-11
 

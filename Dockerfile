@@ -123,8 +123,9 @@ RUN chown -R 1001:1001 /opt/venv /build/ssl
 # -----------------------------------------------------------------------------
 # STAGE 2: Production Runtime (minimalist distroless variant)
 # -----------------------------------------------------------------------------
-# The runtime variant has no shell, no package manager, minimal attack surface.
-# Only Python interpreter and essential runtime libraries are included.
+# The hardened runtime variant has no shell and no package manager. It ships
+# the Python interpreter plus the Debian runtime packages the interpreter
+# depends on; generate an SBOM from the image for the exact package inventory.
 #
 # To update digest:
 #   docker pull dhi.io/python:3.14
@@ -132,23 +133,32 @@ RUN chown -R 1001:1001 /opt/venv /build/ssl
 # -----------------------------------------------------------------------------
 FROM ${BASE_IMAGE}
 
+# Image identity build-args. The defaults describe the pinned DHI base; the
+# public-base fallback build must override them so the labels always record
+# the base image actually used (see .github/workflows/ci.yml).
+ARG BASE_IMAGE_NAME="dhi.io/python:3.14"
+ARG IMAGE_DESCRIPTION="CLI tool for CI/CD integration with CRA Evidence - DHI hardened production image"
+ARG SECURITY_HARDENED="true"
+ARG SECURITY_NO_SHELL="true"
+ARG SECURITY_NO_PACKAGE_MANAGER="true"
+
 # OCI Image Labels for CRA compliance and traceability.
 # org.opencontainers.image.licenses is "MIT AND Apache-2.0": MIT is the CLI's own
 # licence; Apache-2.0 covers the redistributed Syft and Grype binaries. Their
 # LICENSE (and NOTICE where present) files are available at /licenses/{syft,grype}/.
 LABEL org.opencontainers.image.title="CRA Evidence CLI" \
-      org.opencontainers.image.description="CLI tool for CI/CD integration with CRA Evidence - DHI hardened production image" \
+      org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
       org.opencontainers.image.vendor="CRA Evidence" \
       org.opencontainers.image.url="https://craevidence.com" \
       org.opencontainers.image.documentation="https://github.com/craevidence/cli/tree/main/docs" \
       org.opencontainers.image.source="https://github.com/craevidence/cli" \
       org.opencontainers.image.licenses="MIT AND Apache-2.0" \
-      org.opencontainers.image.base.name="dhi.io/python:3.14" \
+      org.opencontainers.image.base.name="${BASE_IMAGE_NAME}" \
       org.opencontainers.image.python.version="3.14" \
-      eu.cra.security.hardened="true" \
+      eu.cra.security.hardened="${SECURITY_HARDENED}" \
       eu.cra.security.non-root="true" \
-      eu.cra.security.no-shell="true" \
-      eu.cra.security.no-package-manager="true" \
+      eu.cra.security.no-shell="${SECURITY_NO_SHELL}" \
+      eu.cra.security.no-package-manager="${SECURITY_NO_PACKAGE_MANAGER}" \
       eu.cra.security.sbom-command="docker scout sbom --image <image>"
 
 # Runtime environment variables

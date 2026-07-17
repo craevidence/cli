@@ -124,16 +124,60 @@ jobs:
           username: ${{ secrets.DHI_REGISTRY_USERNAME }}
           password: ${{ secrets.DHI_REGISTRY_TOKEN }}
 
+      # Publishing paths (main pushes, releases, manual dispatch) must never
+      # build from the public fallback bases: an image labeled as hardened has
+      # to be built from the hardened base. Only pull requests, which never
+      # publish, may fall back.
+      - name: Require the hardened base for publishing builds
+        if: github.event_name != 'pull_request' && steps.dhi-login.outcome != 'success'
+        run: |
+          echo "::error::DHI registry login failed; refusing to build a publishing image from public fallback base images"
+          exit 1
+
+      # Publishing builds must also use the current hardened base, not a stale
+      # pin that still happens to resolve. Strict mode fails when a pinned
+      # digest is no longer the tag's current digest.
+      - name: Verify the pinned DHI base digests are current
+        if: github.event_name != 'pull_request'
+        run: bash scripts/check-dhi-base.sh --strict
+
       - name: Build CLI Docker image
         run: |
           if [ "${{ steps.dhi-login.outcome }}" = "success" ]; then
             docker build -t craevidence:${{ steps.version.outputs.version }} .
           else
-            # DHI registry unavailable; use public Python base images as fallback
+            # Pull-request fallback: public Python base images, with labels
+            # overridden so the image records the base actually used.
             docker build \
               --build-arg BASE_IMAGE_BUILDER=python:3.14 \
               --build-arg BASE_IMAGE=python:3.14-slim \
+              --build-arg BASE_IMAGE_NAME=python:3.14-slim \
+              --build-arg IMAGE_DESCRIPTION="CLI tool for CI/CD integration with CRA Evidence - public Python base fallback build" \
+              --build-arg SECURITY_HARDENED=false \
+              --build-arg SECURITY_NO_SHELL=false \
+              --build-arg SECURITY_NO_PACKAGE_MANAGER=false \
               -t craevidence:${{ steps.version.outputs.version }} .
+          fi
+
+      # The labels and the shell surface must match the base the image was
+      # actually built from, for both variants.
+      - name: Assert image labels match the built base
+        run: |
+          image="craevidence:${{ steps.version.outputs.version }}"
+          hardened=$(docker inspect "$image" --format '{{index .Config.Labels "eu.cra.security.hardened"}}')
+          base=$(docker inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.base.name"}}')
+          if [ "${{ steps.dhi-login.outcome }}" = "success" ]; then
+            expected_hardened="true"; expected_base="dhi.io/python:3.14"
+            if docker run --rm --entrypoint /bin/sh "$image" -c "true" 2>/dev/null; then
+              echo "::error::hardened image unexpectedly contains a shell"
+              exit 1
+            fi
+          else
+            expected_hardened="false"; expected_base="python:3.14-slim"
+          fi
+          if [ "$hardened" != "$expected_hardened" ] || [ "$base" != "$expected_base" ]; then
+            echo "::error::image labels (hardened=$hardened, base=$base) do not match the built base (expected hardened=$expected_hardened, base=$expected_base)"
+            exit 1
           fi
 
       # Security gate: fail the build if HIGH/CRITICAL vulnerabilities with a
@@ -142,7 +186,11 @@ jobs:
       # pre-push runs produce the same result. Suppressions live in
       # .github/grype.yaml; accepted findings without a fix are tracked in
       # .github/grype-watchlist.yaml.
+      # On pull requests without DHI credentials the scan runs against the
+      # public-base fallback image, so its findings are informational there;
+      # every publishing path blocks on the gate.
       - name: Scan image for vulnerabilities (Grype)
+        continue-on-error: ${{ steps.dhi-login.outcome != 'success' }}
         run: bash scripts/check-image-gate.sh craevidence:${{ steps.version.outputs.version }}
 
       - name: Install Syft
@@ -229,10 +277,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/craevidence:${{ steps.version.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/craevidence:latest
-          build-args: |
-            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE_BUILDER=python:3.14' || '' }}
-            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE=python:3.14-slim' || '' }}
-
       - name: Build and push multi-arch image to Docker Hub
         if: github.event_name == 'release' && steps.dockerhub-login.outcome == 'success'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
@@ -243,10 +287,6 @@ jobs:
           tags: |
             ${{ vars.DOCKERHUB_IMAGE }}:${{ steps.version.outputs.version }}
             ${{ vars.DOCKERHUB_IMAGE }}:latest
-          build-args: |
-            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE_BUILDER=python:3.14' || '' }}
-            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE=python:3.14-slim' || '' }}
-
       - name: Build and push multi-arch image to Quay.io
         if: github.event_name == 'release' && steps.quay-login.outcome == 'success'
         continue-on-error: true
@@ -258,10 +298,6 @@ jobs:
           tags: |
             quay.io/craevidence/cli:${{ steps.version.outputs.version }}
             quay.io/craevidence/cli:latest
-          build-args: |
-            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE_BUILDER=python:3.14' || '' }}
-            ${{ steps.dhi-login.outcome != 'success' && 'BASE_IMAGE=python:3.14-slim' || '' }}
-
       # Keyless signing of the pushed manifest lists (Sigstore OIDC, no long-lived keys).
       # All three signing steps reference the manifest index digest from the GHCR build;
       # the digest is identical across registries for identical image content.

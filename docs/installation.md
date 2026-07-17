@@ -42,7 +42,9 @@ docker build \
 ```
 
 Without the build-args the build uses the pinned DHI digests, which require DHI credentials. The
-resulting image is functionally identical; only the base image provenance differs.
+fallback image provides the same CLI functionality, but it is not the hardened production image:
+the public base includes a shell and a package manager, and the image labels record the base
+image actually used.
 
 ## From Source
 
