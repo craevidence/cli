@@ -7,7 +7,10 @@ that publishes something is deliberate: nothing here happens implicitly.
 
 A release publishes to PyPI, GHCR, Docker Hub, and Quay, and attaches signed
 artifacts and per-platform SBOMs to the GitHub release. All channels are
-required: the pipeline fails rather than publishing a partial release.
+required for a successful release run. Multi-channel publication is not
+transactional: a failed run can leave already-published version artifacts in
+place, and a rerun resumes from them instead of replacing them. The `latest`
+tags move only after every required channel has succeeded.
 
 Only the latest minor release line is supported. Older lines receive no
 fixes; users should upgrade to the newest release.
@@ -95,17 +98,20 @@ a glance:
 
 ## Reruns and partial failures
 
-Version tags are immutable in practice: a rerun reuses the digest already
-published under the version tag instead of rebuilding, refuses to overwrite
-a published tag that differs, and re-runs the copy, signing, and SBOM steps
-idempotently over that same digest. `latest` cannot move until both the
-container channels and PyPI have succeeded, so a partial failure leaves the
-previous release as the default. The PyPI job refuses to publish or clobber
-when freshly built artifacts differ from files PyPI already serves; the
-wheel is byte-reproducible, the sdist is not, so after a partial PyPI
-publish, complete the remaining channels with the bytes PyPI already serves
-rather than rebuilding. Never amend or force-push a released commit or tag:
-correct forward with a new commit and, when needed, a new patch release.
+A rerun resumes a partially failed release: it reuses the digest already
+published under the version tag instead of rebuilding, refuses to act when a
+registry's state cannot be determined or a published tag differs from the
+canonical digest, and uploads only release assets that are not attached yet,
+so SBOMs and signature bundles published by an earlier run are never
+replaced. Release-writing jobs run in a shared concurrency group, so two
+release runs cannot interleave their checks and pushes. `latest` cannot move
+until both the container channels and PyPI have succeeded, so a partial
+failure leaves the previous release as the default. The PyPI job refuses to
+publish when freshly built artifacts differ from files PyPI already serves;
+the wheel is byte-reproducible, the sdist is not. These are resume
+guarantees, not transactions: artifacts published before a failure stay
+published. Never amend or force-push a released commit or tag: correct
+forward with a new commit and, when needed, a new patch release.
 
 ## The `v3` major tag
 

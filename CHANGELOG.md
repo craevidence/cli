@@ -62,12 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   equality on every registry, signs each registry's copy of that digest, and
   verifies every signature against the exact release workflow identity before
   the `latest` tags move. All three registries are required channels; a
-  failing registry fails the release instead of shipping a partial one.
+  failing registry fails the release run instead of continuing without it.
   Release reruns reuse the digest already published under the version tag
-  instead of rebuilding, and refuse to overwrite a published version tag
-  that differs. Previously the Docker Hub and Quay images were separate
-  builds signed with the GHCR digest, so their published tags carried no
-  valid signature.
+  instead of rebuilding, refuse to act when a registry's state cannot be
+  determined or a published version tag differs, upload only release assets
+  that are not attached yet, and release-writing jobs run in a shared
+  concurrency group so two release runs cannot interleave. Previously the
+  Docker Hub and Quay images were separate builds signed with the GHCR
+  digest, so their published tags carried no valid signature.
 - The release tag is validated against the package version in a read-only
   job before any publishing job starts, and the `latest` tags move in a
   final approval-gated job only after both the container registries and
