@@ -473,10 +473,15 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Build inputs are version-pinned so a rerun rebuilds from the same
-      # toolchain; the comparison step below is the hard gate that stops a
-      # rerun from publishing or clobbering different bytes.
+      # Build inputs are version-pinned and the epoch is fixed so the wheel
+      # builds to identical bytes everywhere, which lets the release commit
+      # pin the wheel checksum in gitlab-ci-component.yml before PyPI has it.
+      # The sdist is not byte-reproducible; the comparison step below is the
+      # hard gate that stops a rerun from publishing or clobbering different
+      # bytes.
       - name: Build sdist and wheel
+        env:
+          SOURCE_DATE_EPOCH: "946684800"
         run: |
           python -m pip install pip==26.1.2 build==1.5.0
           python -m build

@@ -77,8 +77,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   publish job pins its build tools, refuses to proceed when freshly built
   artifacts differ from files PyPI already serves for the version, and
   verifies after publishing that PyPI serves exactly the built artifacts
-  with matching hashes. The CI opengrep download is verified against pinned
-  checksums before it runs.
+  with matching hashes. Wheel builds use pinned tools and a fixed source
+  date epoch, so the wheel builds to identical bytes everywhere. The CI
+  opengrep download is verified against pinned checksums before it runs.
 - A manually dispatched workflow, gated by an approval-protected environment,
   retro-signs the Docker Hub and Quay copies of releases 3.6.0, 3.6.1, and
   3.7.0 at their audited digests. These post-hoc signatures carry the
