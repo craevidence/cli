@@ -1,0 +1,134 @@
+# Vulnerability watch-list for the CRA Evidence CLI Docker image.
+#
+# Inventory of known findings that have no published fix. They cannot fail the
+# "--only-fixed" gate, so they carry no ignore entry in grype.yaml; this file
+# makes them visible instead of silent. Keeping a reviewed finding in the
+# shipped image is a deliberate risk treatment decision, recorded here with
+# the facts it was based on. The image's properties (non-root user, no shell,
+# no package manager, no network listener) reduce exposure; they do not prove
+# any individual finding unexploitable.
+#
+# When any entry gains a published fix, the gate in
+# scripts/check-image-gate.sh surfaces it on the next scan and the response is
+# decided in the open: refresh the base image digests (base packages) or adopt
+# a rebuilt upstream binary (bundled Syft/Grype), with a reviewed waiver in
+# grype.yaml only if neither exists yet.
+#
+# Provenance of the scan-derived sections (everything except
+# build_info_audit):
+#   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
+#   scanner: Grype 0.116.0
+#   database: schema v6.1.9, built 2026-07-17T06:57:18Z
+#   image: built 2026-07-17 from this repository's Dockerfile with bases
+#     dhi.io/python:3.14-dev@sha256:9b72c38a520f44fafa1c4a3026e9b390eb3b4967c62d38be01400ecbb0232b65
+#     and dhi.io/python:3.14@sha256:c82da5a1a30a6214f45c42def5b6f5b85981c7dc7a1802015a6ebf264675436d,
+#     bundled Syft 1.48.0 and Grype 0.116.0
+#   review date: 2026-07-17
+# Review at every release.
+
+watchlist:
+  bundled_binaries:
+    - package: github.com/docker/docker v28.5.2+incompatible
+      source: pinned Grype 0.116.0 binary
+      advisories:
+        - { id: GHSA-rg2x-37c3-w2rh, severity: High, fix_state: not-fixed }
+        - { id: GHSA-x86f-5xw2-fm2r, severity: High, fix_state: not-fixed }
+        - { id: GHSA-pxq6-2prw-chj9, severity: Medium, fix_state: not-fixed }
+        - { id: GHSA-vp62-88p7-qqf5, severity: Medium, fix_state: not-fixed }
+      note: "Docker daemon code paths; this image does not run a Docker daemon or expose daemon endpoints. GHSA-x744-4wpc-v9h2 from the same package gained a fix (29.3.1) and is therefore a reviewed waiver in grype.yaml, not a watch-list row."
+
+  dhi_base_packages:
+    # Debian Trixie packages from the hardened runtime base. fix_state is the
+    # per-advisory state reported by the scan above: "wont-fix" is an explicit
+    # distribution decision, "not-fixed" means no fix is available yet.
+    - package: libc6 2.41-12+deb13u3+dhi1
+      also: [libc6-dev 2.41-12+deb13u3+dhi1, libc-dev-bin 2.41-12+deb13u3+dhi1]
+      advisories:
+        - { id: CVE-2026-5450, severity: Critical, fix_state: wont-fix }
+        - { id: CVE-2026-5435, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-5928, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-6238, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2010-4756, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2018-20796, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2019-1010022, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2019-1010023, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2019-1010024, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2019-1010025, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2019-9192, severity: Negligible, fix_state: not-fixed }
+      note: "glibc issues Debian marks wont-fix or leaves unfixed; the higher-severity items concern scanf width handling, deprecated DNS printing functions, and special encodings that no known code path in this image exercises."
+    - package: libexpat1 2.7.1-2+dhi5
+      also: [libexpat1-dev 2.7.1-2+dhi5]
+      advisories:
+        - { id: CVE-2025-59375, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-25210, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-41080, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-45186, severity: High, fix_state: not-fixed }
+        - { id: CVE-2025-66382, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-32776, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-32777, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-32778, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-50219, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56131, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56132, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56403, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56404, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56405, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56406, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56407, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56408, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56409, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56410, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56411, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-56412, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-24515, severity: Low, fix_state: wont-fix }
+      note: "expat XML parsing issues without a Debian fix; no known code path in this image parses untrusted XML with expat."
+    - package: libsqlite3-0 3.46.1-7+deb13u1+dhi2
+      advisories:
+        - { id: CVE-2026-11822, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-11824, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-50812, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-50813, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2021-45346, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2025-70873, severity: Negligible, fix_state: not-fixed }
+      note: "The higher-severity items require opening a crafted SQLite database and executing FTS5 MATCH; no known code path in this image opens user-supplied SQLite databases."
+    - package: libncursesw6 6.5+20250216-2+dhi4
+      also: [libtinfo6 6.5+20250216-2+dhi4, ncurses-base 6.5+20250216-2+dhi4, ncurses-bin 6.5+20250216-2+dhi4]
+      advisories:
+        - { id: CVE-2025-69720, severity: High, fix_state: wont-fix }
+        - { id: CVE-2025-6141, severity: Medium, fix_state: wont-fix }
+      note: "Debian marks these ncurses infocmp issues no-dsa or minor; no known code path in this image processes untrusted infocmp input."
+    - package: libuuid1 2.41-5+dhi3
+      advisories:
+        - { id: CVE-2026-27456, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-3184, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-13595, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-53612, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-53613, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-53614, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-53615, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2022-0563, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2025-14104, severity: Negligible, fix_state: not-fixed }
+      note: "util-linux issues; the CLI runs as a non-root user and performs no privileged util-linux operations."
+    - package: zlib1g 1:1.3.dfsg+really1.3.1-1+dhi2
+      also: [zlib1g-dev 1:1.3.dfsg+really1.3.1-1+dhi2]
+      advisories:
+        - { id: CVE-2026-27171, severity: Medium, fix_state: wont-fix }
+      note: "Runtime base package, no Debian fix available."
+    - package: libbz2-1.0 1.0.8-6+dhi2
+      advisories:
+        - { id: CVE-2026-42250, severity: Medium, fix_state: wont-fix }
+      note: "Runtime base package, no Debian fix available."
+
+  # Entries below come from the binaries' embedded Go build information, not
+  # from the scanner output above. They record embedded dependencies the
+  # scanner currently filters out, so the dependency stays visible.
+  build_info_audit:
+    - package: golang.org/x/crypto v0.53.0
+      source: go build info of the pinned Syft 1.48.0 and Grype 0.116.0 binaries
+      advisories:
+        - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
+      note: "Grype 0.116.0 does not report this advisory against the image (Go reachability filtering, checked 2026-07-17)."
+
+  resolved_since_last_review:
+    - id: CVE-2026-34743
+      note: "Previously waived against liblzma5. The package is still shipped (5.8.1-1+dhi1), but the vulnerability database used above no longer reports the advisory against this tuple (checked 2026-07-17)."

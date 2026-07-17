@@ -359,29 +359,29 @@ cra-evidence-upload:
       tools = {
           "syft": {
               "repo": "anchore/syft",
-              "version": "1.46.0",
+              "version": "1.48.0",
               "sha256": {
                   "linux": {
-                      "amd64": "d654f678b709eb53c393d38519d5ed7d2e57205529404018614cfefa0fb2b5ca",
-                      "arm64": "9fafef4db4f032ce81008d3a1529985d41ceb6ccdf2b388c9ce2f1ed7d32082e",
+                      "amd64": "6cef9a7f37220d9067eaf9cfaaa2fce986e9f320a8d42cbc36658c99af78ea04",
+                      "arm64": "6865a3d97c4e28b4b38571c17a2bf512da4494ef1d37613c3122fce0d67e63b0",
                   },
                   "darwin": {
-                      "amd64": "5c983db13533de02e5331aae88091116f25365840741f86234084a30166672a7",
-                      "arm64": "cd4e2c40e075684a5746d8959f76b6572bb2d2dda8cf6877dbfff1cc0baeea01",
+                      "amd64": "dc7b2135fa5591003596df4ddb3408f499b68174f5e7dc1c77a373b753463182",
+                      "arm64": "fef3e6d5df336a0a4c3e421e503119d1e221cf82a3ef5e426a791fcd81667e87",
                   },
               },
           },
           "grype": {
               "repo": "anchore/grype",
-              "version": "0.115.0",
+              "version": "0.116.0",
               "sha256": {
                   "linux": {
-                      "amd64": "3fad92940650e514c0aa2dad83526942a055e210cec09a8a59d9c024adc2b90e",
-                      "arm64": "b8541b9ecc3e936e7db4ff14b71a9474b25f3898ccaad63ee0bfe3449fcd734d",
+                      "amd64": "40aff724297312f91ea390d003bed8d8651c74cc7f5b26732db80b3a408d2fc5",
+                      "arm64": "7af3eed24f469b0cf3ab5ec4508d9c12f4bb9c2c6be714f32973c7b5d63cb6a5",
                   },
                   "darwin": {
-                      "amd64": "f2c50aa2c00b633b24535dd44804f09d22b55a3f76d42b5290655af85e55aa64",
-                      "arm64": "a5faa957bca6f39e252a046b9431cd79745030c692dd400ab4c0c74266edc406",
+                      "amd64": "92dc64f7f1c71f92f610b250d801837c75a3c7336cb44656e59c4f1a07939163",
+                      "arm64": "9425c225d0d63d2b384baf2177d3aba713a2bfb800235848ce70169e78c9c5fa",
                   },
               },
           },

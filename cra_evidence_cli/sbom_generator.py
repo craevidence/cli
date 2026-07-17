@@ -11,7 +11,7 @@ from pathlib import Path
 
 from cra_evidence_cli.exceptions import CRAEvidenceError
 
-_SYFT_IMAGE = "anchore/syft:v1.46.0"
+_SYFT_IMAGE = "anchore/syft:v1.48.0"
 
 
 class SBOMGenerationError(CRAEvidenceError):

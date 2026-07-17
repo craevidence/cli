@@ -136,18 +136,14 @@ jobs:
               -t craevidence:${{ steps.version.outputs.version }} .
           fi
 
-      # Security gate: fail the build if HIGH/CRITICAL vulnerabilities found in the Docker image.
-      # Only fixed vulnerabilities are flagged to avoid false positives (e.g. glibc in base image).
-      # Suppressions live in .github/grype.yaml, loaded via GRYPE_CONFIG.
+      # Security gate: fail the build if HIGH/CRITICAL vulnerabilities with a
+      # published fix are found in the Docker image. The gate script pins the
+      # Grype version and refreshes the vulnerability database, so CI and local
+      # pre-push runs produce the same result. Suppressions live in
+      # .github/grype.yaml; accepted findings without a fix are tracked in
+      # .github/grype-watchlist.yaml.
       - name: Scan image for vulnerabilities (Grype)
-        uses: anchore/scan-action@e1165082ffb1fe366ebaf02d8526e7c4989ea9d2  # v7.4.0
-        env:
-          GRYPE_CONFIG: .github/grype.yaml
-        with:
-          image: craevidence:${{ steps.version.outputs.version }}
-          severity-cutoff: high
-          fail-build: true
-          only-fixed: true
+        run: bash scripts/check-image-gate.sh craevidence:${{ steps.version.outputs.version }}
 
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # v0

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bundled Syft updated to 1.48.0 and Grype to 0.116.0 everywhere the tools are
+  pinned: the Docker image, the GitHub Action, the GitLab CI component, the
+  Codespaces setup, the demo workflow, and the Syft fallback container image.
+  Scan output can change across this update: Grype 0.116.0 deduplicates
+  advisory aliases, filters Go compiler-only CVEs, and applies reachability
+  filtering to Go modules, so the same input may report findings under
+  different advisory identifiers than 0.115.0 did.
+- Docker Hardened Images base digests refreshed to the current
+  `python:3.14-dev` and `python:3.14` builds.
+
+### Security
+
+- The CI image vulnerability gate now runs through
+  `scripts/check-image-gate.sh`, which pins Grype 0.116.0 by checksum, updates
+  the vulnerability database before scanning, and fails closed on any
+  download, checksum, or database error. The same script serves as the local
+  pre-push gate, so CI and local checks run the same pinned scanner, flags,
+  and database refresh policy; results can still differ between runs when the
+  vulnerability database changes in between.
+- `.github/grype.yaml` now holds only reviewed waivers for fixed findings at
+  High or Critical severity; fixed findings below that threshold stay visible
+  in the gate output, and findings without a published fix moved to the new
+  `.github/grype-watchlist.yaml` inventory, where a future fix release
+  surfaces them through the gate instead of staying hidden behind a
+  suppression.
+
 ## [3.7.0] - 2026-07-11
 
 ### Added
