@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=77.0", "wheel"]
+# Exact backend pins keep wheel builds byte-reproducible: the release commit
+# records the wheel checksum before PyPI has the file, so local and CI builds
+# must produce identical bytes.
+requires = ["setuptools==83.0.0", "wheel==0.47.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -42,6 +45,9 @@ dev = [
     "ruff>=0.1.0",
     "mypy>=1.0",
     "types-PyYAML",
+    # Pinned build frontend so scripts/check_dist.py and the documented
+    # release checks run in a fresh development environment.
+    "build==1.5.0",
     # Test-only: validates emitted CSAF documents against the official CSAF 2.0
     # schema. The [format] extra enables the uri/date-time format checks.
     "jsonschema[format]>=4.18",

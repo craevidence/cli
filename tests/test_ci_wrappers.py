@@ -105,3 +105,19 @@ def test_gitlab_component_uses_cli_signing_path():
     assert "aud: sigstore" in component_text
     assert "/api/v1/ci/upload" not in component_text
     assert "curl -s" not in component_text
+
+
+def test_gitlab_component_pins_the_packaged_version():
+    component_text = (REPO_ROOT / "gitlab-ci-component.yml").read_text(encoding="utf-8")
+    pyproject_text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    project_version = re.search(
+        r'^version = "([^"]+)"', pyproject_text, re.MULTILINE
+    ).group(1)
+
+    pinned_versions = re.findall(r'CLI_VERSION="([0-9][0-9a-z.]*)"', component_text)
+    assert len(pinned_versions) == 2, "both templates must pin the CLI version"
+    assert set(pinned_versions) == {project_version}
+
+    pinned_hashes = re.findall(r'CLI_WHEEL_SHA256="([a-f0-9]{64})"', component_text)
+    assert len(pinned_hashes) == 2, "both templates must pin the wheel checksum"
+    assert len(set(pinned_hashes)) == 1, "both templates must pin the same checksum"
