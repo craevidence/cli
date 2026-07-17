@@ -38,9 +38,17 @@
 #   docker inspect dhi.io/python:3.14-dev --format='{{index .RepoDigests 0}}'
 # -----------------------------------------------------------------------------
 # Allow org builds to supply alternative base images (e.g. a newer DHI digest)
-# and allow anyone without DHI access to build using public images:
-#   docker build --build-arg BASE_IMAGE_BUILDER=python:3.14 \
-#                --build-arg BASE_IMAGE=python:3.14-slim .
+# and allow anyone without DHI access to build using public images. Fallback
+# builds must also override the identity labels so the image records the base
+# actually used instead of claiming hardened properties it does not have:
+#   docker build \
+#     --build-arg BASE_IMAGE_BUILDER=python:3.14 \
+#     --build-arg BASE_IMAGE=python:3.14-slim \
+#     --build-arg BASE_IMAGE_NAME=python:3.14-slim \
+#     --build-arg IMAGE_DESCRIPTION="CLI tool for CI/CD integration with CRA Evidence - public Python base fallback build" \
+#     --build-arg SECURITY_HARDENED=false \
+#     --build-arg SECURITY_NO_SHELL=false \
+#     --build-arg SECURITY_NO_PACKAGE_MANAGER=false .
 ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:9b72c38a520f44fafa1c4a3026e9b390eb3b4967c62d38be01400ecbb0232b65
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.

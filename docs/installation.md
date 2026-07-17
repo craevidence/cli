@@ -38,8 +38,16 @@ cd cli
 docker build \
   --build-arg BASE_IMAGE_BUILDER=python:3.14 \
   --build-arg BASE_IMAGE=python:3.14-slim \
+  --build-arg BASE_IMAGE_NAME=python:3.14-slim \
+  --build-arg IMAGE_DESCRIPTION="CLI tool for CI/CD integration with CRA Evidence - public Python base fallback build" \
+  --build-arg SECURITY_HARDENED=false \
+  --build-arg SECURITY_NO_SHELL=false \
+  --build-arg SECURITY_NO_PACKAGE_MANAGER=false \
   -t craevidence-cli:local .
 ```
+
+The label build-args keep the image identity honest: without them the labels would describe the
+hardened base while the image actually contains the public one.
 
 Without the build-args the build uses the pinned DHI digests, which require DHI credentials. The
 fallback image provides the same CLI functionality, but it is not the hardened production image:
