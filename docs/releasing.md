@@ -48,7 +48,7 @@ vulnerability database and base image digests move daily:
 bash scripts/check-dhi-base.sh --strict
 docker build -t craevidence:release-check .
 bash scripts/check-image-gate.sh craevidence:release-check
-python scripts/check_dist.py
+./.venv/bin/python scripts/check_dist.py
 ```
 
 ## Tag and publish
@@ -58,19 +58,24 @@ python scripts/check_dist.py
    `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`. The pipeline's
    signing identity and checkout both derive from this tag.
 3. Create the GitHub release from the existing tag `vX.Y.Z` and publish it.
-4. Approve the two protected environments when GitHub asks: `release-images`
-   (registry publishing, signing, SBOMs) and `pypi` (the immutable PyPI
-   upload).
+4. Approve the protected deployments when GitHub asks. Three release jobs are
+   approval-gated: image publishing and the final `latest` move both use the
+   `release-images` environment, and the immutable PyPI upload uses `pypi`.
 
-The pipeline then: builds the canonical multi-arch image once and pushes it
-to GHCR; copies the index to Docker Hub and Quay by digest; requires every
-version tag to resolve to the canonical digest; signs that digest on each
-registry and verifies every signature against the release identity
-`.../.github/workflows/ci.yml@refs/tags/vX.Y.Z`; generates per-platform
-SBOMs from the released digests, attaches them to the GitHub release, and
-uploads the linux/amd64 SBOM to CRA Evidence as a required step; moves the
-`latest` tags last; builds, signs, and publishes the PyPI artifacts with a
-pre-publish idempotence check and a post-publish verification.
+The pipeline then: validates the release tag against the package version in
+a read-only job before any publishing job starts; builds the canonical
+multi-arch image once and pushes it to GHCR, or reuses the already-published
+digest when the version tag exists; copies the index to registries that do
+not have it and refuses to overwrite a published version tag that differs;
+requires every version tag to resolve to the canonical digest; signs that
+digest on each registry and verifies every signature against the release
+identity `.../.github/workflows/ci.yml@refs/tags/vX.Y.Z`; generates
+per-platform SBOMs from the released digests, attaches them to the GitHub
+release, and uploads the linux/amd64 SBOM to CRA Evidence as a required
+step; checks the built wheel against the component pin, builds, signs, and
+publishes the PyPI artifacts with a pre-publish idempotence check and a
+post-publish verification; and only after both the container channels and
+PyPI have succeeded, moves the `latest` tags in a final approval-gated job.
 
 ## After the pipeline
 
@@ -90,14 +95,17 @@ a glance:
 
 ## Reruns and partial failures
 
-Registry copy, signing, and `latest` moves are idempotent over the same
-digest: rerunning the release workflow converges instead of diverging. The
-PyPI job refuses to publish or clobber when freshly built artifacts differ
-from files PyPI already serves; the sdist is not byte-reproducible, so after
-a partial publish, complete the remaining channels with the bytes PyPI
-already serves rather than rebuilding. Never amend or force-push a released
-commit or tag: correct forward with a new commit and, when needed, a new
-patch release.
+Version tags are immutable in practice: a rerun reuses the digest already
+published under the version tag instead of rebuilding, refuses to overwrite
+a published tag that differs, and re-runs the copy, signing, and SBOM steps
+idempotently over that same digest. `latest` cannot move until both the
+container channels and PyPI have succeeded, so a partial failure leaves the
+previous release as the default. The PyPI job refuses to publish or clobber
+when freshly built artifacts differ from files PyPI already serves; the
+wheel is byte-reproducible, the sdist is not, so after a partial PyPI
+publish, complete the remaining channels with the bytes PyPI already serves
+rather than rebuilding. Never amend or force-push a released commit or tag:
+correct forward with a new commit and, when needed, a new patch release.
 
 ## The `v3` major tag
 

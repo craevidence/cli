@@ -47,10 +47,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credentials are unavailable.
 - Image labels record the base image actually used: fallback builds no longer
   claim `eu.cra.security.hardened`, `no-shell`, or `no-package-manager`, and
-  CI asserts that the labels and the shell surface match the built base.
-- `scripts/check-dhi-base.sh` gains a `--strict` mode with classified
-  failures (authentication, network, unresolvable tag, removed digest, moved
-  tag) instead of skipping on registry errors. Publishing builds verify in CI
+  CI asserts every security label plus the actual shell and package-manager
+  surface for both variants. The documented fallback build commands pass the
+  label overrides.
+- `scripts/check-dhi-base.sh` gains a `--strict` mode that classifies every
+  registry operation's failure (authentication, network, unresolvable tag,
+  removed digest, moved tag) instead of skipping on registry errors. Publishing builds verify in CI
   that the pinned DHI digests are still the current tag digests before
   building; the lenient default for contributors is unchanged.
 
@@ -61,8 +63,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   verifies every signature against the exact release workflow identity before
   the `latest` tags move. All three registries are required channels; a
   failing registry fails the release instead of shipping a partial one.
-  Previously the Docker Hub and Quay images were separate builds signed with
-  the GHCR digest, so their published tags carried no valid signature.
+  Release reruns reuse the digest already published under the version tag
+  instead of rebuilding, and refuse to overwrite a published version tag
+  that differs. Previously the Docker Hub and Quay images were separate
+  builds signed with the GHCR digest, so their published tags carried no
+  valid signature.
+- The release tag is validated against the package version in a read-only
+  job before any publishing job starts, and the `latest` tags move in a
+  final approval-gated job only after both the container registries and
+  PyPI have published successfully.
 - The GitLab CI templates install a version-pinned CLI wheel verified by
   checksum instead of a floating, caller-overridable pip package spec; the
   `cli-package` input is removed. The Sigstore OIDC token moved out of the
@@ -83,9 +92,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   publish job pins its build tools, refuses to proceed when freshly built
   artifacts differ from files PyPI already serves for the version, and
   verifies after publishing that PyPI serves exactly the built artifacts
-  with matching hashes. Wheel builds use pinned tools and a fixed source
-  date epoch, so the wheel builds to identical bytes everywhere. The CI
-  opengrep download is verified against pinned checksums before it runs.
+  with matching hashes. Wheel builds pin the build frontend and backend and
+  use a fixed source date epoch, so the wheel builds to identical bytes
+  everywhere, and the release checks the built wheel against the version and
+  checksum pinned in the GitLab component before publishing. The CI opengrep
+  download is verified against pinned checksums before it runs.
 - A manually dispatched workflow, gated by an approval-protected environment,
   retro-signs the Docker Hub and Quay copies of releases 3.6.0, 3.6.1, and
   3.7.0 at their audited digests. These post-hoc signatures carry the
