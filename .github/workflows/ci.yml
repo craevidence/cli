@@ -69,15 +69,28 @@ jobs:
         run: |
           VERSION="${{ steps.opengrep-version.outputs.version }}"
           ARCH="$(uname -m)"
-          # Map uname arch to the opengrep release asset name
+          # Map uname arch to the opengrep release asset name and its pinned
+          # checksum. The hashes are tied to the pinned engine version; bumping
+          # TESTED_OPENGREP_VERSION requires updating them here.
           case "$ARCH" in
-            x86_64)  OG_ASSET="opengrep_manylinux_x86" ;;
-            aarch64) OG_ASSET="opengrep_manylinux_aarch64" ;;
-            *)        echo "Unsupported arch: $ARCH" >&2; exit 1 ;;
+            x86_64)
+              OG_ASSET="opengrep_manylinux_x86"
+              OG_SHA256="9ac4aebb47ba3f7b0d8fc641ac8749cb6c2f253f616131a67d9631e00d4bea33"
+              ;;
+            aarch64)
+              OG_ASSET="opengrep_manylinux_aarch64"
+              OG_SHA256="fd40124272d006082a5594b19aecee07b01dd50933d8add7a4fd5c557d2be5f6"
+              ;;
+            *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;;
           esac
+          if [ "$VERSION" != "1.25.0" ]; then
+            echo "::error::pinned opengrep checksums are for 1.25.0 but TESTED_OPENGREP_VERSION is ${VERSION}; update the checksums in this step"
+            exit 1
+          fi
           URL="https://github.com/opengrep/opengrep/releases/download/v${VERSION}/${OG_ASSET}"
-          curl -fsSL "$URL" -o /usr/local/bin/opengrep
-          chmod +x /usr/local/bin/opengrep
+          curl -fsSL "$URL" -o /tmp/opengrep
+          echo "${OG_SHA256}  /tmp/opengrep" | sha256sum -c -
+          install -m 0755 /tmp/opengrep /usr/local/bin/opengrep
           opengrep --version
 
       - name: Structural gate (pyyaml)
@@ -403,10 +416,62 @@ jobs:
         with:
           python-version: "3.14"
 
+      # Build inputs are version-pinned so a rerun rebuilds from the same
+      # toolchain; the comparison step below is the hard gate that stops a
+      # rerun from publishing or clobbering different bytes.
       - name: Build sdist and wheel
         run: |
-          python -m pip install --upgrade pip build
+          python -m pip install pip==26.1.2 build==1.5.0
           python -m build
+
+      # Rerun idempotence: if PyPI already has files for this version, the
+      # freshly built artifacts must match them exactly. Publishing and the
+      # release-asset clobber below both depend on this step passing.
+      - name: Require built artifacts to match PyPI on rerun
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'EOF'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+          import urllib.error
+          import urllib.request
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          expected = {
+              f"craevidence-{version}-py3-none-any.whl",
+              f"craevidence-{version}.tar.gz",
+          }
+          local = {
+              p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in pathlib.Path("dist").iterdir()
+          }
+          if set(local) != expected:
+              sys.exit(f"dist holds {sorted(local)}, expected exactly {sorted(expected)}")
+          try:
+              with urllib.request.urlopen(
+                  f"https://pypi.org/pypi/craevidence/{version}/json"
+              ) as response:
+                  data = json.load(response)
+          except urllib.error.HTTPError as err:
+              if err.code == 404:
+                  print(f"PyPI has no {version} yet; first publish proceeds")
+                  sys.exit(0)
+              raise
+          pypi = {u["filename"]: u["digests"]["sha256"] for u in data["urls"]}
+          problems = sorted(
+              set(pypi) ^ set(local)
+          ) + sorted(n for n in pypi.keys() & local.keys() if pypi[n] != local[n])
+          if problems:
+              sys.exit(
+                  f"built artifacts differ from PyPI for {problems}; "
+                  "refusing to publish or clobber"
+              )
+          print("built artifacts match PyPI; rerun is idempotent")
+          EOF
 
       # Sign before publishing so a signing failure stops the job while the
       # release is still fully reversible; the PyPI upload below is immutable.
@@ -415,7 +480,7 @@ jobs:
       # verifiable signatures for every distribution.
       - name: Sign artifacts with Sigstore
         run: |
-          python -m pip install sigstore
+          python -m pip install sigstore==4.4.0
           python -m sigstore sign dist/*.tar.gz dist/*.whl
           # Keep dist/ distribution-only for the PyPI upload step.
           mkdir -p sigstore-bundles
@@ -434,3 +499,44 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: gh release upload "${RELEASE_TAG}" dist/* sigstore-bundles/* --clobber
+
+      # Post-publish check: PyPI must now serve exactly the artifacts that
+      # were built and uploaded, with matching hashes.
+      - name: Verify PyPI serves the published artifacts
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'EOF'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+          import time
+          import urllib.error
+          import urllib.request
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          local = {
+              p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in pathlib.Path("dist").iterdir()
+          }
+          last_error = "no attempt made"
+          for attempt in range(6):
+              if attempt:
+                  time.sleep(20)
+              try:
+                  with urllib.request.urlopen(
+                      f"https://pypi.org/pypi/craevidence/{version}/json"
+                  ) as response:
+                      data = json.load(response)
+              except urllib.error.HTTPError as err:
+                  last_error = f"PyPI returned {err.code}"
+                  continue
+              pypi = {u["filename"]: u["digests"]["sha256"] for u in data["urls"]}
+              if pypi == local:
+                  print("PyPI serves the published artifacts with matching hashes")
+                  sys.exit(0)
+              last_error = f"PyPI files {sorted(pypi)} do not match built {sorted(local)}"
+          sys.exit(f"publication verification failed: {last_error}")
+          EOF

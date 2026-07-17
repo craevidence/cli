@@ -57,6 +57,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failing registry fails the release instead of shipping a partial one.
   Previously the Docker Hub and Quay images were separate builds signed with
   the GHCR digest, so their published tags carried no valid signature.
+- Release reruns can no longer diverge the published channels: the PyPI
+  publish job pins its build tools, refuses to proceed when freshly built
+  artifacts differ from files PyPI already serves for the version, and
+  verifies after publishing that PyPI serves exactly the built artifacts
+  with matching hashes. The CI opengrep download is verified against pinned
+  checksums before it runs.
 - A manually dispatched workflow, gated by an approval-protected environment,
   retro-signs the Docker Hub and Quay copies of releases 3.6.0, 3.6.1, and
   3.7.0 at their audited digests. These post-hoc signatures carry the
