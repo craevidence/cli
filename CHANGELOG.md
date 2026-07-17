@@ -57,6 +57,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failing registry fails the release instead of shipping a partial one.
   Previously the Docker Hub and Quay images were separate builds signed with
   the GHCR digest, so their published tags carried no valid signature.
+- Registry publishing, image signing, and evidence upload moved into a
+  release-only job behind the approval-protected release-images environment,
+  holding the only registry-push and OIDC permissions in the workflow; pull
+  request and main builds now run with read-only repository permissions.
+- Release SBOMs are digest-bound: two per-platform SBOMs are generated from
+  the canonical released image digests, attached to the GitHub release, and
+  the linux/amd64 one is uploaded to CRA Evidence as a required release step
+  instead of a best-effort one. The single-architecture CI scan SBOM remains
+  a workflow artifact only.
 - Release reruns can no longer diverge the published channels: the PyPI
   publish job pins its build tools, refuses to proceed when freshly built
   artifacts differ from files PyPI already serves for the version, and

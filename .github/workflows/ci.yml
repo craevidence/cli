@@ -110,8 +110,6 @@ jobs:
     needs: [test, rulepack]
     permissions:
       contents: read
-      packages: write
-      id-token: write  # keyless cosign signing via Sigstore OIDC
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
@@ -219,38 +217,53 @@ jobs:
             --exclude '/var/lib/dpkg/status.d/**' \
             -o cyclonedx-json=sbom.cdx.json
 
-      - name: Upload SBOM to CRA Evidence
-        if: github.event_name == 'release'
-        continue-on-error: true
-        env:
-          CRA_EVIDENCE_API_KEY: ${{ secrets.CRA_EVIDENCE_API_KEY }}
-          CRA_EVIDENCE_URL: https://api.craevidence.com
-        run: |
-          docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
-            -e CRA_EVIDENCE_API_KEY \
-            -e CRA_EVIDENCE_URL \
-            craevidence:${{ steps.version.outputs.version }} \
-            upload-sbom \
-              --product cra-evidence-cli \
-              --component cli \
-              --version ${{ steps.version.outputs.version }} \
-              --file /workspace/sbom.cdx.json \
-              --no-create-product \
-              --create-version \
-              --scan
-
       - name: Upload SBOM as artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: sbom
           path: sbom.cdx.json
 
-      # Release distribution: GHCR, Docker Hub, and Quay are all required
-      # channels. The release fails early when any of them cannot be used,
-      # instead of publishing a partial release.
+  # ---------------------------------------------------------------------------
+  # Job 4: Publish release images (on release)
+  # ---------------------------------------------------------------------------
+  # Least-privilege split: only this release-gated job holds registry-push and
+  # OIDC permissions, and it runs behind the approval-protected release-images
+  # environment. It builds the canonical index once, copies it by digest to
+  # the other registries, signs and verifies every copy, publishes the
+  # digest-bound per-platform SBOMs, and moves latest last. GHCR, Docker Hub,
+  # and Quay are all required channels: the release fails early when any of
+  # them cannot be used, instead of publishing a partial release.
+  publish-images:
+    runs-on: ubuntu-latest
+    needs: [test, rulepack, build-and-sbom]
+    if: github.event_name == 'release'
+    environment: release-images
+    permissions:
+      contents: write  # attach the per-platform SBOMs to the GitHub release
+      packages: write
+      id-token: write  # keyless cosign signing via Sigstore OIDC
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Get version from pyproject.toml
+        id: version
+        run: |
+          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      # The canonical release image must come from the hardened base, so a
+      # failed DHI login fails the release here.
+      - name: Login to DHI registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: dhi.io
+          username: ${{ secrets.DHI_REGISTRY_USERNAME }}
+          password: ${{ secrets.DHI_REGISTRY_TOKEN }}
+
       - name: Validate release registry configuration
-        if: github.event_name == 'release'
         run: |
           if [ -z "${{ vars.DOCKERHUB_IMAGE }}" ]; then
             echo "::error::vars.DOCKERHUB_IMAGE is not set; refusing to release without the Docker Hub destination"
@@ -258,14 +271,12 @@ jobs:
           fi
 
       - name: Login to Docker Hub
-        if: github.event_name == 'release'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
           username: craevidence
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Login to GHCR
-        if: github.event_name == 'release'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
           registry: ghcr.io
@@ -273,7 +284,6 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Quay.io
-        if: github.event_name == 'release'
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
           registry: quay.io
@@ -284,7 +294,6 @@ jobs:
       # receive exact copies of this index by digest, so every registry serves
       # the same content-addressed artifact and one signature target exists.
       - name: Build and push the canonical multi-arch image to GHCR
-        if: github.event_name == 'release'
         id: build-ghcr
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
@@ -295,7 +304,6 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/craevidence:${{ steps.version.outputs.version }}
 
       - name: Copy the release index to Docker Hub and Quay by digest
-        if: github.event_name == 'release'
         run: |
           set -euo pipefail
           digest="${{ steps.build-ghcr.outputs.digest }}"
@@ -307,7 +315,6 @@ jobs:
           done
 
       - name: Require every version tag to resolve to the canonical digest
-        if: github.event_name == 'release'
         run: |
           set -euo pipefail
           digest="${{ steps.build-ghcr.outputs.digest }}"
@@ -322,15 +329,14 @@ jobs:
             fi
             echo "verified ${ref} -> ${resolved}"
           done
+
       # Keyless signing (Sigstore OIDC, no long-lived keys): one signature per
       # registry over the same canonical digest, then verification with the
       # exact release identity before latest moves.
       - name: Install cosign
-        if: github.event_name == 'release'
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
 
       - name: Sign the release digest on every registry
-        if: github.event_name == 'release'
         env:
           COSIGN_YES: "true"
         run: |
@@ -344,7 +350,6 @@ jobs:
           done
 
       - name: Verify every signature with the release identity
-        if: github.event_name == 'release'
         run: |
           set -euo pipefail
           digest="${{ steps.build-ghcr.outputs.digest }}"
@@ -360,10 +365,62 @@ jobs:
             echo "verified signature on ${repo}@${digest}"
           done
 
-      # latest moves only after every version tag is published, verified, and
-      # signed, so latest can never point at a partially released digest.
+      # The published SBOMs describe the canonical released digests, one per
+      # platform, never a separate local build.
+      - name: Install Syft
+        uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # v0
+
+      - name: Generate digest-bound per-platform SBOMs
+        run: |
+          set -euo pipefail
+          digest="${{ steps.build-ghcr.outputs.digest }}"
+          version="${{ steps.version.outputs.version }}"
+          repo="ghcr.io/${{ github.repository_owner }}/craevidence"
+          docker buildx imagetools inspect "${repo}@${digest}" --raw > release-index.json
+          for arch in amd64 arm64; do
+            platform_digest="$(jq -r --arg arch "${arch}" \
+              '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' \
+              release-index.json)"
+            if [ -z "${platform_digest}" ] || [ "${platform_digest}" = "null" ]; then
+              echo "::error::no linux/${arch} manifest found in the release index"
+              exit 1
+            fi
+            syft "registry:${repo}@${platform_digest}" \
+              --exclude '/var/lib/dpkg/status.d/**' \
+              -o "cyclonedx-json=sbom-${version}-linux-${arch}.cdx.json"
+            echo "generated sbom-${version}-linux-${arch}.cdx.json from ${platform_digest} (index ${digest})"
+          done
+
+      - name: Attach the per-platform SBOMs to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "${RELEASE_TAG}" sbom-*.cdx.json --clobber
+
+      # Dogfooding is a release dependency: the release fails when our own
+      # evidence upload fails.
+      - name: Upload the release SBOM to CRA Evidence
+        env:
+          CRA_EVIDENCE_API_KEY: ${{ secrets.CRA_EVIDENCE_API_KEY }}
+          CRA_EVIDENCE_URL: https://api.craevidence.com
+        run: |
+          docker run --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -e CRA_EVIDENCE_API_KEY \
+            -e CRA_EVIDENCE_URL \
+            "ghcr.io/${{ github.repository_owner }}/craevidence@${{ steps.build-ghcr.outputs.digest }}" \
+            upload-sbom \
+              --product cra-evidence-cli \
+              --component cli \
+              --version ${{ steps.version.outputs.version }} \
+              --file /workspace/sbom-${{ steps.version.outputs.version }}-linux-amd64.cdx.json \
+              --no-create-product \
+              --create-version \
+              --scan
+
+      # latest moves only after every channel of the release has succeeded,
+      # so latest can never point at a partially released digest.
       - name: Move the latest tags to the verified release digest
-        if: github.event_name == 'release'
         run: |
           set -euo pipefail
           digest="${{ steps.build-ghcr.outputs.digest }}"
@@ -376,7 +433,7 @@ jobs:
           done
 
   # ---------------------------------------------------------------------------
-  # Job 3: Publish to PyPI (on release)
+  # Job 5: Publish to PyPI (on release)
   # ---------------------------------------------------------------------------
   # Publishes the sdist and wheel to PyPI via Trusted Publishing (OIDC, no API
   # token) and attaches PEP 740 Sigstore attestations to each artifact.
@@ -388,7 +445,7 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-pypi:
     runs-on: ubuntu-latest
-    needs: [test, rulepack, build-and-sbom]
+    needs: [test, rulepack, build-and-sbom, publish-images]
     if: github.event_name == 'release'
     environment: pypi
     permissions:
