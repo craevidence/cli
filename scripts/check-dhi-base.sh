@@ -11,7 +11,7 @@
 #
 # Strict mode is the CI and pre-push contract: it exits 0 only when every
 # pinned digest still resolves AND is the current digest of its tag. Failures
-# are classified instead of skipped:
+# are classified per registry operation instead of skipped:
 #   0  fresh: every pin resolves and matches its tag's current digest
 #   2  usage error
 #   3  docker not available
@@ -25,6 +25,7 @@ set -uo pipefail
 
 strict=0
 dockerfile="Dockerfile"
+dockerfile_set=0
 for arg in "$@"; do
   case "${arg}" in
     --strict) strict=1 ;;
@@ -32,7 +33,14 @@ for arg in "$@"; do
       echo "usage: $0 [--strict] [Dockerfile]" >&2
       exit 2
       ;;
-    *) dockerfile="${arg}" ;;
+    *)
+      if [ "${dockerfile_set}" -eq 1 ]; then
+        echo "usage: $0 [--strict] [Dockerfile]" >&2
+        exit 2
+      fi
+      dockerfile="${arg}"
+      dockerfile_set=1
+      ;;
   esac
 done
 
@@ -50,32 +58,52 @@ if [ ! -f "${dockerfile}" ]; then
   exit 2
 fi
 
-mapfile -t refs < <(grep -oE 'dhi\.io/[a-zA-Z0-9/_.:-]+@sha256:[a-f0-9]{64}' "${dockerfile}" | sort -u)
+refs=()
+while IFS= read -r line; do
+  refs+=("${line}")
+done < <(grep -oE 'dhi\.io/[a-zA-Z0-9/_.:-]+@sha256:[a-f0-9]{64}' "${dockerfile}" | sort -u)
 
 if [ "${#refs[@]}" -eq 0 ]; then
   echo "check-dhi-base: no pinned dhi.io digests found in ${dockerfile}."
   exit 0
 fi
 
-# Map a failed registry call to an exit class from its error output.
-classify_error() {
-  if grep -qiE 'unauthorized|denied|authentication|401|403' <<< "$1"; then
+err_file="$(mktemp)"
+trap 'rm -f "${err_file}"' EXIT
+
+# Classify the last captured registry error: 4 auth, 5 network, empty when it
+# looks like a missing manifest rather than a transport failure.
+transport_class() {
+  if grep -qiE 'unauthorized|denied|authentication|401|403' "${err_file}"; then
     echo 4
-  elif grep -qiE 'no such host|timed? ?out|connection refused|i/o error|network|tls handshake|lookup' <<< "$1"; then
+  elif grep -qiE 'no such host|timed? ?out|connection refused|i/o error|network|tls handshake|lookup' "${err_file}"; then
     echo 5
   else
-    echo 6
+    echo ""
   fi
+}
+
+manifest_exists() {
+  docker manifest inspect "$1" > /dev/null 2> "${err_file}"
+}
+
+current_digest() {
+  docker buildx imagetools inspect "$1" 2> "${err_file}" | awk '/^Digest:/{print $2; exit}'
+}
+
+report_transport() {
+  echo "check-dhi-base: registry error for $1:" >&2
+  sed 's/^/  /' "${err_file}" >&2
 }
 
 # Probe reachability with the tag of the first reference. A failure here means
 # the registry session is broken (auth or network) rather than a stale digest.
 probe_tag="${refs[0]%@*}"
-if ! probe_err="$(docker manifest inspect "${probe_tag}" 2>&1 > /dev/null)"; then
+if ! manifest_exists "${probe_tag}"; then
+  class="$(transport_class)"
   if [ "${strict}" -eq 1 ]; then
-    echo "check-dhi-base: cannot reach dhi.io for ${probe_tag}:" >&2
-    echo "  ${probe_err}" >&2
-    exit "$(classify_error "${probe_err}")"
+    report_transport "${probe_tag}"
+    exit "${class:-6}"
   fi
   echo "check-dhi-base: cannot reach dhi.io (run 'docker login dhi.io'); skipping."
   exit 0
@@ -91,8 +119,16 @@ record() {
 for ref in "${refs[@]}"; do
   tag="${ref%@*}"
   pinned="${ref##*@}"
-  if ! docker manifest inspect "${ref}" > /dev/null 2>&1; then
-    current="$(docker buildx imagetools inspect "${tag}" 2> /dev/null | awk '/^Digest:/{print $2; exit}')"
+  if ! manifest_exists "${ref}"; then
+    class="$(transport_class)"
+    if [ -n "${class}" ]; then
+      # Credentials or network broke after the probe; classify, do not call
+      # the pin stale.
+      report_transport "${ref}"
+      if [ "${strict}" -eq 1 ]; then record "${class}"; else record 1; fi
+      continue
+    fi
+    current="$(current_digest "${tag}")" || current=""
     echo "stale ${ref}"
     echo "      ${tag} now resolves to ${current:-unknown}"
     echo "      update the pinned digest in ${dockerfile} to the value above."
@@ -100,10 +136,11 @@ for ref in "${refs[@]}"; do
     continue
   fi
   if [ "${strict}" -eq 1 ]; then
-    current="$(docker buildx imagetools inspect "${tag}" 2> /dev/null | awk '/^Digest:/{print $2; exit}')"
+    current="$(current_digest "${tag}")" || current=""
     if [ -z "${current}" ]; then
-      echo "check-dhi-base: cannot resolve the current digest of ${tag}." >&2
-      record 6
+      class="$(transport_class)"
+      report_transport "${tag}"
+      record "${class:-6}"
     elif [ "${current}" != "${pinned}" ]; then
       echo "moved ${ref}"
       echo "      ${tag} now resolves to ${current}"
