@@ -100,32 +100,15 @@ a glance:
 4. The image labels report the hardened base
    (`org.opencontainers.image.base.name=dhi.io/python:3.14`).
 
-## Reruns and partial failures
+## Reruns
 
-A rerun resumes a partially failed release: it reuses the digest already
-published under the version tag instead of rebuilding, refuses to act when a
-registry's state cannot be determined or a published tag differs from the
-canonical digest, and uploads only release assets that are not attached yet,
-so SBOMs and signature bundles published by an earlier run are never
-replaced, and the CRA Evidence upload runs on every release run with the
-published SBOM bytes after verifying the canonical digest is the SBOM's
-subject. When PyPI already serves the complete file set, a rerun recovers
-those bytes instead of rebuilding, so it can finish the remaining channels;
-a partially published PyPI version stops the run for investigation. Retained
-release assets are verified before being kept: distributions must match the
-canonical bytes and signature bundles must verify with the release identity. A
-release run holds one workflow concurrency group from its first job to its
-last, so two release runs cannot interleave their checks and pushes. A
-running release run is never canceled, and at most one further release run
-stays pending behind it. Ordinary push and pull request runs cancel their
-superseded predecessors per ref. `latest` cannot move
-until both the container channels and PyPI have succeeded, so a partial
-failure leaves the previous release as the default. The PyPI job refuses to
-publish when freshly built artifacts differ from files PyPI already serves;
-the wheel is byte-reproducible, the sdist is not. These are resume
-guarantees, not transactions: artifacts published before a failure stay
-published. Never amend or force-push a released commit or tag: correct
-forward with a new commit and, when needed, a new patch release.
+If a release run fails partway, rerun it: the container steps are idempotent
+over the published digest, and the PyPI step completes from the artifacts
+already published rather than rebuilding. The wheel is byte-reproducible; the
+sdist is not, so do not rebuild over a partly published PyPI version, cut a
+corrective patch release instead. Never amend or force-push a released commit
+or tag: correct forward with a new commit and, when needed, a new patch
+release.
 
 ## The `v3` major tag
 

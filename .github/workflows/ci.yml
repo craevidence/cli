@@ -296,6 +296,8 @@ jobs:
       contents: write  # attach the per-platform SBOMs to the GitHub release
       packages: write
       id-token: write  # keyless cosign signing via Sigstore OIDC
+    outputs:
+      digest: ${{ steps.canonical.outputs.digest }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
@@ -349,16 +351,18 @@ jobs:
           set -euo pipefail
           repo="ghcr.io/${{ github.repository_owner }}/craevidence"
           version="${{ needs.validate-release.outputs.version }}"
-          err="$(mktemp)"
-          if digest="$(docker buildx imagetools inspect "${repo}:${version}" 2> "${err}" | awk '/^Digest:/{print $2; exit}')" && [ -n "${digest}" ]; then
-            echo "${repo}:${version} already exists at ${digest}; reusing it, not rebuilding."
-          elif grep -qF -- "${repo}:${version}: not found" "${err}" || grep -qiE 'manifest unknown|name unknown' "${err}"; then
-            digest=""
-          else
-            echo "::error::cannot determine whether ${repo}:${version} exists; refusing to build over an unknown state"
-            cat "${err}" >&2
-            exit 1
-          fi
+          # A non-zero helper exit (unknown state after retries) fails the step
+          # under set -e, so a transient registry error never triggers a rebuild.
+          result="$(bash scripts/registry-inspect.sh digest "${repo}:${version}")"
+          case "${result}" in
+            "FOUND "*)
+              digest="${result#FOUND }"
+              echo "${repo}:${version} already exists at ${digest}; reusing it, not rebuilding." ;;
+            NOTFOUND)
+              digest="" ;;
+            *)
+              echo "::error::unexpected registry-inspect result: ${result}"; exit 1 ;;
+          esac
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
       # One canonical multi-arch build, pushed to GHCR, and only on the first
@@ -400,23 +404,23 @@ jobs:
           digest="${{ steps.canonical.outputs.digest }}"
           src="ghcr.io/${{ github.repository_owner }}/craevidence@${digest}"
           version="${{ needs.validate-release.outputs.version }}"
-          err="$(mktemp)"
           for dst in \
             "${{ vars.DOCKERHUB_IMAGE }}" \
             "quay.io/craevidence/cli"; do
-            if existing="$(docker buildx imagetools inspect "${dst}:${version}" 2> "${err}" | awk '/^Digest:/{print $2; exit}')" && [ -n "${existing}" ]; then
-              if [ "${existing}" != "${digest}" ]; then
-                echo "::error::${dst}:${version} already exists at ${existing}, which differs from the canonical ${digest}; refusing to overwrite a published release"
-                exit 1
-              fi
-              echo "${dst}:${version} already matches the canonical digest"
-            elif grep -qF -- "${dst}:${version}: not found" "${err}" || grep -qiE 'manifest unknown|name unknown' "${err}"; then
-              docker buildx imagetools create --tag "${dst}:${version}" "${src}"
-            else
-              echo "::error::cannot determine whether ${dst}:${version} exists; refusing to copy over an unknown state"
-              cat "${err}" >&2
-              exit 1
-            fi
+            result="$(bash scripts/registry-inspect.sh digest "${dst}:${version}")"
+            case "${result}" in
+              "FOUND "*)
+                existing="${result#FOUND }"
+                if [ "${existing}" != "${digest}" ]; then
+                  echo "::error::${dst}:${version} already exists at ${existing}, which differs from the canonical ${digest}; refusing to overwrite a published release"
+                  exit 1
+                fi
+                echo "${dst}:${version} already matches the canonical digest" ;;
+              NOTFOUND)
+                docker buildx imagetools create --tag "${dst}:${version}" "${src}" ;;
+              *)
+                echo "::error::unexpected registry-inspect result: ${result}"; exit 1 ;;
+            esac
           done
 
       - name: Require every version tag to resolve to the canonical digest
@@ -427,9 +431,10 @@ jobs:
             "ghcr.io/${{ github.repository_owner }}/craevidence:${{ needs.validate-release.outputs.version }}" \
             "${{ vars.DOCKERHUB_IMAGE }}:${{ needs.validate-release.outputs.version }}" \
             "quay.io/craevidence/cli:${{ needs.validate-release.outputs.version }}"; do
-            resolved="$(docker buildx imagetools inspect "${ref}" | awk '/^Digest:/{print $2; exit}')"
-            if [ "${resolved}" != "${digest}" ]; then
-              echo "::error::${ref} resolves to ${resolved}, expected ${digest}"
+            result="$(bash scripts/registry-inspect.sh digest "${ref}")"
+            resolved="${result#FOUND }"
+            if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${digest}" ]; then
+              echo "::error::${ref} resolved to '${result}', expected FOUND ${digest}"
               exit 1
             fi
             echo "verified ${ref} -> ${resolved}"
@@ -481,7 +486,7 @@ jobs:
           digest="${{ steps.canonical.outputs.digest }}"
           version="${{ needs.validate-release.outputs.version }}"
           repo="ghcr.io/${{ github.repository_owner }}/craevidence"
-          docker buildx imagetools inspect "${repo}@${digest}" --raw > release-index.json
+          bash scripts/registry-inspect.sh raw "${repo}@${digest}" > release-index.json
           for arch in amd64 arm64; do
             platform_digest="$(jq -r --arg arch "${arch}" \
               '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' \
@@ -857,7 +862,9 @@ jobs:
   # ---------------------------------------------------------------------------
   # latest moves only after BOTH the container channels and PyPI have
   # succeeded, so the default tag can never point at a partially released
-  # version. The version digest is re-resolved from the immutable version tag.
+  # version. The canonical digest is carried from publish-images as a job
+  # output (not re-resolved by tag), and every version tag is confirmed to
+  # equal it before any latest tag is moved.
   finalize-release:
     runs-on: ubuntu-latest
     needs: [validate-release, publish-images, publish-pypi]
@@ -866,6 +873,11 @@ jobs:
     permissions:
       packages: write
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
       - name: Login to Docker Hub
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
@@ -886,20 +898,47 @@ jobs:
           username: craevidence+all
           password: ${{ secrets.QUAY_TOKEN }}
 
-      - name: Move the latest tags to the released version digest
+      - name: Move the latest tags to the canonical release digest
         run: |
           set -euo pipefail
           version="${{ needs.validate-release.outputs.version }}"
-          repo="ghcr.io/${{ github.repository_owner }}/craevidence"
-          digest="$(docker buildx imagetools inspect "${repo}:${version}" | awk '/^Digest:/{print $2; exit}')"
-          if [ -z "${digest}" ]; then
-            echo "::error::cannot resolve ${repo}:${version}"
+          digest="${{ needs.publish-images.outputs.digest }}"
+          if ! printf '%s' "${digest}" | grep -qE '^sha256:[0-9a-f]{64}$'; then
+            echo "::error::publish-images did not provide a valid canonical digest: '${digest}'"
             exit 1
           fi
+          repo="ghcr.io/${{ github.repository_owner }}/craevidence"
           src="${repo}@${digest}"
-          for dst in \
+          # Confirm every published version tag still equals the canonical
+          # digest before promoting latest, so latest can never point at a
+          # digest that drifted from the release.
+          for ref in \
+            "${repo}:${version}" \
+            "${{ vars.DOCKERHUB_IMAGE }}:${version}" \
+            "quay.io/craevidence/cli:${version}"; do
+            result="$(bash scripts/registry-inspect.sh digest "${ref}")"
+            resolved="${result#FOUND }"
+            if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${digest}" ]; then
+              echo "::error::${ref} resolved to '${result}', expected FOUND ${digest}; refusing to move latest"
+              exit 1
+            fi
+          done
+          latest_tags=( \
             "${repo}:latest" \
             "${{ vars.DOCKERHUB_IMAGE }}:latest" \
-            "quay.io/craevidence/cli:latest"; do
+            "quay.io/craevidence/cli:latest" )
+          for dst in "${latest_tags[@]}"; do
             docker buildx imagetools create --tag "${dst}" "${src}"
+          done
+          # Confirm every latest tag now resolves to the canonical digest, so a
+          # partial promotion cannot be reported as success. A rerun re-creates
+          # the same digest idempotently.
+          for dst in "${latest_tags[@]}"; do
+            result="$(bash scripts/registry-inspect.sh digest "${dst}")"
+            resolved="${result#FOUND }"
+            if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${digest}" ]; then
+              echo "::error::${dst} resolved to '${result}' after promotion, expected FOUND ${digest}"
+              exit 1
+            fi
+            echo "promoted ${dst} -> ${resolved}"
           done

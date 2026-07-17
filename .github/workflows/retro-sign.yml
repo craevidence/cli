@@ -26,6 +26,11 @@ jobs:
       contents: read
       id-token: write  # keyless cosign signing via Sigstore OIDC
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
       - name: Login to Docker Hub
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
         with:
@@ -48,10 +53,11 @@ jobs:
         run: |
           set -euo pipefail
           sign_audited() {
-            local repo="$1" tag="$2" audited="$3" resolved
-            resolved="$(docker buildx imagetools inspect "${repo}:${tag}" | awk '/^Digest:/{print $2; exit}')"
-            if [ "${resolved}" != "${audited}" ]; then
-              echo "::error::${repo}:${tag} resolves to ${resolved}, expected audited ${audited}; refusing to sign"
+            local repo="$1" tag="$2" audited="$3" result resolved
+            result="$(bash scripts/registry-inspect.sh digest "${repo}:${tag}")"
+            resolved="${result#FOUND }"
+            if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${audited}" ]; then
+              echo "::error::${repo}:${tag} resolved to '${result}', expected audited ${audited}; refusing to sign"
               exit 1
             fi
             cosign sign --yes "${repo}@${audited}"

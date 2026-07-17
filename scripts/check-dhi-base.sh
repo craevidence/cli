@@ -88,7 +88,12 @@ manifest_exists() {
 }
 
 current_digest() {
-  docker buildx imagetools inspect "$1" 2> "${err_file}" | awk '/^Digest:/{print $2; exit}'
+  # Capture the full output before parsing. Piping inspect straight into
+  # `awk '...exit'` lets awk close the pipe early, so inspect can die with
+  # SIGPIPE and the pipeline reports failure despite a correct read.
+  local out
+  out="$(docker buildx imagetools inspect "$1" 2> "${err_file}")" || return 1
+  printf '%s\n' "${out}" | awk '/^Digest:/{print $2; exit}'
 }
 
 report_transport() {
