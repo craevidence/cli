@@ -20,7 +20,10 @@ fixes; users should upgrade to the newest release.
 One commit contains everything the release needs:
 
 1. Roll the `[Unreleased]` section of `CHANGELOG.md` into `## [X.Y.Z] - date`.
-2. Bump `version` in `pyproject.toml`.
+2. Bump `version` in `pyproject.toml` AND `__version__` in
+   `cra_evidence_cli/__init__.py`; a test fails when they disagree. Bump the
+   version before predicting the wheel checksum, because the version is part
+   of the wheel bytes.
 3. Update the pinned CLI wheel version and checksum in
    `gitlab-ci-component.yml` (both templates install it). The checksum is
    predictable before PyPI has the file because wheel builds are

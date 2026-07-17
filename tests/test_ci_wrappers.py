@@ -77,7 +77,9 @@ def test_gitlab_component_uses_cli_signing_path():
     # version-pinned wheel verified by checksum.
     assert "cli-package" not in inputs
     assert "CRA_CLI_PACKAGE" not in component_text
-    assert 'CLI_VERSION="3.7.0"' in component_text
+    # The exact pinned version is asserted against pyproject.toml in
+    # test_gitlab_component_pins_the_packaged_version.
+    assert re.search(r'CLI_VERSION="[0-9][0-9a-z.]*"', component_text)
     assert component_text.count("sha256sum -c -") >= 2
 
     upload_template = content[".cra-evidence-upload"]
@@ -121,3 +123,17 @@ def test_gitlab_component_pins_the_packaged_version():
     pinned_hashes = re.findall(r'CLI_WHEEL_SHA256="([a-f0-9]{64})"', component_text)
     assert len(pinned_hashes) == 2, "both templates must pin the wheel checksum"
     assert len(set(pinned_hashes)) == 1, "both templates must pin the same checksum"
+
+
+def test_package_version_matches_pyproject():
+    pyproject_text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    project_version = re.search(
+        r'^version = "([^"]+)"', pyproject_text, re.MULTILINE
+    ).group(1)
+    init_text = (REPO_ROOT / "cra_evidence_cli" / "__init__.py").read_text(
+        encoding="utf-8"
+    )
+    dunder_version = re.search(
+        r'^__version__ = "([^"]+)"', init_text, re.MULTILINE
+    ).group(1)
+    assert dunder_version == project_version
