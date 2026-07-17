@@ -103,8 +103,11 @@ published under the version tag instead of rebuilding, refuses to act when a
 registry's state cannot be determined or a published tag differs from the
 canonical digest, and uploads only release assets that are not attached yet,
 so SBOMs and signature bundles published by an earlier run are never
-replaced. Release-writing jobs run in a shared concurrency group, so two
-release runs cannot interleave their checks and pushes. `latest` cannot move
+replaced, and the CRA Evidence upload runs on every release run with the
+published SBOM bytes after verifying they reference the canonical digest. A
+release run holds one workflow concurrency group from its first job to its
+last, so two release runs cannot interleave their checks and pushes, and
+queued release runs are retained instead of canceled. `latest` cannot move
 until both the container channels and PyPI have succeeded, so a partial
 failure leaves the previous release as the default. The PyPI job refuses to
 publish when freshly built artifacts differ from files PyPI already serves;

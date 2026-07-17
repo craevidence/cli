@@ -66,8 +66,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Release reruns reuse the digest already published under the version tag
   instead of rebuilding, refuse to act when a registry's state cannot be
   determined or a published version tag differs, upload only release assets
-  that are not attached yet, and release-writing jobs run in a shared
-  concurrency group so two release runs cannot interleave. Previously the
+  that are not attached yet, and resubmit the published SBOM bytes to CRA
+  Evidence after verifying they reference the canonical digest. A release
+  run holds one workflow concurrency group from start to finish, so two
+  release runs cannot interleave and queued runs are retained. Previously the
   Docker Hub and Quay images were separate builds signed with the GHCR
   digest, so their published tags carried no valid signature.
 - The release tag is validated against the package version in a read-only
