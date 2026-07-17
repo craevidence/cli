@@ -13,7 +13,14 @@
 #         sign: true
 #
 # Required project variable:
-#   CRA_EVIDENCE_API_KEY: CRA Evidence API key, masked and protected where appropriate.
+#   CRA_EVIDENCE_API_KEY: CRA Evidence API key. Store it as a masked CI/CD
+#   variable, mark it protected so it is only available on protected branches
+#   and tags, and scope it to the environments that upload evidence.
+#
+# The templates install a version-pinned CLI wheel verified by checksum; its
+# dependencies resolve from the wheel metadata. Jobs that sign SBOMs need a
+# Sigstore OIDC token and use the .cra-evidence-upload-signed template; the
+# plain .cra-evidence-upload template requests no OIDC token.
 
 spec:
   inputs:
@@ -36,11 +43,6 @@ spec:
       description: 'CRA Evidence API URL'
       type: string
       default: 'https://api.craevidence.com'
-    cli-package:
-      description: 'pip package spec for the CRA Evidence CLI'
-      type: string
-      default: 'craevidence>=3.6.0,<4'
-
     # === Artifact Options ===
     artifact-type:
       description: 'Type of artifact: sbom, hbom, vex, or document'
@@ -146,12 +148,8 @@ spec:
 # Optional variables mirror the component inputs below.
 .cra-evidence-upload:
   image: python:3.12-slim
-  id_tokens:
-    SIGSTORE_ID_TOKEN:
-      aud: sigstore
   variables:
     CRA_BASE_URL: 'https://api.craevidence.com'
-    CRA_CLI_PACKAGE: 'craevidence>=3.6.0,<4'
     CRA_ARTIFACT_TYPE: 'sbom'
     CRA_CREATE_PRODUCT: 'true'
     CRA_CREATE_VERSION: 'true'
@@ -178,8 +176,12 @@ spec:
         exit 1
       fi
 
-      python -m pip install --upgrade pip
-      python -m pip install "${CRA_CLI_PACKAGE}"
+      CLI_VERSION="3.7.0"
+      CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
+      CLI_WHEEL_SHA256="7025fbfccd8f6ba2636b7d239423cf0d6d3b73d2fbdf9f7a0e6f6278bc86ddb8"
+      python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
+      echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
+      python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"
 
       export CRA_EVIDENCE_API_KEY="${API_KEY}"
       export CRA_EVIDENCE_URL="${CRA_BASE_URL}"
@@ -267,16 +269,24 @@ spec:
       echo "Uploading ${CRA_ARTIFACT_TYPE} to CRA Evidence with the CRA Evidence CLI..."
       craevidence "$@"
 
-# Component job for the GitLab CI Components catalog.
-cra-evidence-upload:
+# Signing variant: identical behavior plus a Sigstore OIDC token for jobs that
+# use the SBOM signature options. Only this template requests the token.
+.cra-evidence-upload-signed:
   extends: .cra-evidence-upload
+  id_tokens:
+    SIGSTORE_ID_TOKEN:
+      aud: sigstore
+
+# Component job for the GitLab CI Components catalog. It extends the signing
+# variant because the sign/signature inputs are available on this job.
+cra-evidence-upload:
+  extends: .cra-evidence-upload-signed
   stage: $[[ inputs.stage ]]
   variables:
     CRA_PRODUCT: $[[ inputs.product ]]
     CRA_VERSION: $[[ inputs.version ]]
     CRA_FILE: $[[ inputs.file ]]
     CRA_BASE_URL: $[[ inputs.api-url ]]
-    CRA_CLI_PACKAGE: $[[ inputs.cli-package ]]
     CRA_ARTIFACT_TYPE: $[[ inputs.artifact-type ]]
     CRA_DOCUMENT_TYPE: $[[ inputs.document-type ]]
     CRA_TAGS: $[[ inputs.tags ]]
@@ -314,7 +324,6 @@ cra-evidence-upload:
 .cra-evidence-check:
   image: python:3.12-slim
   variables:
-    CRA_CLI_PACKAGE: 'craevidence>=3.6.0,<4'
     CRA_CHECK_PATH: '.'
     CRA_CHECK_SBOM: ''
     CRA_CHECK_IMAGE: ''
@@ -323,8 +332,12 @@ cra-evidence-upload:
   script:
     - |
       set -eu
-      python -m pip install --upgrade pip
-      python -m pip install "${CRA_CLI_PACKAGE}"
+      CLI_VERSION="3.7.0"
+      CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
+      CLI_WHEEL_SHA256="7025fbfccd8f6ba2636b7d239423cf0d6d3b73d2fbdf9f7a0e6f6278bc86ddb8"
+      python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
+      echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
+      python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"
       ENGINE_DIR="/tmp/craevidence/bin"
       GRYPE_DB_CACHE_DIR="/tmp/craevidence/grype-db"
       mkdir -p "${ENGINE_DIR}" "${GRYPE_DB_CACHE_DIR}"

@@ -73,11 +73,23 @@ def test_gitlab_component_uses_cli_signing_path():
     assert inputs["signature-issuer"]["type"] == "string"
     assert inputs["fail-untrusted"]["default"] is False
 
+    # The caller-selectable package spec is gone: the CLI is installed from a
+    # version-pinned wheel verified by checksum.
+    assert "cli-package" not in inputs
+    assert "CRA_CLI_PACKAGE" not in component_text
+    assert 'CLI_VERSION="3.7.0"' in component_text
+    assert component_text.count("sha256sum -c -") >= 2
+
     upload_template = content[".cra-evidence-upload"]
     assert upload_template["image"] == "python:3.12-slim"
-    assert upload_template["id_tokens"]["SIGSTORE_ID_TOKEN"]["aud"] == "sigstore"
-    assert upload_template["variables"]["CRA_CLI_PACKAGE"] == "craevidence>=3.6.0,<4"
+    # Only the signing variant requests a Sigstore OIDC token.
+    assert "id_tokens" not in upload_template
     assert upload_template["variables"]["CRA_TARGET_MARKETS"] == ""
+
+    signed_template = content[".cra-evidence-upload-signed"]
+    assert signed_template["extends"] == ".cra-evidence-upload"
+    assert signed_template["id_tokens"]["SIGSTORE_ID_TOKEN"]["aud"] == "sigstore"
+    assert content["cra-evidence-upload"]["extends"] == ".cra-evidence-upload-signed"
 
     variables = content["cra-evidence-upload"]["variables"]
     assert variables["CRA_TARGET_MARKETS"] == "$[[ inputs.target-markets ]]"

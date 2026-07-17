@@ -57,6 +57,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failing registry fails the release instead of shipping a partial one.
   Previously the Docker Hub and Quay images were separate builds signed with
   the GHCR digest, so their published tags carried no valid signature.
+- The GitLab CI templates install a version-pinned CLI wheel verified by
+  checksum instead of a floating, caller-overridable pip package spec; the
+  `cli-package` input is removed. The Sigstore OIDC token moved out of the
+  base upload template into the new `.cra-evidence-upload-signed` variant, so
+  jobs that never sign no longer receive a signing token. The component
+  documentation now describes masking, protecting, and environment-scoping
+  the `CRA_EVIDENCE_API_KEY` variable.
 - Registry publishing, image signing, and evidence upload moved into a
   release-only job behind the approval-protected release-images environment,
   holding the only registry-push and OIDC permissions in the workflow; pull
