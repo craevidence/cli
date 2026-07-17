@@ -15,6 +15,15 @@ on:
 permissions:
   contents: read
 
+# A release run holds one concurrency group from its first job to its last,
+# so two release runs can never interleave registry checks and pushes; queued
+# runs are retained instead of canceled. Other events group per ref so
+# ordinary CI stays outside the release group.
+concurrency:
+  group: ${{ github.event_name == 'release' && 'release-publish' || format('ci-{0}-{1}', github.event_name, github.ref) }}
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   # ---------------------------------------------------------------------------
   # Job 1: Run tests
@@ -280,9 +289,6 @@ jobs:
   # early when any of them cannot be used.
   publish-images:
     runs-on: ubuntu-latest
-    concurrency:
-      group: release-publish
-      cancel-in-progress: false
     needs: [test, rulepack, build-and-sbom, validate-release]
     if: github.event_name == 'release'
     environment: release-images
@@ -346,7 +352,7 @@ jobs:
           err="$(mktemp)"
           if digest="$(docker buildx imagetools inspect "${repo}:${version}" 2> "${err}" | awk '/^Digest:/{print $2; exit}')" && [ -n "${digest}" ]; then
             echo "${repo}:${version} already exists at ${digest}; reusing it, not rebuilding."
-          elif grep -qiE 'manifest unknown|name unknown|not found|no such' "${err}"; then
+          elif grep -qF -- "${repo}:${version}: not found" "${err}" || grep -qiE 'manifest unknown|name unknown' "${err}"; then
             digest=""
           else
             echo "::error::cannot determine whether ${repo}:${version} exists; refusing to build over an unknown state"
@@ -404,7 +410,7 @@ jobs:
                 exit 1
               fi
               echo "${dst}:${version} already matches the canonical digest"
-            elif grep -qiE 'manifest unknown|name unknown|not found|no such' "${err}"; then
+            elif grep -qF -- "${dst}:${version}: not found" "${err}" || grep -qiE 'manifest unknown|name unknown' "${err}"; then
               docker buildx imagetools create --tag "${dst}:${version}" "${src}"
             else
               echo "::error::cannot determine whether ${dst}:${version} exists; refusing to copy over an unknown state"
@@ -494,44 +500,51 @@ jobs:
       # serial number), so assets published by an earlier run are kept and
       # only missing assets are uploaded; a rerun never replaces evidence.
       - name: Attach the per-platform SBOMs to the GitHub release
-        id: attach-sboms
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
-          uploaded_amd64="false"
           for f in sbom-*.cdx.json; do
-            if grep -qx "${f}" <<< "${existing}"; then
+            if grep -Fqx -- "${f}" <<< "${existing}"; then
               echo "${f} is already attached to the release; keeping the published copy"
             else
               gh release upload "${RELEASE_TAG}" "${f}"
-              case "${f}" in *linux-amd64*) uploaded_amd64="true" ;; esac
             fi
           done
-          echo "uploaded_amd64=${uploaded_amd64}" >> "$GITHUB_OUTPUT"
 
-      # Dogfooding is a release dependency: the release fails when our own
-      # evidence upload fails. The upload happens once, together with the
-      # first publication of the amd64 SBOM asset; a rerun does not resubmit
-      # different bytes for already-published evidence.
+      # Dogfooding is a release dependency: every release run submits the
+      # PUBLISHED amd64 SBOM bytes to CRA Evidence, verified against the
+      # canonical amd64 digest first, so a rerun after any partial failure
+      # still completes the evidence upload with the bytes the release serves.
       - name: Upload the release SBOM to CRA Evidence
-        if: steps.attach-sboms.outputs.uploaded_amd64 == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
           CRA_EVIDENCE_API_KEY: ${{ secrets.CRA_EVIDENCE_API_KEY }}
           CRA_EVIDENCE_URL: https://api.craevidence.com
         run: |
+          set -euo pipefail
+          version="${{ needs.validate-release.outputs.version }}"
+          asset="sbom-${version}-linux-amd64.cdx.json"
+          mkdir -p published-evidence
+          gh release download "${RELEASE_TAG}" --pattern "${asset}" --dir published-evidence --clobber
+          amd64_digest="$(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' release-index.json)"
+          if ! grep -qF -- "${amd64_digest}" "published-evidence/${asset}"; then
+            echo "::error::published ${asset} does not reference the canonical amd64 digest ${amd64_digest}"
+            exit 1
+          fi
           docker run --rm \
-            -v ${{ github.workspace }}:/workspace \
+            -v "${{ github.workspace }}/published-evidence:/workspace" \
             -e CRA_EVIDENCE_API_KEY \
             -e CRA_EVIDENCE_URL \
             "ghcr.io/${{ github.repository_owner }}/craevidence@${{ steps.canonical.outputs.digest }}" \
             upload-sbom \
               --product cra-evidence-cli \
               --component cli \
-              --version ${{ needs.validate-release.outputs.version }} \
-              --file /workspace/sbom-${{ needs.validate-release.outputs.version }}-linux-amd64.cdx.json \
+              --version "${version}" \
+              --file "/workspace/${asset}" \
               --no-create-product \
               --create-version \
               --scan
@@ -549,9 +562,6 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-pypi:
     runs-on: ubuntu-latest
-    concurrency:
-      group: release-publish
-      cancel-in-progress: false
     needs: [test, rulepack, build-and-sbom, validate-release, publish-images]
     if: github.event_name == 'release'
     environment: pypi
@@ -691,7 +701,7 @@ jobs:
           existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
           for f in dist/* sigstore-bundles/*; do
             name="$(basename "${f}")"
-            if grep -qx "${name}" <<< "${existing}"; then
+            if grep -Fqx -- "${name}" <<< "${existing}"; then
               echo "${name} is already attached to the release; keeping the published copy"
             else
               gh release upload "${RELEASE_TAG}" "${f}"
@@ -747,9 +757,6 @@ jobs:
   # version. The version digest is re-resolved from the immutable version tag.
   finalize-release:
     runs-on: ubuntu-latest
-    concurrency:
-      group: release-publish
-      cancel-in-progress: false
     needs: [validate-release, publish-images, publish-pypi]
     if: github.event_name == 'release'
     environment: release-images
