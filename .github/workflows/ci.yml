@@ -270,15 +270,19 @@ jobs:
   # ---------------------------------------------------------------------------
   # Job 5: Publish release images (on release)
   # ---------------------------------------------------------------------------
-  # Least-privilege split: only this release-gated job holds registry-push and
-  # OIDC permissions, and it runs behind the approval-protected release-images
-  # environment. It builds the canonical index once, copies it by digest to
-  # the other registries, signs and verifies every copy, publishes the
-  # digest-bound per-platform SBOMs, and moves latest last. GHCR, Docker Hub,
-  # and Quay are all required channels: the release fails early when any of
-  # them cannot be used, instead of publishing a partial release.
+  # Least-privilege split: only the release-gated jobs hold registry-push and
+  # OIDC permissions, and this one runs behind the approval-protected
+  # release-images environment. It builds the canonical index once (or reuses
+  # a published one), copies it by digest to the other registries, signs and
+  # verifies every copy, and publishes the digest-bound per-platform SBOMs.
+  # The latest tags move in finalize-release only after PyPI also succeeds.
+  # GHCR, Docker Hub, and Quay are all required channels: the release fails
+  # early when any of them cannot be used.
   publish-images:
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
     needs: [test, rulepack, build-and-sbom, validate-release]
     if: github.event_name == 'release'
     environment: release-images
@@ -330,16 +334,24 @@ jobs:
 
       # Published releases are immutable: when the GHCR version tag already
       # exists (a rerun after a partial failure), its digest is reused and
-      # nothing is rebuilt, so a rerun can never replace released bytes.
+      # nothing is rebuilt, so a rerun can never replace released bytes. Only
+      # a definitive not-found response counts as an absent tag; any other
+      # inspection error fails the run instead of triggering a rebuild.
       - name: Resolve any existing release digest
         id: existing
         run: |
           set -euo pipefail
           repo="ghcr.io/${{ github.repository_owner }}/craevidence"
           version="${{ needs.validate-release.outputs.version }}"
-          digest="$(docker buildx imagetools inspect "${repo}:${version}" 2> /dev/null | awk '/^Digest:/{print $2; exit}')" || digest=""
-          if [ -n "${digest}" ]; then
+          err="$(mktemp)"
+          if digest="$(docker buildx imagetools inspect "${repo}:${version}" 2> "${err}" | awk '/^Digest:/{print $2; exit}')" && [ -n "${digest}" ]; then
             echo "${repo}:${version} already exists at ${digest}; reusing it, not rebuilding."
+          elif grep -qiE 'manifest unknown|name unknown|not found|no such' "${err}"; then
+            digest=""
+          else
+            echo "::error::cannot determine whether ${repo}:${version} exists; refusing to build over an unknown state"
+            cat "${err}" >&2
+            exit 1
           fi
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
@@ -373,23 +385,31 @@ jobs:
           echo "canonical release digest: ${digest}"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
+      # Only a definitive not-found response allows a copy; any other
+      # inspection error fails the run so a transient registry failure can
+      # never lead to overwriting an existing version tag.
       - name: Copy the release index to registries that do not have it yet
         run: |
           set -euo pipefail
           digest="${{ steps.canonical.outputs.digest }}"
           src="ghcr.io/${{ github.repository_owner }}/craevidence@${digest}"
           version="${{ needs.validate-release.outputs.version }}"
+          err="$(mktemp)"
           for dst in \
             "${{ vars.DOCKERHUB_IMAGE }}" \
             "quay.io/craevidence/cli"; do
-            existing="$(docker buildx imagetools inspect "${dst}:${version}" 2> /dev/null | awk '/^Digest:/{print $2; exit}')" || existing=""
-            if [ -z "${existing}" ]; then
-              docker buildx imagetools create --tag "${dst}:${version}" "${src}"
-            elif [ "${existing}" != "${digest}" ]; then
-              echo "::error::${dst}:${version} already exists at ${existing}, which differs from the canonical ${digest}; refusing to overwrite a published release"
-              exit 1
-            else
+            if existing="$(docker buildx imagetools inspect "${dst}:${version}" 2> "${err}" | awk '/^Digest:/{print $2; exit}')" && [ -n "${existing}" ]; then
+              if [ "${existing}" != "${digest}" ]; then
+                echo "::error::${dst}:${version} already exists at ${existing}, which differs from the canonical ${digest}; refusing to overwrite a published release"
+                exit 1
+              fi
               echo "${dst}:${version} already matches the canonical digest"
+            elif grep -qiE 'manifest unknown|name unknown|not found|no such' "${err}"; then
+              docker buildx imagetools create --tag "${dst}:${version}" "${src}"
+            else
+              echo "::error::cannot determine whether ${dst}:${version} exists; refusing to copy over an unknown state"
+              cat "${err}" >&2
+              exit 1
             fi
           done
 
@@ -470,15 +490,34 @@ jobs:
             echo "generated sbom-${version}-linux-${arch}.cdx.json from ${platform_digest} (index ${digest})"
           done
 
+      # SBOM bytes are not deterministic across generations (timestamp and
+      # serial number), so assets published by an earlier run are kept and
+      # only missing assets are uploaded; a rerun never replaces evidence.
       - name: Attach the per-platform SBOMs to the GitHub release
+        id: attach-sboms
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "${RELEASE_TAG}" sbom-*.cdx.json --clobber
+        run: |
+          set -euo pipefail
+          existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
+          uploaded_amd64="false"
+          for f in sbom-*.cdx.json; do
+            if grep -qx "${f}" <<< "${existing}"; then
+              echo "${f} is already attached to the release; keeping the published copy"
+            else
+              gh release upload "${RELEASE_TAG}" "${f}"
+              case "${f}" in *linux-amd64*) uploaded_amd64="true" ;; esac
+            fi
+          done
+          echo "uploaded_amd64=${uploaded_amd64}" >> "$GITHUB_OUTPUT"
 
       # Dogfooding is a release dependency: the release fails when our own
-      # evidence upload fails.
+      # evidence upload fails. The upload happens once, together with the
+      # first publication of the amd64 SBOM asset; a rerun does not resubmit
+      # different bytes for already-published evidence.
       - name: Upload the release SBOM to CRA Evidence
+        if: steps.attach-sboms.outputs.uploaded_amd64 == 'true'
         env:
           CRA_EVIDENCE_API_KEY: ${{ secrets.CRA_EVIDENCE_API_KEY }}
           CRA_EVIDENCE_URL: https://api.craevidence.com
@@ -510,6 +549,9 @@ jobs:
   # ---------------------------------------------------------------------------
   publish-pypi:
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
     needs: [test, rulepack, build-and-sbom, validate-release, publish-images]
     if: github.event_name == 'release'
     environment: pypi
@@ -637,11 +679,24 @@ jobs:
           attestations: true
           skip-existing: true
 
+      # Sigstore bundles are not deterministic across runs, and the dist
+      # files were already proven byte-identical to PyPI when present, so a
+      # rerun uploads only assets the release does not have yet.
       - name: Upload signed artifacts to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "${RELEASE_TAG}" dist/* sigstore-bundles/* --clobber
+        run: |
+          set -euo pipefail
+          existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
+          for f in dist/* sigstore-bundles/*; do
+            name="$(basename "${f}")"
+            if grep -qx "${name}" <<< "${existing}"; then
+              echo "${name} is already attached to the release; keeping the published copy"
+            else
+              gh release upload "${RELEASE_TAG}" "${f}"
+            fi
+          done
 
       # Post-publish check: PyPI must now serve exactly the artifacts that
       # were built and uploaded, with matching hashes.
@@ -692,6 +747,9 @@ jobs:
   # version. The version digest is re-resolved from the immutable version tag.
   finalize-release:
     runs-on: ubuntu-latest
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
     needs: [validate-release, publish-images, publish-pypi]
     if: github.event_name == 'release'
     environment: release-images
