@@ -21,7 +21,7 @@ permissions:
 # ordinary CI stays outside the release group.
 concurrency:
   group: ${{ github.event_name == 'release' && 'release-publish' || format('ci-{0}-{1}', github.event_name, github.ref) }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name != 'release' }}
   queue: max
 
 jobs:
@@ -531,8 +531,10 @@ jobs:
           mkdir -p published-evidence
           gh release download "${RELEASE_TAG}" --pattern "${asset}" --dir published-evidence --clobber
           amd64_digest="$(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' release-index.json)"
-          if ! grep -qF -- "${amd64_digest}" "published-evidence/${asset}"; then
-            echo "::error::published ${asset} does not reference the canonical amd64 digest ${amd64_digest}"
+          if ! jq -e --arg d "${amd64_digest}" --arg r "ghcr.io/${{ github.repository_owner }}/craevidence" \
+              '.metadata.component.version == $d and .metadata.component.name == $r' \
+              "published-evidence/${asset}" > /dev/null; then
+            echo "::error::published ${asset} does not have the canonical amd64 digest as its SBOM subject"
             exit 1
           fi
           docker run --rm \
@@ -590,6 +592,50 @@ jobs:
         with:
           python-version: "3.14"
 
+      # A rerun after a successful PyPI publish must not rebuild: the sdist is
+      # not byte-reproducible, so the published bytes are recovered from PyPI
+      # instead. A partially published version is an incident, not a resume.
+      - name: Determine the PyPI state for this version
+        id: pypi-state
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          python - <<'EOF'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          expected = {
+              f"craevidence-{version}-py3-none-any.whl",
+              f"craevidence-{version}.tar.gz",
+          }
+          try:
+              with urllib.request.urlopen(
+                  f"https://pypi.org/pypi/craevidence/{version}/json"
+              ) as response:
+                  files = {u["filename"] for u in json.load(response)["urls"]}
+          except urllib.error.HTTPError as err:
+              if err.code == 404:
+                  files = set()
+              else:
+                  raise
+          out = open(os.environ["GITHUB_OUTPUT"], "a")
+          if files == expected:
+              print("PyPI already serves the complete file set; resuming without rebuilding")
+              out.write("complete=true\n")
+          elif not files:
+              print("PyPI has no files for this version; first publish proceeds")
+              out.write("complete=false\n")
+          else:
+              sys.exit(
+                  f"PyPI serves a partial file set {sorted(files)} for {version}; "
+                  "refusing to resume automatically"
+              )
+          EOF
+
       # Build inputs are version-pinned and the epoch is fixed so the wheel
       # builds to identical bytes everywhere, which lets the release commit
       # pin the wheel checksum in gitlab-ci-component.yml before PyPI has it.
@@ -597,6 +643,7 @@ jobs:
       # hard gate that stops a rerun from publishing or clobbering different
       # bytes.
       - name: Build sdist and wheel
+        if: steps.pypi-state.outputs.complete != 'true'
         env:
           SOURCE_DATE_EPOCH: "946684800"
         run: |
@@ -606,6 +653,7 @@ jobs:
       # The GitLab component ships with a pinned wheel version and checksum;
       # they must describe exactly the wheel this release publishes.
       - name: Require the built wheel to match the component pin
+        if: steps.pypi-state.outputs.complete != 'true'
         run: |
           set -euo pipefail
           wheel=$(ls dist/*.whl)
@@ -623,6 +671,7 @@ jobs:
       # freshly built artifacts must match them exactly. Publishing and the
       # release-asset clobber below both depend on this step passing.
       - name: Require built artifacts to match PyPI on rerun
+        if: steps.pypi-state.outputs.complete != 'true'
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
@@ -674,6 +723,7 @@ jobs:
       # release with their Sigstore bundles, so the release page carries
       # verifiable signatures for every distribution.
       - name: Sign artifacts with Sigstore
+        if: steps.pypi-state.outputs.complete != 'true'
         run: |
           python -m pip install sigstore==4.4.0
           python -m sigstore sign dist/*.tar.gz dist/*.whl
@@ -684,28 +734,81 @@ jobs:
       # skip-existing makes a rerun after a post-publish failure idempotent;
       # the tag-check step above already guards against version mixups.
       - name: Publish to PyPI
+        if: steps.pypi-state.outputs.complete != 'true'
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
         with:
           attestations: true
           skip-existing: true
 
-      # Sigstore bundles are not deterministic across runs, and the dist
-      # files were already proven byte-identical to PyPI when present, so a
-      # rerun uploads only assets the release does not have yet.
+      # On a resume, the canonical distribution bytes come from PyPI, and
+      # fresh Sigstore bundles are created for them so missing release assets
+      # can be completed with signed, canonical content.
+      - name: Recover the published artifacts from PyPI
+        if: steps.pypi-state.outputs.complete == 'true'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          mkdir -p dist sigstore-bundles
+          python - <<'EOF'
+          import json
+          import os
+          import urllib.request
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          with urllib.request.urlopen(
+              f"https://pypi.org/pypi/craevidence/{version}/json"
+          ) as response:
+              for entry in json.load(response)["urls"]:
+                  urllib.request.urlretrieve(entry["url"], f"dist/{entry['filename']}")
+                  print(f"recovered dist/{entry['filename']}")
+          EOF
+          python -m pip install sigstore==4.4.0
+          python -m sigstore sign dist/*.tar.gz dist/*.whl
+          mv dist/*.sigstore.json sigstore-bundles/
+
+      # Sigstore bundles are not deterministic across runs, so assets already
+      # attached to the release are kept, but never blindly: a retained
+      # distribution must match the local canonical bytes, and a retained
+      # bundle must verify against those bytes with the release identity.
       - name: Upload signed artifacts to the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
+          identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
           existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
+          mkdir -p retained-assets
           for f in dist/* sigstore-bundles/*; do
             name="$(basename "${f}")"
-            if grep -Fqx -- "${name}" <<< "${existing}"; then
-              echo "${name} is already attached to the release; keeping the published copy"
-            else
+            if ! grep -Fqx -- "${name}" <<< "${existing}"; then
               gh release upload "${RELEASE_TAG}" "${f}"
+              continue
             fi
+            gh release download "${RELEASE_TAG}" --pattern "${name}" --dir retained-assets --clobber
+            case "${name}" in
+              *.sigstore.json)
+                subject="dist/$(basename "${name}" .sigstore.json)"
+                if ! python -m sigstore verify identity \
+                    --bundle "retained-assets/${name}" \
+                    --cert-identity "${identity}" \
+                    --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+                    "${subject}"; then
+                  echo "::error::retained release asset ${name} does not verify against ${subject} with the release identity"
+                  exit 1
+                fi
+                echo "${name} is already attached and verifies; keeping the published copy"
+                ;;
+              *)
+                if ! cmp -s "retained-assets/${name}" "${f}"; then
+                  echo "::error::retained release asset ${name} differs from the canonical bytes"
+                  exit 1
+                fi
+                echo "${name} is already attached and matches; keeping the published copy"
+                ;;
+            esac
           done
 
       # Post-publish check: PyPI must now serve exactly the artifacts that
