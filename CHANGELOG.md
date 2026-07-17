@@ -48,6 +48,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that the pinned DHI digests are still the current tag digests before
   building; the lenient default for contributors is unchanged.
 
+- Releases now publish one canonical multi-arch image: built once, pushed to
+  GHCR, and copied to Docker Hub and Quay by digest, so all three registries
+  serve the identical content-addressed artifact. The release verifies digest
+  equality on every registry, signs each registry's copy of that digest, and
+  verifies every signature against the exact release workflow identity before
+  the `latest` tags move. All three registries are required channels; a
+  failing registry fails the release instead of shipping a partial one.
+  Previously the Docker Hub and Quay images were separate builds signed with
+  the GHCR digest, so their published tags carried no valid signature.
+
 ### Fixed
 
 - The Docker installation guide no longer describes the public-base fallback
