@@ -16,13 +16,13 @@ permissions:
   contents: read
 
 # A release run holds one concurrency group from its first job to its last,
-# so two release runs can never interleave registry checks and pushes; queued
-# runs are retained instead of canceled. Other events group per ref so
-# ordinary CI stays outside the release group.
+# so two release runs can never interleave registry checks and pushes. A
+# running release is never canceled; with GitHub's default queue behavior at
+# most one further release run stays pending behind it. Other events group
+# per ref and cancel superseded runs.
 concurrency:
   group: ${{ github.event_name == 'release' && 'release-publish' || format('ci-{0}-{1}', github.event_name, github.ref) }}
   cancel-in-progress: ${{ github.event_name != 'release' }}
-  queue: max
 
 jobs:
   # ---------------------------------------------------------------------------

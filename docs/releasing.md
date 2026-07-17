@@ -48,6 +48,7 @@ vulnerability database and base image digests move daily:
 ```sh
 ./.venv/bin/python -m pytest -q
 ./.venv/bin/ruff check .
+actionlint .github/workflows/*.yml
 bash scripts/check-dhi-base.sh --strict
 docker build -t craevidence:release-check .
 bash scripts/check-image-gate.sh craevidence:release-check
@@ -111,9 +112,10 @@ a partially published PyPI version stops the run for investigation. Retained
 release assets are verified before being kept: distributions must match the
 canonical bytes and signature bundles must verify with the release identity. A
 release run holds one workflow concurrency group from its first job to its
-last, so two release runs cannot interleave their checks and pushes, and
-queued release runs are retained instead of canceled. Ordinary push and pull
-request runs cancel their superseded predecessors per ref. `latest` cannot move
+last, so two release runs cannot interleave their checks and pushes. A
+running release run is never canceled, and at most one further release run
+stays pending behind it. Ordinary push and pull request runs cancel their
+superseded predecessors per ref. `latest` cannot move
 until both the container channels and PyPI have succeeded, so a partial
 failure leaves the previous release as the default. The PyPI job refuses to
 publish when freshly built artifacts differ from files PyPI already serves;

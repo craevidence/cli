@@ -72,9 +72,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of rebuilding, and retained release assets are verified before
   being kept: distributions against the canonical bytes, signature bundles
   against the release identity. A release run holds one workflow concurrency
-  group from start to finish, so two release runs cannot interleave and
-  queued release runs are retained; superseded push and pull request runs
-  are canceled per ref. Previously the
+  group from start to finish, so two release runs cannot interleave; a
+  running release run is never canceled, and superseded push and pull
+  request runs are canceled per ref. Previously the
   Docker Hub and Quay images were separate builds signed with the GHCR
   digest, so their published tags carried no valid signature.
 - The release tag is validated against the package version in a read-only
