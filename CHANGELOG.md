@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failing registry fails the release instead of shipping a partial one.
   Previously the Docker Hub and Quay images were separate builds signed with
   the GHCR digest, so their published tags carried no valid signature.
+- A manually dispatched workflow, gated by an approval-protected environment,
+  retro-signs the Docker Hub and Quay copies of releases 3.6.0, 3.6.1, and
+  3.7.0 at their audited digests. These post-hoc signatures carry the
+  workflow's main-branch identity rather than a release tag identity, as
+  documented in the workflow file.
 
 ### Fixed
 

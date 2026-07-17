@@ -1,0 +1,65 @@
+name: Retro-sign published release images
+
+# Signs the Docker Hub and Quay copies of already-published releases whose
+# original release runs signed only the GHCR digest. The target digests are
+# hard-coded below from an audit of the live registries; the job refuses to
+# sign when a tag no longer resolves to its audited digest. Runs only on
+# manual dispatch and only with approval through the protected "signing"
+# environment.
+#
+# Signatures created here carry this workflow's main-branch identity, not a
+# release tag identity. Verify them with:
+#   --certificate-identity https://github.com/craevidence/cli/.github/workflows/retro-sign.yml@refs/heads/main
+#   --certificate-oidc-issuer https://token.actions.githubusercontent.com
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retro-sign:
+    runs-on: ubuntu-latest
+    environment: signing
+    permissions:
+      contents: read
+      id-token: write  # keyless cosign signing via Sigstore OIDC
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          username: craevidence
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to Quay.io
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: quay.io
+          username: craevidence+all
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
+
+      - name: Verify audited digests and sign
+        env:
+          COSIGN_YES: "true"
+        run: |
+          set -euo pipefail
+          sign_audited() {
+            local repo="$1" tag="$2" audited="$3" resolved
+            resolved="$(docker buildx imagetools inspect "${repo}:${tag}" | awk '/^Digest:/{print $2; exit}')"
+            if [ "${resolved}" != "${audited}" ]; then
+              echo "::error::${repo}:${tag} resolves to ${resolved}, expected audited ${audited}; refusing to sign"
+              exit 1
+            fi
+            cosign sign --yes "${repo}@${audited}"
+          }
+          # Audited 2026-07-17 from the live registries.
+          sign_audited docker.io/craevidence/cli 3.6.0 sha256:0c9f608738472a3dbdb629d957af670c784742df098bc4960337da7450a2dc98
+          sign_audited quay.io/craevidence/cli   3.6.0 sha256:cb82bfe53aa8db54df439b8fe212b0908209fcb515c445a85b34d06405184b50
+          sign_audited docker.io/craevidence/cli 3.6.1 sha256:db98cbd07f359f8fbf36d414ed573189922710f687d677d7dcf9456547dd79e7
+          sign_audited quay.io/craevidence/cli   3.6.1 sha256:6625560a1195222bcca186820f22982b5e8fdf212d9871bfb9c6aaffae8b82ed
+          sign_audited docker.io/craevidence/cli 3.7.0 sha256:f6b9b2465082a0c948c9ed7384cc43e176554ddcba7b52ec041339236203851c
+          sign_audited quay.io/craevidence/cli   3.7.0 sha256:2bffab9ece62d65eb372ef7e760388ded5fd70eeefd2a2069850823d43a8372f
