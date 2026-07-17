@@ -67,9 +67,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of rebuilding, refuse to act when a registry's state cannot be
   determined or a published version tag differs, upload only release assets
   that are not attached yet, and resubmit the published SBOM bytes to CRA
-  Evidence after verifying they reference the canonical digest. A release
-  run holds one workflow concurrency group from start to finish, so two
-  release runs cannot interleave and queued runs are retained. Previously the
+  Evidence after verifying the canonical digest is the SBOM's subject. When
+  PyPI already serves the complete file set, a rerun recovers those bytes
+  instead of rebuilding, and retained release assets are verified before
+  being kept: distributions against the canonical bytes, signature bundles
+  against the release identity. A release run holds one workflow concurrency
+  group from start to finish, so two release runs cannot interleave and
+  queued release runs are retained; superseded push and pull request runs
+  are canceled per ref. Previously the
   Docker Hub and Quay images were separate builds signed with the GHCR
   digest, so their published tags carried no valid signature.
 - The release tag is validated against the package version in a read-only

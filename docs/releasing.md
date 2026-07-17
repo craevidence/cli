@@ -104,10 +104,16 @@ registry's state cannot be determined or a published tag differs from the
 canonical digest, and uploads only release assets that are not attached yet,
 so SBOMs and signature bundles published by an earlier run are never
 replaced, and the CRA Evidence upload runs on every release run with the
-published SBOM bytes after verifying they reference the canonical digest. A
+published SBOM bytes after verifying the canonical digest is the SBOM's
+subject. When PyPI already serves the complete file set, a rerun recovers
+those bytes instead of rebuilding, so it can finish the remaining channels;
+a partially published PyPI version stops the run for investigation. Retained
+release assets are verified before being kept: distributions must match the
+canonical bytes and signature bundles must verify with the release identity. A
 release run holds one workflow concurrency group from its first job to its
 last, so two release runs cannot interleave their checks and pushes, and
-queued release runs are retained instead of canceled. `latest` cannot move
+queued release runs are retained instead of canceled. Ordinary push and pull
+request runs cancel their superseded predecessors per ref. `latest` cannot move
 until both the container channels and PyPI have succeeded, so a partial
 failure leaves the previous release as the default. The PyPI job refuses to
 publish when freshly built artifacts differ from files PyPI already serves;
