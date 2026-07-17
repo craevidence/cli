@@ -87,6 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The PyPI project page's Documentation link points at the public command
+  reference on GitHub instead of a page that requires signing in.
 - The Docker installation guide no longer describes the public-base fallback
   image as functionally identical to the hardened image; the fallback keeps
   the CLI functionality but includes a shell and a package manager.

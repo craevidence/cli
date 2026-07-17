@@ -49,7 +49,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://craevidence.com"
-Documentation = "https://docs.craevidence.com/cli"
+Documentation = "https://github.com/craevidence/cli/blob/main/docs/README.md"
 Repository = "https://github.com/craevidence/cli"
 "Bug Tracker" = "https://github.com/craevidence/cli/issues"
 Changelog = "https://github.com/craevidence/cli/blob/main/CHANGELOG.md"
