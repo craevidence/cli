@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `docs/releasing.md`: maintainer reference for the release process, channel
+  verification, the mutable `v3` tag procedure, and the support policy
+  (latest minor release line only).
+
 ### Changed
 
 - Bundled Syft updated to 1.48.0 and Grype to 0.116.0 everywhere the tools are

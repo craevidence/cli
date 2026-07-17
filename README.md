@@ -51,6 +51,7 @@ covered in the [installation guide](https://github.com/craevidence/cli/blob/main
 | [CI/CD integration](https://github.com/craevidence/cli/blob/main/docs/ci-cd.md) | GitHub Action, GitLab Component, Docker, Jenkins, OpenSSF Scorecard, and complyctl. |
 | [Installation](https://github.com/craevidence/cli/blob/main/docs/installation.md) | PyPI, Docker, container registries, and from source. |
 | [Troubleshooting](https://github.com/craevidence/cli/blob/main/docs/troubleshooting.md) | Common errors and fixes. |
+| [Releasing](https://github.com/craevidence/cli/blob/main/docs/releasing.md) | Maintainer reference: channels, verification, tags, support policy. |
 
 ## Local Check
 
