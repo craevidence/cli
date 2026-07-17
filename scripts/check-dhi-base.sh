@@ -123,12 +123,31 @@ for ref in "${refs[@]}"; do
     class="$(transport_class)"
     if [ -n "${class}" ]; then
       # Credentials or network broke after the probe; classify, do not call
-      # the pin stale.
+      # the pin stale. Lenient mode skips like the probe path does.
       report_transport "${ref}"
-      if [ "${strict}" -eq 1 ]; then record "${class}"; else record 1; fi
+      if [ "${strict}" -eq 1 ]; then
+        record "${class}"
+      else
+        echo "check-dhi-base: cannot verify ${ref}; skipping."
+      fi
       continue
     fi
     current="$(current_digest "${tag}")" || current=""
+    if [ -z "${current}" ]; then
+      class="$(transport_class)"
+      if [ -n "${class}" ]; then
+        # The pinned digest did not resolve, but the follow-up tag lookup
+        # failed in transport, so the replacement digest is unknown; report
+        # the transport failure instead of an unconfirmed stale verdict.
+        report_transport "${tag}"
+        if [ "${strict}" -eq 1 ]; then
+          record "${class}"
+        else
+          echo "check-dhi-base: cannot verify ${tag}; skipping."
+        fi
+        continue
+      fi
+    fi
     echo "stale ${ref}"
     echo "      ${tag} now resolves to ${current:-unknown}"
     echo "      update the pinned digest in ${dockerfile} to the value above."
