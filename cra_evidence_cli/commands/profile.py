@@ -33,10 +33,13 @@ CONFORMITY_TYPES = [
 ]
 
 CONFORMITY_TYPE_LABELS = {
-    "self_assessment": "Self Assessment (Article 32)",
-    "third_party_type_examination": "Third-Party Type Examination (Module B, Article 33)",
-    "third_party_full_qa": "Third-Party Full QA (Module H, Article 33)",
-    "eu_certification": "EU Type Examination / Certification (Article 34)",
+    "self_assessment": "Internal Control (Module A, Article 32(1)(a))",
+    "third_party_type_examination": (
+        "EU-Type Examination (Module B) followed by Conformity to EU-Type "
+        "based on Internal Production Control (Module C), Article 32(1)(b)"
+    ),
+    "third_party_full_qa": "Full Quality Assurance (Module H, Article 32(1)(c))",
+    "eu_certification": "European Cybersecurity Certification Scheme (Article 32(1)(d))",
 }
 
 # All valid attestation keys accepted by the API.

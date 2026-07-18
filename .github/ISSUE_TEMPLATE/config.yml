@@ -4,7 +4,7 @@ contact_links:
     url: https://github.com/craevidence/cli/security/advisories/new
     about: Report security issues privately. Do not open a public issue.
   - name: Documentation
-    url: https://docs.craevidence.com/cli
+    url: https://github.com/craevidence/cli/blob/main/docs/README.md
     about: CLI usage and command reference.
   - name: Product support
     url: mailto:support@craevidence.com

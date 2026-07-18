@@ -170,10 +170,12 @@ def _determine_support(
 def _classify(is_eol: bool, is_supported: bool | None) -> str:
     """Map EOL and active-support state to a support-period status label.
 
-    Uses the vocabulary the CRA expects manufacturers to determine and disclose
-    for the support period (Article 13(8), Annex II point 7): "active" full
-    support, "security-only" maintenance after active support ends, "eol" past
-    end of life, or "unknown" when endoflife.date has no support data.
+    The CRA requires manufacturers to disclose the type of technical security
+    support and the end date of the support period (Article 13(8), Annex II
+    point 7). The status vocabulary here is this tool's own, chosen to express
+    that disclosure: "active" full support, "security-only" maintenance after
+    active support ends, "eol" past end of life, or "unknown" when
+    endoflife.date has no support data.
     """
     if is_eol:
         return "eol"

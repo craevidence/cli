@@ -112,8 +112,8 @@ def assert_no_cra_pass(dimensions: list[dict[str, Any]]) -> None:
 
 _EUVD_NOTE = (
     "KEV flags US-catalogued known-exploited CVEs; it is enrichment, not the CRA "
-    "Article 3(41)/(42) determination. The EU's authoritative source is the European "
-    "Vulnerability Database (EUVD, Art 12(2) of Directive (EU) 2022/2555), not queried here."
+    "Article 3(41)/(42) determination. The European Vulnerability Database "
+    "(EUVD, established by Art 12(2) of Directive (EU) 2022/2555) is not queried here."
 )
 
 

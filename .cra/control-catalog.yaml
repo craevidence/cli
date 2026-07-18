@@ -1,4 +1,4 @@
-# CRA Evidence CLI - Control Catalog (CRA Annex I)
+# CRA Evidence CLI - Control Catalog
 # Validate: cue vet -c -d '#ControlCatalog' github.com/gemaraproj/gemara@v1.0.0 .cra/control-catalog.yaml
 #
 # Assessment requirement ids use stable `cra:` references so reviewers can trace
@@ -9,8 +9,8 @@ metadata:
   id: "cra-evidence-cli-control-catalog"
   type: ControlCatalog
   gemara-version: "1.0.0"
-  description: "Security controls implemented by the CRA Evidence CLI product, mapped to CRA Annex I Part I."
-  version: "1.0.0"
+  description: "Security controls implemented by the CRA Evidence CLI product, mapped to the product's security attestations."
+  version: "1.1.0"
   author:
     id: cra-evidence-security
     name: "CRA Evidence Security"
@@ -39,37 +39,37 @@ controls:
     state: Active
     assessment-requirements:
       - id: "cra:secure_by_default_confirmed"
-        text: "The CLI Docker image contains no hard-coded credentials or debug endpoints; the default command prints help and requires an API key via environment variable to do anything else."
+        text: "The CLI build definition and tracked source contain no hard-coded credentials or debug endpoints; the default command prints help. Local analysis commands run without an account; an API key via environment variable is required only for commands that talk to the CRA Evidence platform."
         applicability: ["all-releases"]
         state: Active
 
   - id: "C02"
-    title: "No known exploitable vulnerabilities at release"
-    objective: "Every CLI build is scanned by Grype; builds with fixable High/Critical CVEs are blocked."
+    title: "Release vulnerability gate"
+    objective: "Every CLI build is scanned by Grype; release and publish builds with fixable High/Critical CVEs are blocked. The gate scopes to findings with an available fix and does not by itself assess exploitability under practical operational conditions."
     group: "vulnerability-mgmt"
     state: Active
     assessment-requirements:
       - id: "cra:no_known_vulns_confirmed"
-        text: "CI runs Grype against the final image on every build; the pipeline fails closed on High or Critical findings that have a fix available (severity-cutoff high, fail-build, only-fixed)."
+        text: "CI runs Grype against the final image on every build via a version-pinned, checksum-verified gate script; release and publish paths fail closed on High or Critical findings that have a fix available, and pull-request scans without registry credentials run informationally."
         applicability: ["all-releases"]
         state: Active
       - id: "cra:security_updates_ensured"
-        text: "Security patches are published within the SLA defined in vulnerability-policy.yaml for every supported release line."
+        text: "Security patches are published within the SLA defined in vulnerability-policy.yaml for the supported release line (the latest minor)."
         applicability: ["all-releases"]
         state: Active
 
   - id: "C03"
     title: "Credential protection"
-    objective: "The CLI never logs the API key; the mask_api_key helper redacts all surfaces."
+    objective: "The CLI never logs the API key; the mask_api_key helper redacts the paths that would otherwise print it."
     group: "access-control"
     state: Active
     assessment-requirements:
       - id: "cra:credential_protection_confirmed"
-        text: "`client.py:mask_api_key` is used everywhere the key could be printed (auth error paths, verbose mode, CI logs)."
+        text: "`client.py:mask_api_key` redacts the key on the auth-error output paths that embed it; no other tracked code path prints the raw key."
         applicability: ["all-releases"]
         state: Active
       - id: "cra:access_control_confirmed"
-        text: "All upload endpoints require a valid API key scoped to `document:write` or above; no anonymous uploads are accepted."
+        text: "Upload commands authenticate every request through the Authorization header, using the API key or a short-lived access token obtained via OIDC exchange; the CLI performs no anonymous uploads."
         applicability: ["all-releases"]
         state: Active
 
@@ -80,7 +80,7 @@ controls:
     state: Active
     assessment-requirements:
       - id: "cra:secure_updates_confirmed"
-        text: "Docker images are signed with cosign (keyless / Sigstore) and PyPI wheels carry PEP 740 Sigstore attestations; every published artifact is addressable by an immutable digest."
+        text: "Docker images are signed with cosign (keyless / Sigstore) and PyPI wheels carry PEP 740 Sigstore attestations; container images and PyPI distributions are addressable by immutable digest, and mutable GitHub release assets are covered by Sigstore bundle verification during reconciliation."
         applicability: ["all-releases"]
         state: Active
 

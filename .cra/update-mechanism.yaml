@@ -1,4 +1,4 @@
-# CRA Evidence CLI - Update Mechanism Documentation (CRA Art. 13(13))
+# CRA Evidence CLI - Update Mechanism Documentation
 # Validate: cue vet -c -d '#GuidanceCatalog' github.com/gemaraproj/gemara@v1.0.0 .cra/update-mechanism.yaml
 
 title: "CRA Evidence CLI - Update Mechanism Documentation"
@@ -8,10 +8,10 @@ metadata:
   type: GuidanceCatalog
   gemara-version: "1.0.0"
   description: |
-    Documents how customers receive and apply updates for the CRA Evidence CLI
-    (the `craevidence` Python package and the `craevidence/cli` Docker image).
-    Satisfies CRA Art. 13(13) - update mechanism documentation.
-  version: "1.0.0"
+    Documents the CLI's release, update-distribution and verification process:
+    how customers receive, verify and apply updates for the CRA Evidence CLI
+    (the `craevidence` Python package and the `craevidence/cli` container image).
+  version: "1.1.0"
   author:
     id: cra-evidence-engineering
     name: "CRA Evidence Engineering"
@@ -35,33 +35,44 @@ guidelines:
   - id: "UPD.GL01"
     title: "Releases published through authenticated channels"
     objective: |
-      Every CLI release MUST be published simultaneously to PyPI (`craevidence`)
-      and Docker Hub (`craevidence/cli`). Both channels authenticate via HTTPS and
-      project-owned credentials.
+      Every CLI release MUST be published to PyPI (`craevidence`) and to the
+      GHCR (`ghcr.io/craevidence/craevidence`), Docker Hub and Quay
+      (`craevidence/cli`) container registries. All
+      four channels are required for a successful release run and authenticate
+      via HTTPS with project-owned credentials.
     group: "distribution"
     state: Active
     recommendations:
-      - "Consume the CLI from PyPI or Docker Hub only; do not mirror through untrusted registries."
-      - "Pin immutable tags for reproducibility (`craevidence/cli:<semver>@sha256:...`), not the `latest` tag."
+      - "Consume the CLI from the official channels only (PyPI, GHCR, Docker Hub, Quay); do not mirror through third-party registries."
+      - "Pin image digests for reproducibility (`craevidence/cli:<semver>@sha256:...`); tags alone are mutable."
 
   - id: "UPD.GL02"
     title: "Release artifacts are signed and addressable by digest"
     objective: |
-      Each release MUST be cryptographically signed. Docker images MUST be signed
-      with cosign (keyless / Sigstore OIDC); PyPI wheels MUST carry PEP 740 Sigstore
-      attestations. Every published artifact is immutable and addressable by digest.
+      Distribution artifacts MUST be cryptographically signed: container images
+      with cosign (keyless / Sigstore OIDC), PyPI wheels with PEP 740 Sigstore
+      attestations, and release-attached SBOMs via reconciliation bundles
+      (releases up to v3.8.1 predate SBOM signing). Container images and PyPI distributions are
+      addressable by immutable digest; GitHub release assets are mutable and
+      are therefore verified against their Sigstore bundles.
     group: "verification"
     state: Active
     recommendations:
-      - "Verify `cosign verify craevidence/cli:<tag>` in CI before first use."
+      - >-
+        Verify images by digest with the release workflow identity before first
+        use: cosign verify
+        --certificate-identity
+        "https://github.com/craevidence/cli/.github/workflows/ci.yml@refs/tags/v<version>"
+        --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+        craevidence/cli@sha256:<digest>
       - "Pin `craevidence==<version>` with a hash in `requirements.txt` or `pyproject.toml`."
 
   - id: "UPD.GL03"
     title: "Security updates communicated through a dedicated feed"
     objective: |
-      Security-relevant releases MUST trigger a GitHub Security Advisory on the
-      `craevidence/cli` repository within 24 hours of publication,
-      and be announced on the CRA Evidence status page.
+      Security-relevant releases MUST be accompanied by a GitHub Security
+      Advisory on the `craevidence/cli` repository, published together with
+      the fixed release.
     group: "notification"
     state: Active
     recommendations:
@@ -72,22 +83,24 @@ guidelines:
     title: "Semantic versioning discipline"
     objective: |
       CLI releases MUST follow SemVer. Breaking CLI flag or output changes
-      only occur on major version bumps; security patches are always published
-      as patch releases on every supported minor line.
+      only occur on major version bumps. Only the latest minor release line is
+      supported; security fixes are published as patch releases on that line,
+      and older lines receive no fixes.
     group: "notification"
     state: Active
     recommendations:
-      - "Track the latest patch release of the minor line you have adopted."
+      - "Track the latest release and upgrade promptly when a new minor line supersedes yours."
       - "Read the release notes before adopting a new minor version."
 
   - id: "UPD.GL05"
     title: "Downgrade and rollback are supported"
     objective: |
-      Customers MUST be able to roll back to the previous version at any time
-      by pinning to a specific tag. No release deliberately breaks older SBOM
-      or VEX file formats previously accepted by CRA Evidence.
+      Customers MUST be able to roll back to a previous version by pinning its
+      digest (or a version pin on PyPI) while that version remains published. Releases aim not to break SBOM or VEX file
+      formats previously accepted by CRA Evidence; a format regression is
+      treated as a bug.
     group: "rollback"
     state: Active
     recommendations:
-      - "Keep the last known-good tag in your CI configuration alongside the current tag."
+      - "Keep the last known-good digest in your CI configuration alongside the current one."
       - "Report regressions through the CVD policy channel if a rollback is required."

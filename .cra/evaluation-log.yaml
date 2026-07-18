@@ -13,9 +13,9 @@ metadata:
   id: "cra-evidence-cli-evaluation-log"
   type: EvaluationLog
   gemara-version: "1.0.0"
-  description: "Evaluation of the CRA Evidence CLI product against its Control Catalog for release 3.4.4."
-  version: "1.0.0"
-  date: "2026-06-14T00:00:00Z"
+  description: "Evaluation of the CRA Evidence CLI product against its Control Catalog for release 3.8.1."
+  version: "2.0.0"
+  date: "2026-07-18T00:00:00Z"
   author:
     id: cra-evidence-security
     name: "CRA Evidence Security"
@@ -23,14 +23,14 @@ metadata:
   mapping-references:
     - id: "cra-evidence-cli-cc"
       title: "CRA Evidence CLI Control Catalog"
-      version: "1.0.0"
+      version: "1.1.0"
       description: "The product's internal ControlCatalog referenced by each control evaluation."
 
 target:
   id: "cra-evidence-cli"
   name: "CRA Evidence CLI"
   type: Software
-  version: "3.4.4"
+  version: "3.8.1"
   environment: "release"
 
 result: "Needs Review"
@@ -38,7 +38,7 @@ result: "Needs Review"
 evaluations:
   - name: "Ship secure by default"
     result: Passed
-    message: "Dockerfile review: distroless non-root runtime; default entrypoint prints help; no credentials baked into any layer."
+    message: "Dockerfile and source review: distroless non-root runtime; default entrypoint prints help; the build definition introduces no credentials; local analysis commands run without an account."
     control:
       reference-id: "cra-evidence-cli-cc"
       entry-id: "C01"
@@ -48,19 +48,21 @@ evaluations:
           entry-id: "cra:secure_by_default_confirmed"
         description: "Inspect the build for hard-coded credentials and confirm the default command requires no secrets."
         result: Passed
-        message: "Runtime stage runs as USER 1001 on a distroless base; ENTRYPOINT is python -m cra_evidence_cli.cli with CMD [\"--help\"]; no API keys or ENV secrets present in any layer."
+        message: "Runtime stage runs as USER 1001 on a distroless base; ENTRYPOINT is python -m cra_evidence_cli.cli with CMD [\"--help\"]; the Dockerfile copies no secrets and sets no credential environment variables in any stage. This reviews the build definition and tracked source, not the assembled layer blobs. The CLI whitelists its local analysis command families to run without an API key; only platform commands require one."
         applicability: ["all-releases"]
         steps:
           - "Review Dockerfile build and runtime stages, USER directive, ENTRYPOINT and CMD."
           - "Scan tracked source for hard-coded credential patterns (cra_key_*, AKIA*, sk_live_, BEGIN keys) - none found."
-        steps-executed: 2
-        start: "2026-06-14T10:00:00Z"
-        end: "2026-06-14T10:08:00Z"
+          - "Review the no-key command whitelist in cra_evidence_cli/cli.py."
+          - "Search tracked source for debug or development endpoints and flags - none found."
+        steps-executed: 4
+        start: "2026-07-18T09:00:00Z"
+        end: "2026-07-18T09:10:00Z"
         confidence-level: High
 
-  - name: "No known exploitable vulnerabilities at release"
-    result: Passed
-    message: "CI enforces a fail-closed Grype gate on every build, and a patch SLA is documented for every supported release line."
+  - name: "Release vulnerability gate"
+    result: "Needs Review"
+    message: "CI runs a pinned Grype gate on every build; release and publish paths fail closed on fixable High/Critical findings, and a patch SLA is documented for the supported release line. This evaluates gate operation only: unfixed findings can be present in the image, and exploitability under practical operational conditions is not individually assessed here."
     control:
       reference-id: "cra-evidence-cli-cc"
       entry-id: "C02"
@@ -68,28 +70,29 @@ evaluations:
       - requirement:
           reference-id: "cra-evidence-cli-cc"
           entry-id: "cra:no_known_vulns_confirmed"
-        description: "Confirm CI runs Grype against the image and fails closed on fixable High/Critical findings."
-        result: Passed
-        message: "ci.yml build-and-sbom runs anchore/scan-action (Grype) with severity-cutoff: high, fail-build: true, only-fixed: true; the build fails closed on High/Critical findings that have a fix available."
+        description: "Confirm CI runs Grype against the image and fails closed on fixable High/Critical findings on release and publish paths."
+        result: "Needs Review"
+        message: "ci.yml invokes scripts/check-image-gate.sh, which downloads a version-pinned, checksum-verified Grype binary and runs it with --fail-on high --only-fixed against the built image. Release and publish paths block on findings; pull-request runs without registry credentials are informational. The gate operates as documented, but its scope means findings without an available fix are not blocked; the no-known-exploitable-vulnerabilities attestation therefore stays at Needs Review until an exploitability assessment of the remaining findings is recorded, per the review rule in the header."
         applicability: ["all-releases"]
         steps:
-          - "Review the Grype scan step in .github/workflows/ci.yml (severity-cutoff, fail-build, only-fixed)."
+          - "Review the image-gate step in .github/workflows/ci.yml and scripts/check-image-gate.sh (pinned version, checksum verification, --fail-on high --only-fixed)."
         steps-executed: 1
-        start: "2026-06-14T10:10:00Z"
-        end: "2026-06-14T10:14:00Z"
+        start: "2026-07-18T09:12:00Z"
+        end: "2026-07-18T09:18:00Z"
         confidence-level: High
       - requirement:
           reference-id: "cra-evidence-cli-cc"
           entry-id: "cra:security_updates_ensured"
         description: "Confirm a patch SLA policy is declared."
         result: Passed
-        message: "vulnerability-policy.yaml declares Critical 7-day / High 30-day / Medium 90-day patch SLAs; the CI gate blocks builds on fixable High/Critical findings, while SLA timelines are tracked as a documented manual process."
+        message: "vulnerability-policy.yaml declares Critical 7-day / High 30-day / Medium 90-day patch SLAs for the supported release line (the latest minor, per docs/releasing.md); the CI gate blocks release builds on fixable High/Critical findings, while SLA timelines are tracked as a documented manual process."
         applicability: ["all-releases"]
         steps:
           - "Review .cra/vulnerability-policy.yaml SLA timelines and enforcement methods."
-        steps-executed: 1
-        start: "2026-06-14T10:14:00Z"
-        end: "2026-06-14T10:16:00Z"
+          - "Confirm the support policy in docs/releasing.md (latest minor line only)."
+        steps-executed: 2
+        start: "2026-07-18T09:18:00Z"
+        end: "2026-07-18T09:22:00Z"
         confidence-level: High
 
   - name: "Credentials are masked in logs"
@@ -104,19 +107,33 @@ evaluations:
           entry-id: "cra:credential_protection_confirmed"
         description: "Confirm every output path that includes the API key routes through mask_api_key()."
         result: Passed
-        message: "mask_api_key() is defined in client.py; the 3 sites that embed the key in auth-error output (client.py:mask_api_key call sites in the 401/403 handler) all call it; no other tracked path prints the raw key."
+        message: "mask_api_key() is defined in client.py; the 3 sites that embed the key in auth-error output (the 401/403 handler in client.py) all call it; no other tracked path prints the raw key."
         applicability: ["all-releases"]
         steps:
           - "Grep mask_api_key across cra_evidence_cli/ and inspect each call site."
           - "Confirm no other path interpolates config.api_key without masking."
         steps-executed: 2
-        start: "2026-06-14T10:18:00Z"
-        end: "2026-06-14T10:24:00Z"
+        start: "2026-07-18T09:24:00Z"
+        end: "2026-07-18T09:30:00Z"
+        confidence-level: High
+      - requirement:
+          reference-id: "cra-evidence-cli-cc"
+          entry-id: "cra:access_control_confirmed"
+        description: "Confirm upload commands authenticate every request and perform no anonymous uploads."
+        result: Passed
+        message: "client.py builds every request through _get_headers(), which sets the Authorization header from the configured API key or, in OIDC mode, from the exchanged short-lived access token, and raises an authentication error when neither is available; no upload path bypasses this header construction."
+        applicability: ["all-releases"]
+        steps:
+          - "Review _get_headers() in cra_evidence_cli/client.py for both API-key and OIDC modes."
+          - "Confirm all upload request paths route through the shared header construction and fail without credentials."
+        steps-executed: 2
+        start: "2026-07-18T09:30:00Z"
+        end: "2026-07-18T09:34:00Z"
         confidence-level: High
 
   - name: "Signed release artifacts"
-    result: "Not Run"
-    message: "Release signing (cosign keyless image signing + PEP 740 PyPI attestations) is implemented in ci.yml but has not yet executed; no signed 3.4.4 release has been published."
+    result: Passed
+    message: "The v3.8.1 release published cosign-signed container images and PyPI artifacts with PEP 740 Sigstore attestations; earlier images on Docker Hub and Quay (3.6.0, 3.6.1, 3.7.0) were retro-signed and verified."
     control:
       reference-id: "cra-evidence-cli-cc"
       entry-id: "C04"
@@ -124,16 +141,18 @@ evaluations:
       - requirement:
           reference-id: "cra-evidence-cli-cc"
           entry-id: "cra:secure_updates_confirmed"
-        description: "Verify that each release artifact is signed and addressable by an immutable digest."
-        result: "Not Run"
-        message: "The signing mechanism exists in the release workflow but no signed release has run yet. To be evaluated after the first signed 3.4.4 release publishes. Must NOT auto-confirm until then."
+        description: "Verify that each distribution artifact (container images, wheel, sdist) is signed and addressable by an immutable digest. SBOM report files attached to the GitHub release are informational assets outside this requirement and are not signed."
+        result: Passed
+        message: "The GitHub v3.8.1 release carries Sigstore bundles and publish attestations for the wheel and sdist, and PyPI serves 3.8.1 with attestations; container signing runs as a blocking, approval-gated step in the release workflow. The retro-signing of 3.6.0-3.7.0 is documented in docs/releasing.md. The SBOM JSON files attached to the GitHub release are unsigned informational assets and are not covered by this requirement."
         applicability: ["all-releases"]
         steps:
-          - "After the first signed release: cosign verify craevidence/cli:3.4.4 and confirm the PyPI project page shows PEP 740 attestations."
-        steps-executed: 0
-        start: "2026-06-14T10:26:00Z"
-        end: "2026-06-14T10:26:00Z"
-        confidence-level: Low
+          - "Inspect the v3.8.1 GitHub release assets for Sigstore bundles and attestations."
+          - "Confirm PyPI shows 3.8.1 with attestations."
+          - "Review the cosign signing and verification steps in .github/workflows/ci.yml."
+        steps-executed: 3
+        start: "2026-07-18T09:32:00Z"
+        end: "2026-07-18T09:40:00Z"
+        confidence-level: High
 
   - name: "Vulnerability information sharing"
     result: Passed
@@ -147,12 +166,12 @@ evaluations:
           entry-id: "cra:vulnerability_info_sharing_confirmed"
         description: "Confirm the CVD policy defines the disclosure channel, acknowledgement SLA, and embargo policy."
         result: Passed
-        message: "cvd-policy.yaml publishes the channel (security@craevidence.com), a 3-business-day acknowledgement SLA, a 10-business-day triage SLA, and a default 90-day embargo, consistent with the live https://craevidence.com/.well-known/security.txt."
+        message: "cvd-policy.yaml publishes the channel (security@craevidence.com), a 3-business-day acknowledgement SLA, a 10-business-day triage SLA, and a default 90-day embargo; the disclosure channel matches the contact in the published security.txt."
         applicability: ["all-releases"]
         steps:
           - "Review .cra/cvd-policy.yaml contacts, SLAs and embargo."
           - "Confirm the published security.txt contact matches the policy."
         steps-executed: 2
-        start: "2026-06-14T10:28:00Z"
-        end: "2026-06-14T10:33:00Z"
+        start: "2026-07-18T09:42:00Z"
+        end: "2026-07-18T09:48:00Z"
         confidence-level: High

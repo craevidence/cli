@@ -518,7 +518,8 @@ when the signal is unclear.
 - **exit 25** - a mandatory requirement (Part I(1) or any Part II duty) is absent,
   marked not-applicable, or applicable with no implementation recorded.
 - **exit 26** - a Part I(2) requirement is marked not-applicable with no
-  justification (CRA Article 13(4) requires a clear justification).
+  justification (the CRA requires a clear justification in the technical
+  documentation for every requirement treated as not applicable).
 
 Two optional committed files tune the gate, both auto-discovered in `.cra/`:
 

@@ -105,8 +105,12 @@ a glance:
    GitHub release assets, and the wheel hash equals the checksum pinned in
    `gitlab-ci-component.yml`.
 3. The GitHub release carries `sbom-X.Y.Z-linux-amd64.cdx.json` and
-   `sbom-X.Y.Z-linux-arm64.cdx.json`, each with a `.cosign.bundle` signature
-   that `cosign verify-blob` accepts under one of the two exact identities:
+   `sbom-X.Y.Z-linux-arm64.cdx.json`. Release and resume runs invoke
+   `scripts/reconcile_release_sboms.sh` during the run, attaching a
+   `.cosign.bundle` signature per SBOM that `cosign verify-blob` accepts
+   under one of the two exact identities (releases published before this
+   behavior, up to v3.8.1, carry unsigned SBOMs until reconciliation is
+   re-run against them):
    `.../ci.yml@refs/tags/vX.Y.Z` when the original release run signed it, or
    `.../ci.yml@refs/heads/main` when a resume run created or replaced it.
    Distribution Sigstore bundles follow the same two-identity rule.
@@ -135,9 +139,11 @@ canonical. A digest reused from the mutable GHCR version tag must already
 carry a signature under the exact release tag identity before it is copied or
 signed anywhere else. A distribution taken from a mutable release asset must
 verify against its checkpointed Sigstore bundle under an accepted identity
-before it is published. SBOM assets are kept only when they verify against
-their signed bundles; an SBOM without a complete signed pair is replaced by a
-freshly generated, freshly signed document, and one that fails verification
+before it is published. During reconciliation (`scripts/reconcile_release_sboms.sh`, invoked by
+release and resume runs), SBOM assets are kept only when they verify
+against their signed bundles; an SBOM without
+a complete signed pair is replaced by a freshly generated, freshly signed
+document, and one that fails verification
 stops the run. Building anything new on a resume requires the GitHub release
 to be immutable, which the current publish-then-attach lifecycle does not
 produce, so in practice a resume never rebuilds. The run then performs only

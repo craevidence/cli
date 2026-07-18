@@ -18,7 +18,7 @@ The CLI has two modes:
 This page covers the public command basics. The full reference lives in
 [docs/](https://github.com/craevidence/cli/blob/main/docs/README.md).
 Registered CRA Evidence users can also sign in to view the command
-documentation at https://docs.craevidence.com/cli.
+documentation at https://docs.craevidence.com/cli-reference.
 
 The local checks are review aids and CI gates. They are not an audit, and
 exit 0 does not prove compliance.

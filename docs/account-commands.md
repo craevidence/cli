@@ -515,37 +515,37 @@ are meant to be stored as document evidence only.
 
 Supported `--type` values:
 
-| Type | CRA Requirement |
-|------|----------------|
-| `risk_assessment` | Art. 10(2) |
-| `eu_declaration_of_conformity` | Art. 28 |
-| `technical_documentation` | Annex VII |
-| `harmonised_standards` | Annex VII §5 - **mandatory** |
-| `update_mechanism_documentation` | Annex VII §2b - **mandatory** |
-| `uii` | Annex II - **mandatory** (renamed from `security_datasheet` to match CRA Annex II terminology) |
-| `supplier_due_diligence` | Art. 13(5) - required before `third_party_due_diligence_confirmed` |
-| `vulnerability_policy` | Art. 14 |
-| `coordinated_disclosure_policy` | Art. 14 |
-| `user_manual` | Annex II |
-| `test_report` | Conformity assessment |
-| `third_party_audit` | Conformity assessment (Module B/H) |
-| `security_advisory` | Vulnerability handling |
-| `secure_development_policy` | Annex I §1(b) - SSDLC evidence |
-| `penetration_test_report` | Conformity assessment |
-| `architecture_diagram` | Annex I §1 - security architecture |
-| `threat_model` | Annex I §1 - threat modelling |
-| `conformity_certificate` | Annex IV - notified body output |
-| `support_period_justification` | Art. 13(8) - declared support period rationale |
+| Type | Purpose |
+|------|---------|
+| `risk_assessment` | Cybersecurity risk assessment for the product |
+| `eu_declaration_of_conformity` | EU Declaration of Conformity |
+| `technical_documentation` | Technical documentation |
+| `harmonised_standards` | List of harmonised standards applied - required evidence area; structured product or version data can satisfy it |
+| `update_mechanism_documentation` | Secure update distribution documentation - required evidence area; a version document or an approved product template can satisfy it |
+| `uii` | User Information and Instructions - required evidence area; a published UII wizard record or an uploaded document can satisfy it (renamed from `security_datasheet`) |
+| `supplier_due_diligence` | Third-party component due diligence - the area becomes applicable when the version has required-SBOM coverage or a confirmed supplier link; it is satisfied by confirming due diligence for the version, with this document type as supporting evidence |
+| `vulnerability_policy` | Vulnerability handling policy |
+| `coordinated_disclosure_policy` | Coordinated vulnerability disclosure policy |
+| `user_manual` | User manual |
+| `test_report` | Security test report |
+| `third_party_audit` | Third-party conformity assessment report |
+| `security_advisory` | Security advisory |
+| `secure_development_policy` | Secure development lifecycle evidence |
+| `penetration_test_report` | Penetration test report |
+| `architecture_diagram` | System architecture description |
+| `threat_model` | Threat model |
+| `conformity_certificate` | Notified body assessment certificate |
+| `support_period_justification` | Declared support period rationale |
 | `other` | Catch-all for evidence not listed above |
 
-> **Note:** `uii`, `harmonised_standards`, `update_mechanism_documentation`, and `supplier_due_diligence` are required to reach `cra_status: ready`.
+> **Note:** reaching `cra_status: ready` requires evidence in the `uii`, `harmonised_standards`, and `update_mechanism_documentation` areas, plus confirmed third-party due diligence when the version has required-SBOM coverage or a confirmed supplier link. Each area accepts either an uploaded document or the structured alternative described above; the server response lists whatever is still missing.
 >
 > **Removed in v3.3.1**: `compliance_certificate`, `integration_guide`, `deployment_guide`, `api_documentation`, `release_notes`, and `patch_notes` are not supported document types. Use `conformity_certificate` for assessment certificates and `other` for general supporting documentation.
 
 ## `upload-diagram`
 
 Upload a Mermaid architecture diagram as `architecture_diagram` technical
-documentation (CRA Annex II §1). When `mmdc` (mermaid-cli) is on PATH the
+documentation. When `mmdc` (mermaid-cli) is on PATH the
 `.mmd` is rendered to PNG before upload; otherwise the raw source is
 uploaded with a warning.
 

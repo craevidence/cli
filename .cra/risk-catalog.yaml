@@ -1,4 +1,4 @@
-# CRA Evidence CLI - Risk Catalog (CRA Art. 13(2))
+# CRA Evidence CLI - Risk Catalog
 # Validate: cue vet -c -d '#RiskCatalog' github.com/gemaraproj/gemara@v1.0.0 .cra/risk-catalog.yaml
 
 title: "CRA Evidence CLI - Risk Catalog"
@@ -6,8 +6,8 @@ metadata:
   id: "cra-evidence-cli-risk-catalog"
   type: RiskCatalog
   gemara-version: "1.0.0"
-  description: "Risks for the CRA Evidence CLI - a CI/CD tool that uploads SBOMs, HBOMs, VEX and compliance documents to the CRA Evidence platform."
-  version: "1.0.0"
+  description: "Risks for the CRA Evidence CLI - a CI/CD tool that uploads SBOMs, HBOMs, VEX, SARIF, attestations and compliance documents to the CRA Evidence platform."
+  version: "1.1.0"
   author:
     id: cra-evidence-security
     name: "CRA Evidence Security"
@@ -48,7 +48,7 @@ risks:
     description: "Syft or Grype binary tampered with between download and invocation (e.g. mutable Docker tag, malicious mirror)."
     group: "supply-chain"
     severity: "Critical"
-    impact: "Fabricated SBOMs uploaded as compliance evidence; CRA Art. 13(16) breach."
+    impact: "Fabricated SBOMs uploaded as compliance evidence; inaccurate evidence in the customer's audit trail."
 
   - id: "R03"
     title: "Unvalidated compliance-as-code YAML uploaded as compliance artifact"
@@ -62,7 +62,7 @@ risks:
     description: "Published `craevidence/cli` image compromised at the registry or during push; customers pull a backdoored CLI."
     group: "supply-chain"
     severity: "Critical"
-    impact: "API keys exfiltrated from thousands of customer CI pipelines; cross-tenant damage."
+    impact: "API keys exfiltrated from customer CI pipelines; cross-tenant damage."
     owner:
       responsible: [{name: "CLI Maintainer"}]
       accountable: [{name: "CTO"}]

@@ -1,4 +1,4 @@
-# CRA Evidence CLI - Coordinated Vulnerability Disclosure Policy (CRA Art. 13(6))
+# CRA Evidence CLI - Coordinated Vulnerability Disclosure Policy
 # Validate: cue vet -c -d '#Policy' github.com/gemaraproj/gemara@v1.0.0 .cra/cvd-policy.yaml
 
 title: "CRA Evidence CLI - Coordinated Vulnerability Disclosure Policy"
@@ -7,10 +7,10 @@ metadata:
   type: Policy
   gemara-version: "1.0.0"
   description: |
-    Defines how security researchers can report vulnerabilities in the CRA Evidence CLI
-    (the `craevidence/cli` Docker image and `craevidence` Python package) and how
-    CRA Evidence will coordinate disclosure. Implements CRA Art. 13(6).
-  version: "1.0.0"
+    Documents the coordinated vulnerability disclosure policy for the CRA Evidence CLI
+    (the `craevidence/cli` Docker image and `craevidence` Python package): how security
+    researchers can report vulnerabilities and how CRA Evidence coordinates disclosure.
+  version: "1.1.0"
   author:
     id: cra-evidence-security
     name: "CRA Evidence Security"
@@ -22,7 +22,7 @@ contacts:
       affiliation: "CRA Evidence"
       email: "security@craevidence.com"
   accountable:
-    - name: "CISO"
+    - name: "Security Lead"
       affiliation: "CRA Evidence"
   informed:
     - name: "Engineering Lead"
@@ -49,6 +49,12 @@ implementation-plan:
     Contact and disclosure policy: https://craevidence.com/.well-known/security.txt.
     Acknowledgement within 3 business days. Triage decision within 10 business days.
     Public advisory coordinated with the reporter; default embargo 90 days.
+    Regulatory: on becoming aware of an actively exploited vulnerability in the CLI,
+    notify the designated CSIRT coordinator and ENISA simultaneously through the
+    single reporting platform, without undue delay, and submit the early warning
+    within 24 hours. This duty is triggered by awareness of active exploitation,
+    independently of the SLAs above; it attaches to the product as made available
+    on the EU market, while this disclosure policy itself applies globally.
 
 adherence:
   evaluation-methods:
@@ -58,17 +64,19 @@ adherence:
       description: "Monthly review of the security@ inbox and open disclosure tickets against the 3-day ack SLA."
     - id: "EVAL-02"
       type: "Behavioral"
-      mode: "Automated"
-      description: "Weekly automated mailbox check for unattended security@ messages."
+      mode: "Manual"
+      description: "Weekly review for unattended security@ messages."
 
   enforcement-methods:
     - id: "ENF-01"
       type: "Remediation"
       mode: "Manual"
-      description: "SLA breach (>3 business days without ack) escalates to CISO."
+      description: "SLA breach (>3 business days without ack) escalates to the Security Lead."
 
   non-compliance: |
     Failure to meet the 3-day acknowledgement or 10-day triage SLA triggers:
-    1. CISO notification within 24h of breach detection.
+    1. Security Lead notification within 24h of breach detection.
     2. Post-mortem within 5 working days.
-    3. Review of Art. 14(1) notification obligations if the vulnerability is actively exploited.
+    3. Confirmation that the regulatory notification duty described in
+       vulnerability-policy.yaml has been assessed where active exploitation
+       is suspected.

@@ -430,10 +430,14 @@ def stop_ship(
     reason: str,
 ) -> None:
     """
-    Mark a product for stop-ship due to significant risk.
+    Mark a product for stop-ship.
 
-    Per CRA Article 20(3), distributors must stop distribution
-    if they believe a product presents a significant risk.
+    Per CRA Article 20(3), a distributor must not make a product available
+    while there is reason to believe that the product or the processes put
+    in place by its manufacturer are not in conformity with the essential
+    cybersecurity requirements. Where the product poses a significant
+    cybersecurity risk, the distributor must also inform the manufacturer
+    and the market surveillance authorities without undue delay.
 
     Note: To notify authorities or manufacturers, use the web interface.
     """
@@ -454,8 +458,15 @@ def stop_ship(
         err_console.print("[red bold]Product marked for stop-ship[/red bold]")
         err_console.print(f"[red]Reason: {reason}[/red]")
         err_console.print(
-            "[red]Per CRA Article 20(3), this product must not be made available "
-            "on the EU market until the issue is resolved.[/red]"
+            "[red]Per CRA Article 20(3), do not make this product available on "
+            "the EU market while there is reason to believe that the product or "
+            "its manufacturer's processes are not in conformity with the "
+            "essential cybersecurity requirements.[/red]"
+        )
+        err_console.print(
+            "[red]Because a significant cybersecurity risk was flagged, also "
+            "inform the manufacturer and the market surveillance authorities "
+            "without undue delay (Article 20(3)).[/red]"
         )
 
         format_verification_output(data, output_format)

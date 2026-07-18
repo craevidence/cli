@@ -31,6 +31,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   crane binary through a fail-closed classifier, the cosign version is pinned
   explicitly, and the post-publish PyPI check verifies exactly the two
   released distributions by name and hash.
+- Conformity route labels in `setup-profile show` now use the official
+  procedure names: Internal Control (Module A), EU-Type Examination followed
+  by Conformity to EU-Type based on Internal Production Control (Modules B
+  and C), Full Quality Assurance (Module H), and European Cybersecurity
+  Certification Scheme, all under Article 32.
+- The `distributor stop-ship` output states the two distinct duties
+  separately: withhold the product on reason to believe non-conformity, and
+  additionally inform the manufacturer and market surveillance authorities
+  when the product poses a significant cybersecurity risk.
+- The `.cra/` evidence pack describes duties in plain language, aligns the
+  distribution channels with the release policy (PyPI, GHCR, Docker Hub,
+  Quay), documents the free local command set accurately, states the
+  single-supported-line patch policy, couples security advisories to the
+  fixed release, and re-evaluates the product against release 3.8.1,
+  including the signed 3.8.1 artifacts.
+- Documentation: the upload type table describes each document type by
+  purpose, and the hosted documentation links point to the correct signed-in
+  reference page.
+
+### Fixed
+
+- References to Regulation (EU) 2024/2847 in command output, docstrings,
+  and documentation now cite the final numbering of the provision or state
+  the duty in plain language. A test keeps citations out of the `.cra/`
+  evidence pack and restricts them to files whose function is requirement
+  mapping.
 
 ### Removed
 
