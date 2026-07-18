@@ -1,0 +1,294 @@
+name: Finalize a released version (recovery)
+
+# Approval-gated finalization for a version whose artifacts are already
+# published. It validates the published state, moves only the three latest
+# container tags, and verifies the resulting digests. It republishes nothing.
+#
+# Dispatch with the exact expected values from the completed release; the run
+# fails closed unless every published channel matches.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Released version, e.g. 3.8.1"
+        required: true
+      expected_digest:
+        description: "Canonical multi-arch image digest, sha256:..."
+        required: true
+      wheel_sha256:
+        description: "Expected PyPI wheel sha256"
+        required: true
+      sdist_sha256:
+        description: "Expected PyPI sdist sha256"
+        required: true
+
+permissions:
+  contents: read
+
+# Share the release concurrency group so a normal release and a recovery run
+# cannot interleave their latest-tag writes. GitHub concurrency groups apply
+# across workflows in the same repository.
+concurrency:
+  group: release-publish
+  cancel-in-progress: false
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: release-images
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ inputs.version }}
+      DIGEST: ${{ inputs.expected_digest }}
+      WHEEL_SHA256: ${{ inputs.wheel_sha256 }}
+      SDIST_SHA256: ${{ inputs.sdist_sha256 }}
+      DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+      GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/craevidence
+      QUAY_IMAGE: quay.io/craevidence/cli
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Validate inputs
+        run: |
+          set -euo pipefail
+          printf '%s' "${DIGEST}" | grep -qE '^sha256:[0-9a-f]{64}$' || { echo "::error::expected_digest must be sha256:<64 hex>"; exit 1; }
+          printf '%s' "${WHEEL_SHA256}" | grep -qE '^[0-9a-f]{64}$' || { echo "::error::wheel_sha256 must be 64 hex"; exit 1; }
+          printf '%s' "${SDIST_SHA256}" | grep -qE '^[0-9a-f]{64}$' || { echo "::error::sdist_sha256 must be 64 hex"; exit 1; }
+          printf '%s' "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::version must be X.Y.Z"; exit 1; }
+          [ "${DOCKERHUB_IMAGE}" = "craevidence/cli" ] || { echo "::error::DOCKERHUB_IMAGE must be craevidence/cli"; exit 1; }
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          username: craevidence
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Quay.io
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
+        with:
+          registry: quay.io
+          username: craevidence+all
+          password: ${{ secrets.QUAY_TOKEN }}
+
+      - name: Preflight - version tags equal the canonical digest
+        run: |
+          set -euo pipefail
+          for ref in \
+            "${GHCR_IMAGE}:${VERSION}" \
+            "${DOCKERHUB_IMAGE}:${VERSION}" \
+            "${QUAY_IMAGE}:${VERSION}"; do
+            result="$(bash scripts/registry-inspect.sh digest "${ref}")"
+            resolved="${result#FOUND }"
+            if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${DIGEST}" ]; then
+              echo "::error::${ref} resolved to '${result}', expected FOUND ${DIGEST}"
+              exit 1
+            fi
+            echo "ok ${ref} -> ${resolved}"
+          done
+
+      - name: Preflight - signatures verify on every registry
+        run: |
+          set -euo pipefail
+          identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/v${VERSION}"
+          for repo in "${GHCR_IMAGE}" "${DOCKERHUB_IMAGE}" "${QUAY_IMAGE}"; do
+            cosign verify \
+              --certificate-identity "${identity}" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${repo}@${DIGEST}" > /dev/null
+            echo "ok signature ${repo}@${DIGEST}"
+          done
+
+      - name: Preflight - resolve per-platform digests from the canonical index
+        id: platforms
+        run: |
+          set -euo pipefail
+          raw="$(bash scripts/registry-inspect.sh raw "${GHCR_IMAGE}@${DIGEST}")"
+          for arch in amd64 arm64; do
+            d="$(printf '%s' "${raw}" | jq -r --arg a "${arch}" '.manifests[] | select(.platform.os=="linux" and .platform.architecture==$a) | .digest')"
+            printf '%s' "${d}" | grep -qE '^sha256:[0-9a-f]{64}$' || { echo "::error::no linux/${arch} manifest in the index"; exit 1; }
+            echo "${arch}=${d}" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Download the release assets
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/release"
+          mkdir -p "${work}"
+          gh release download "v${VERSION}" --dir "${work}" --clobber \
+            --pattern "craevidence-${VERSION}*" \
+            --pattern "sbom-${VERSION}-linux-*.cdx.json"
+          gh release view "v${VERSION}" --json isDraft,isPrerelease,assets > "${work}/release.json"
+
+      # Verify the Sigstore bundle content (not just its filename) with the
+      # already-installed cosign, so an empty or wrong bundle fails closed.
+      - name: Preflight - Sigstore bundles verify
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/release"
+          identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/v${VERSION}"
+          for name in \
+            "craevidence-${VERSION}-py3-none-any.whl" \
+            "craevidence-${VERSION}.tar.gz"; do
+            cosign verify-blob \
+              --bundle "${work}/${name}.sigstore.json" \
+              --certificate-identity "${identity}" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${work}/${name}" > /dev/null
+            echo "ok sigstore ${name}"
+          done
+
+      - name: Preflight - GitHub release, PyPI, provenance, and SBOM binding
+        env:
+          AMD64_DIGEST: ${{ steps.platforms.outputs.amd64 }}
+          ARM64_DIGEST: ${{ steps.platforms.outputs.arm64 }}
+        run: |
+          set -euo pipefail
+          work="${RUNNER_TEMP}/release"
+          python - "${work}" <<'EOF'
+          import base64
+          import hashlib
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          work = sys.argv[1]
+          version = os.environ["VERSION"]
+          ghcr = os.environ["GHCR_IMAGE"]
+          repo = os.environ["GITHUB_REPOSITORY"]
+          wheel = f"craevidence-{version}-py3-none-any.whl"
+          sdist = f"craevidence-{version}.tar.gz"
+          expected_hash = {wheel: os.environ["WHEEL_SHA256"], sdist: os.environ["SDIST_SHA256"]}
+          platform_digest = {
+              "amd64": os.environ["AMD64_DIGEST"],
+              "arm64": os.environ["ARM64_DIGEST"],
+          }
+
+          def sha256(path):
+              return hashlib.sha256(open(path, "rb").read()).hexdigest()
+
+          def fail(msg):
+              sys.exit(f"preflight failed: {msg}")
+
+          # GitHub release must be published, and carry the distribution, Sigstore,
+          # attestation, and SBOM assets.
+          rel = json.load(open(os.path.join(work, "release.json")))
+          if rel["isDraft"] or rel["isPrerelease"]:
+              fail(f"release v{version} is draft={rel['isDraft']} prerelease={rel['isPrerelease']}")
+          assets = {a["name"] for a in rel["assets"]}
+          required = {
+              wheel, sdist,
+              f"{wheel}.sigstore.json", f"{sdist}.sigstore.json",
+              f"{wheel}.publish.attestation", f"{sdist}.publish.attestation",
+              f"sbom-{version}-linux-amd64.cdx.json",
+              f"sbom-{version}-linux-arm64.cdx.json",
+          }
+          missing = required - assets
+          if missing:
+              fail(f"release is missing assets: {sorted(missing)}")
+
+          # GitHub release distribution bytes must match the expected hashes.
+          for name, want in expected_hash.items():
+              got = sha256(os.path.join(work, name))
+              if got != want:
+                  fail(f"release asset {name} sha256 {got} != {want}")
+
+          # PyPI must serve exactly the two distributions with the same hashes.
+          with urllib.request.urlopen(
+              f"https://pypi.org/pypi/craevidence/{version}/json", timeout=30
+          ) as r:
+              pypi = {u["filename"]: u["digests"]["sha256"] for u in json.load(r)["urls"]}
+          if pypi != expected_hash:
+              fail(f"PyPI files {pypi} != expected {expected_hash}")
+
+          # Each PyPI distribution must carry a Trusted Publishing attestation
+          # bound to this repository/workflow/environment and to the exact
+          # filename and hash.
+          for name, want in expected_hash.items():
+              with urllib.request.urlopen(
+                  f"https://pypi.org/integrity/craevidence/{version}/{name}/provenance",
+                  timeout=30,
+              ) as r:
+                  bundle = json.load(r)["attestation_bundles"][0]
+              pub = bundle["publisher"]
+              if (pub.get("kind"), pub.get("repository"), pub.get("workflow"), pub.get("environment")) != (
+                  "GitHub", repo, "ci.yml", "pypi"
+              ):
+                  fail(f"{name} unexpected publisher {pub}")
+              if not bundle["attestations"]:
+                  fail(f"{name} has no attestation")
+              stmt = json.loads(base64.b64decode(bundle["attestations"][0]["envelope"]["statement"]))
+              if stmt.get("_type") != "https://in-toto.io/Statement/v1":
+                  fail(f"{name} unexpected statement type {stmt.get('_type')}")
+              if stmt.get("predicateType") != "https://docs.pypi.org/attestations/publish/v1":
+                  fail(f"{name} unexpected predicate {stmt.get('predicateType')}")
+              if stmt.get("subject") != [{"name": name, "digest": {"sha256": want}}]:
+                  fail(f"{name} attestation subject mismatch: {stmt.get('subject')}")
+              # The release's own .publish.attestation asset must be one PyPI
+              # actually accepted, not arbitrary bytes under the right name.
+              released = json.load(open(os.path.join(work, f"{name}.publish.attestation")))
+              if released not in bundle["attestations"]:
+                  fail(f"{name}.publish.attestation does not match PyPI provenance")
+
+          # Each SBOM must be a CycloneDX document whose subject is the canonical
+          # image at the matching platform digest.
+          for arch, digest in platform_digest.items():
+              sbom = json.load(open(os.path.join(work, f"sbom-{version}-linux-{arch}.cdx.json")))
+              if sbom.get("bomFormat") != "CycloneDX" or sbom.get("specVersion") != "1.6":
+                  fail(f"{arch} SBOM is not CycloneDX 1.6")
+              bom_version = sbom.get("version")
+              # `type(...) is int` intentionally rejects bool, which subclasses int.
+              if type(bom_version) is not int or bom_version < 1:
+                  fail(f"{arch} SBOM has an invalid version: {bom_version}")
+              components = sbom.get("components")
+              if (
+                  not isinstance(components, list)
+                  or not components
+                  or not all(isinstance(component, dict) for component in components)
+              ):
+                  fail(f"{arch} SBOM has an invalid components list")
+              comp = sbom.get("metadata", {}).get("component", {})
+              if comp.get("name") != ghcr or comp.get("version") != digest:
+                  fail(f"{arch} SBOM subject {comp.get('name')}@{comp.get('version')} != {ghcr}@{digest}")
+
+          print("release, PyPI, provenance, and SBOM binding verified")
+          EOF
+
+      # All checks passed: move only the three latest tags to the verified digest.
+      - name: Move the latest tags to the verified digest
+        run: |
+          set -euo pipefail
+          for repo in "${GHCR_IMAGE}" "${DOCKERHUB_IMAGE}" "${QUAY_IMAGE}"; do
+            docker buildx imagetools create --tag "${repo}:latest" "${repo}@${DIGEST}"
+          done
+
+      - name: Verify every latest tag resolves to the canonical digest
+        run: |
+          set -euo pipefail
+          for repo in "${GHCR_IMAGE}" "${DOCKERHUB_IMAGE}" "${QUAY_IMAGE}"; do
+            result="$(bash scripts/registry-inspect.sh digest "${repo}:latest")"
+            resolved="${result#FOUND }"
+            if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${DIGEST}" ]; then
+              echo "::error::${repo}:latest resolved to '${result}' after promotion, expected FOUND ${DIGEST}"
+              exit 1
+            fi
+            echo "promoted ${repo}:latest -> ${resolved}"
+          done
