@@ -4,7 +4,7 @@
 # Include in your .gitlab-ci.yml:
 #
 #   include:
-#     - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.8.0/gitlab-ci-component.yml'
+#     - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.8.1/gitlab-ci-component.yml'
 #       inputs:
 #         product: my-product
 #         version: $CI_COMMIT_TAG
@@ -176,9 +176,9 @@ spec:
         exit 1
       fi
 
-      CLI_VERSION="3.8.0"
+      CLI_VERSION="3.8.1"
       CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
-      CLI_WHEEL_SHA256="58c0edd758138793d957bca73238b91b36e7abfc0cc8d2914ece2139c389dc33"
+      CLI_WHEEL_SHA256="cf50913e4439e62afb72f920b243ead4ee6030399f8d023e9c3ee68337a8f894"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
       python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"
@@ -332,9 +332,9 @@ cra-evidence-upload:
   script:
     - |
       set -eu
-      CLI_VERSION="3.8.0"
+      CLI_VERSION="3.8.1"
       CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
-      CLI_WHEEL_SHA256="58c0edd758138793d957bca73238b91b36e7abfc0cc8d2914ece2139c389dc33"
+      CLI_WHEEL_SHA256="cf50913e4439e62afb72f920b243ead4ee6030399f8d023e9c3ee68337a8f894"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
       python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"

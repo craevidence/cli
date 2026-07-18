@@ -78,7 +78,7 @@ component:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.8.0/gitlab-ci-component.yml'
+  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.8.1/gitlab-ci-component.yml'
     inputs:
       product: $CI_PROJECT_NAME
       version: $CI_COMMIT_TAG

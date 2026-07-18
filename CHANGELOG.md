@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-07-18
+
+Completes the 3.8.0 release across all distribution channels with a more
+reliable publishing pipeline. Functionally identical to 3.8.0; see that entry
+for the bundled tool and base image updates.
+
+### Fixed
+
+- Reliability of release publishing across the container registries.
+
 ## [3.8.0] - 2026-07-17
 
 ### Added
@@ -195,7 +205,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v3.8.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v3.8.1...HEAD
+[3.8.1]: https://github.com/craevidence/cli/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/craevidence/cli/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/craevidence/cli/compare/v3.6.1...v3.7.0
 [3.6.1]: https://github.com/craevidence/cli/compare/v3.6.0...v3.6.1
