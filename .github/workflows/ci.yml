@@ -340,6 +340,13 @@ jobs:
           username: craevidence+all
           password: ${{ secrets.QUAY_TOKEN }}
 
+      # Digest resolution and cross-registry copies use a pinned crane so the
+      # registry read/copy behaviour is identical on every run.
+      - name: Install crane
+        run: |
+          bash scripts/install-crane.sh "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+
       # Published releases are immutable: when the GHCR version tag already
       # exists (a rerun after a partial failure), its digest is reused and
       # nothing is rebuilt, so a rerun can never replace released bytes. Only
@@ -353,7 +360,7 @@ jobs:
           version="${{ needs.validate-release.outputs.version }}"
           # A non-zero helper exit (unknown state after retries) fails the step
           # under set -e, so a transient registry error never triggers a rebuild.
-          result="$(bash scripts/registry-inspect.sh digest "${repo}:${version}")"
+          result="$(bash scripts/registry-crane.sh digest "${repo}:${version}")"
           case "${result}" in
             "FOUND "*)
               digest="${result#FOUND }"
@@ -361,7 +368,7 @@ jobs:
             NOTFOUND)
               digest="" ;;
             *)
-              echo "::error::unexpected registry-inspect result: ${result}"; exit 1 ;;
+              echo "::error::unexpected registry-crane result: ${result}"; exit 1 ;;
           esac
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
@@ -407,7 +414,7 @@ jobs:
           for dst in \
             "${{ vars.DOCKERHUB_IMAGE }}" \
             "quay.io/craevidence/cli"; do
-            result="$(bash scripts/registry-inspect.sh digest "${dst}:${version}")"
+            result="$(bash scripts/registry-crane.sh digest "${dst}:${version}")"
             case "${result}" in
               "FOUND "*)
                 existing="${result#FOUND }"
@@ -417,9 +424,9 @@ jobs:
                 fi
                 echo "${dst}:${version} already matches the canonical digest" ;;
               NOTFOUND)
-                docker buildx imagetools create --tag "${dst}:${version}" "${src}" ;;
+                crane copy "${src}" "${dst}:${version}" ;;
               *)
-                echo "::error::unexpected registry-inspect result: ${result}"; exit 1 ;;
+                echo "::error::unexpected registry-crane result: ${result}"; exit 1 ;;
             esac
           done
 
@@ -431,7 +438,7 @@ jobs:
             "ghcr.io/${{ github.repository_owner }}/craevidence:${{ needs.validate-release.outputs.version }}" \
             "${{ vars.DOCKERHUB_IMAGE }}:${{ needs.validate-release.outputs.version }}" \
             "quay.io/craevidence/cli:${{ needs.validate-release.outputs.version }}"; do
-            result="$(bash scripts/registry-inspect.sh digest "${ref}")"
+            result="$(bash scripts/registry-crane.sh digest "${ref}")"
             resolved="${result#FOUND }"
             if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${digest}" ]; then
               echo "::error::${ref} resolved to '${result}', expected FOUND ${digest}"
@@ -445,6 +452,8 @@ jobs:
       # exact release identity before latest moves.
       - name: Install cosign
         uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
+        with:
+          cosign-release: "v2.6.3"
 
       - name: Sign the release digest on every registry
         env:
@@ -486,7 +495,7 @@ jobs:
           digest="${{ steps.canonical.outputs.digest }}"
           version="${{ needs.validate-release.outputs.version }}"
           repo="ghcr.io/${{ github.repository_owner }}/craevidence"
-          bash scripts/registry-inspect.sh raw "${repo}@${digest}" > release-index.json
+          bash scripts/registry-crane.sh raw "${repo}@${digest}" > release-index.json
           for arch in amd64 arm64; do
             platform_digest="$(jq -r --arg arch "${arch}" \
               '.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest' \
@@ -736,14 +745,16 @@ jobs:
           mkdir -p sigstore-bundles
           mv dist/*.sigstore.json sigstore-bundles/
 
-      # skip-existing makes a rerun after a post-publish failure idempotent;
-      # the tag-check step above already guards against version mixups.
+      # skip-existing is not set. It is redundant with the PyPI state gate above
+      # (a complete version is recovered from PyPI and a partial version is
+      # refused), and the publish action recommends letting a production
+      # duplicate upload fail loudly so a raced or unexpected re-upload is never
+      # masked.
       - name: Publish to PyPI
         if: steps.pypi-state.outputs.complete != 'true'
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
         with:
           attestations: true
-          skip-existing: true
 
       # On a resume, the canonical distribution bytes come from PyPI, and
       # fresh Sigstore bundles are created for them so missing release assets
@@ -816,46 +827,14 @@ jobs:
             esac
           done
 
-      # Post-publish check: PyPI must now serve exactly the artifacts that
-      # were built and uploaded, with matching hashes.
+      # Post-publish check: PyPI must serve exactly the two expected
+      # distributions with sha256 matching the local build. This checks only the
+      # two distribution filenames, never other dist/ contents, so publish
+      # sidecar files cannot cause a false mismatch.
       - name: Verify PyPI serves the published artifacts
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          python - <<'EOF'
-          import hashlib
-          import json
-          import os
-          import pathlib
-          import sys
-          import time
-          import urllib.error
-          import urllib.request
-
-          version = os.environ["RELEASE_TAG"].removeprefix("v")
-          local = {
-              p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-              for p in pathlib.Path("dist").iterdir()
-          }
-          last_error = "no attempt made"
-          for attempt in range(6):
-              if attempt:
-                  time.sleep(20)
-              try:
-                  with urllib.request.urlopen(
-                      f"https://pypi.org/pypi/craevidence/{version}/json"
-                  ) as response:
-                      data = json.load(response)
-              except urllib.error.HTTPError as err:
-                  last_error = f"PyPI returned {err.code}"
-                  continue
-              pypi = {u["filename"]: u["digests"]["sha256"] for u in data["urls"]}
-              if pypi == local:
-                  print("PyPI serves the published artifacts with matching hashes")
-                  sys.exit(0)
-              last_error = f"PyPI files {sorted(pypi)} do not match built {sorted(local)}"
-          sys.exit(f"publication verification failed: {last_error}")
-          EOF
+        run: python scripts/verify_pypi_release.py
 
   # ---------------------------------------------------------------------------
   # Job 7: Finalize the release (on release)
@@ -875,8 +854,12 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
+      # crane moves the latest tags by digest; no image build happens here, so
+      # buildx is not needed.
+      - name: Install crane
+        run: |
+          bash scripts/install-crane.sh "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
 
       - name: Login to Docker Hub
         uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0  # v4.4.0
@@ -916,7 +899,7 @@ jobs:
             "${repo}:${version}" \
             "${{ vars.DOCKERHUB_IMAGE }}:${version}" \
             "quay.io/craevidence/cli:${version}"; do
-            result="$(bash scripts/registry-inspect.sh digest "${ref}")"
+            result="$(bash scripts/registry-crane.sh digest "${ref}")"
             resolved="${result#FOUND }"
             if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${digest}" ]; then
               echo "::error::${ref} resolved to '${result}', expected FOUND ${digest}; refusing to move latest"
@@ -928,13 +911,13 @@ jobs:
             "${{ vars.DOCKERHUB_IMAGE }}:latest" \
             "quay.io/craevidence/cli:latest" )
           for dst in "${latest_tags[@]}"; do
-            docker buildx imagetools create --tag "${dst}" "${src}"
+            crane copy "${src}" "${dst}"
           done
           # Confirm every latest tag now resolves to the canonical digest, so a
           # partial promotion cannot be reported as success. A rerun re-creates
           # the same digest idempotently.
           for dst in "${latest_tags[@]}"; do
-            result="$(bash scripts/registry-inspect.sh digest "${dst}")"
+            result="$(bash scripts/registry-crane.sh digest "${dst}")"
             resolved="${result#FOUND }"
             if [ "${result%% *}" != "FOUND" ] || [ "${resolved}" != "${digest}" ]; then
               echo "::error::${dst} resolved to '${result}' after promotion, expected FOUND ${digest}"

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Release pipeline: registry reads and cross-registry copies use a pinned
+  crane binary through a fail-closed classifier, the cosign version is pinned
+  explicitly, and the post-publish PyPI check verifies exactly the two
+  released distributions by name and hash.
+
 ## [3.8.1] - 2026-07-18
 
 Completes the 3.8.0 release across all distribution channels with a more
