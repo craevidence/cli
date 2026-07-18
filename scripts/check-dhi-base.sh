@@ -17,7 +17,8 @@
 #   3  docker not available
 #   4  registry authentication failed (run 'docker login dhi.io')
 #   5  network failure reaching the registry
-#   6  a tag or its current digest could not be resolved
+#   6  a tag or its current digest could not be resolved, or strict mode
+#      found no pinned dhi.io digest at all
 #   7  a pinned digest no longer resolves upstream
 #   8  a tag has moved to a newer digest than the pin
 # When several failures apply, the highest code wins.
@@ -64,6 +65,13 @@ while IFS= read -r line; do
 done < <(grep -oE 'dhi\.io/[a-zA-Z0-9/_.:-]+@sha256:[a-f0-9]{64}' "${dockerfile}" | sort -u)
 
 if [ "${#refs[@]}" -eq 0 ]; then
+  # Strict mode is the publishing contract: a build input with no pinned
+  # hardened base must never pass as verified. Lenient mode stays permissive
+  # for contributor environments.
+  if [ "${strict}" -eq 1 ]; then
+    echo "check-dhi-base: no pinned dhi.io digests found in ${dockerfile}; strict mode requires the hardened base." >&2
+    exit 6
+  fi
   echo "check-dhi-base: no pinned dhi.io digests found in ${dockerfile}."
   exit 0
 fi
