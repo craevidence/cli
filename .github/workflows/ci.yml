@@ -9,20 +9,30 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      resume_release:
+        description: >-
+          Exact existing release tag to resume publishing (for example
+          v3.8.1). The run uses the current pipeline code on this branch,
+          checks every published artifact, and performs only the missing
+          operations. Leave empty for a normal CI run.
+        required: false
+        default: ""
+        type: string
   release:
     types: [published]
 
 permissions:
   contents: read
 
-# A release run holds one concurrency group from its first job to its last,
-# so two release runs can never interleave registry checks and pushes. A
-# running release is never canceled; with GitHub's default queue behavior at
-# most one further release run stays pending behind it. Other events group
-# per ref and cancel superseded runs.
+# A release or resume run holds the one release-publish concurrency group from
+# its first job to its last, so two publishing runs can never interleave
+# registry checks and pushes. A running publish is never canceled; with
+# GitHub's default queue behavior at most one further run stays pending behind
+# it. Other events group per ref and cancel superseded runs.
 concurrency:
-  group: ${{ github.event_name == 'release' && 'release-publish' || format('ci-{0}-{1}', github.event_name, github.ref) }}
-  cancel-in-progress: ${{ github.event_name != 'release' }}
+  group: ${{ (github.event_name == 'release' || inputs.resume_release != '') && 'release-publish' || format('ci-{0}-{1}', github.event_name, github.ref) }}
+  cancel-in-progress: ${{ !(github.event_name == 'release' || inputs.resume_release != '') }}
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -255,26 +265,191 @@ jobs:
   validate-release:
     runs-on: ubuntu-latest
     needs: [test, rulepack, build-and-sbom]
-    if: github.event_name == 'release'
+    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.resume_release != '')
     permissions:
       contents: read
     outputs:
       version: ${{ steps.check.outputs.version }}
+      tag: ${{ steps.check.outputs.tag }}
+      mode: ${{ steps.check.outputs.mode }}
+      source_sha: ${{ steps.check.outputs.source_sha }}
+      build_allowed: ${{ steps.check.outputs.build_allowed }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
-      - name: Require the release tag to match the package version
+      # Release mode: the checkout is the tag commit, so the tag must match the
+      # package version it carries, and the event commit SHA is the immutable
+      # source anchor for the whole run. Resume mode: the run executes the
+      # current pipeline code against an exact already-published release; the
+      # tag is resolved to a commit SHA exactly once, here, and every later
+      # checkout uses that SHA, so a tag moved after validation can never
+      # change what gets built. Building anything NEW on a resume additionally
+      # requires the GitHub release to be immutable, because a mutable tag
+      # gives a rebuild no trustworthy source; completing already-published
+      # artifacts needs no rebuild and stays allowed.
+      - name: Resolve and validate the release to publish
         id: check
         env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          EVENT_SHA: ${{ github.sha }}
+          RESUME_TAG: ${{ inputs.resume_release }}
         run: |
-          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          if [ "${RELEASE_TAG}" != "v${VERSION}" ]; then
-            echo "::error::Release tag '${RELEASE_TAG}' does not match package version 'v${VERSION}'"
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "release" ]; then
+            mode="release"
+            tag="${RELEASE_TAG}"
+            # Prereleases also fire release:published; they must never reach
+            # the immutable publishing channels.
+            if [ "${RELEASE_PRERELEASE}" != "false" ]; then
+              echo "::error::'${tag}' is a prerelease; only stable releases publish"
+              exit 1
+            fi
+            VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+            if [ "${tag}" != "v${VERSION}" ]; then
+              echo "::error::Release tag '${tag}' does not match package version 'v${VERSION}'"
+              exit 1
+            fi
+            source_sha="${EVENT_SHA}"
+            build_allowed="true"
+          else
+            mode="resume"
+            tag="${RESUME_TAG}"
+            # A resume publishes with this run's branch identity, so it may
+            # only run from main: reviewed code, and the exact identity the
+            # verifiers and documentation accept.
+            if [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+              echo "::error::resume runs only from main (got '${GITHUB_REF}')"
+              exit 1
+            fi
+            if ! printf '%s' "${tag}" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "::error::resume_release must be an exact release tag like v3.8.1, got '${tag}'"
+              exit 1
+            fi
+            state="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq '[.draft, .prerelease, .immutable // false] | @tsv')" || {
+              echo "::error::no GitHub release exists for '${tag}'"; exit 1; }
+            IFS="$(printf '\t')" read -r draft prerelease immutable <<< "${state}"
+            if [ "${draft}" != "false" ] || [ "${prerelease}" != "false" ]; then
+              echo "::error::release '${tag}' is a draft or prerelease; only published stable releases can be resumed"
+              exit 1
+            fi
+            # Only the newest stable release may be resumed: the run ends by
+            # moving the latest tags, and resuming an older release would roll
+            # them backward.
+            newest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+            if [ "${newest}" != "${tag}" ]; then
+              echo "::error::'${tag}' is not the newest stable release ('${newest}'); resuming it would move latest backward"
+              exit 1
+            fi
+            # Resolve the tag to a commit exactly once; annotated tags are
+            # peeled to the commit they point at.
+            source_sha="$(git ls-remote origin "refs/tags/${tag}^{}" | awk '{print $1; exit}')"
+            if [ -z "${source_sha}" ]; then
+              source_sha="$(git ls-remote origin "refs/tags/${tag}" | awk '{print $1; exit}')"
+            fi
+            if ! printf '%s' "${source_sha}" | grep -qE '^[0-9a-f]{40}$'; then
+              echo "::error::cannot resolve git tag '${tag}' on origin"
+              exit 1
+            fi
+            if [ "${immutable}" = "true" ]; then
+              build_allowed="true"
+            else
+              build_allowed="false"
+            fi
+            VERSION="${tag#v}"
+          fi
+          echo "publishing mode '${mode}' for tag '${tag}' (version ${VERSION}, source ${source_sha}, build_allowed ${build_allowed})"
+          {
+            echo "version=${VERSION}"
+            echo "tag=${tag}"
+            echo "mode=${mode}"
+            echo "source_sha=${source_sha}"
+            echo "build_allowed=${build_allowed}"
+          } >> "$GITHUB_OUTPUT"
+
+      # The release tag is mutable unless immutable releases are enabled, so
+      # the checked-out release source is bound to the published artifacts
+      # cryptographically: its pyproject version must match the tag, and the
+      # byte-reproducible wheel it builds must equal the wheel PyPI or the
+      # release assets already serve. A moved tag, even one keeping the same
+      # version string, builds different wheel bytes and fails here before
+      # either publishing job starts. On a first publish nothing is published
+      # yet and the checked-out source is the canonical input, exactly as in a
+      # release run.
+      - name: Check out the release source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ steps.check.outputs.source_sha }}
+          path: release-src
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.14"
+
+      - name: Bind the release source to the published artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.check.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          src_version=$(grep '^version' release-src/pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          if [ "v${src_version}" != "${RELEASE_TAG}" ]; then
+            echo "::error::release source at '${RELEASE_TAG}' carries package version '${src_version}'"
             exit 1
           fi
-          echo "Release tag '${RELEASE_TAG}' matches package version 'v${VERSION}'."
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          python -m pip install --quiet pip==26.1.2 build==1.5.0
+          # The wheel bytes depend on the source file modes and the process
+          # umask as well as the pinned tools and epoch; umask 022 matches the
+          # published builds.
+          umask 022
+          SOURCE_DATE_EPOCH=946684800 python -m build --wheel --outdir bind-check release-src > /dev/null
+          built=$(sha256sum bind-check/*.whl | awk '{print $1}')
+          published=$(python - <<'EOF'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          wheel = f"craevidence-{version}-py3-none-any.whl"
+          try:
+              with urllib.request.urlopen(
+                  f"https://pypi.org/pypi/craevidence/{version}/json", timeout=30
+              ) as response:
+                  data = json.load(response)
+          except urllib.error.HTTPError as err:
+              if err.code == 404:
+                  raise SystemExit(0)
+              raise
+          for entry in data["urls"]:
+              if entry["filename"] == wheel:
+                  print(entry["digests"]["sha256"])
+          EOF
+          )
+          if [ -n "${published}" ]; then
+            if [ "${built}" != "${published}" ]; then
+              echo "::error::the release source does not rebuild the published wheel (built ${built}, PyPI serves ${published}); the tag no longer points at the released source"
+              exit 1
+            fi
+            echo "release source verified against the published wheel"
+          else
+            wheel_asset="craevidence-${version}-py3-none-any.whl"
+            if gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name' | grep -Fqx -- "${wheel_asset}"; then
+              gh release download "${RELEASE_TAG}" --pattern "${wheel_asset}" --dir bind-asset
+              asset=$(sha256sum "bind-asset/${wheel_asset}" | awk '{print $1}')
+              if [ "${built}" != "${asset}" ]; then
+                echo "::error::the release source does not rebuild the checkpointed wheel (built ${built}, asset ${asset})"
+                exit 1
+              fi
+              echo "release source verified against the checkpointed wheel"
+            else
+              echo "nothing published yet for ${RELEASE_TAG}; the release source is the canonical input"
+            fi
+          fi
 
   # ---------------------------------------------------------------------------
   # Job 5: Publish release images (on release)
@@ -290,7 +465,7 @@ jobs:
   publish-images:
     runs-on: ubuntu-latest
     needs: [test, rulepack, build-and-sbom, validate-release]
-    if: github.event_name == 'release'
+    if: needs.validate-release.outputs.mode != ''
     environment: release-images
     permissions:
       contents: write  # attach the per-platform SBOMs to the GitHub release
@@ -300,6 +475,17 @@ jobs:
       digest: ${{ steps.canonical.outputs.digest }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      # Pipeline code (scripts and gates) comes from this run's own commit; the
+      # release source being built is checked out separately at the release
+      # tag. In release mode both are the same commit; in a resume run the
+      # pipeline is the current branch and the source is the exact released
+      # tag, so a corrected pipeline can republish unchanged release bytes.
+      - name: Check out the release source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+          path: release-src
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0
@@ -313,10 +499,13 @@ jobs:
           username: ${{ secrets.DHI_REGISTRY_USERNAME }}
           password: ${{ secrets.DHI_REGISTRY_TOKEN }}
 
+      # The Docker Hub destination is pinned to the exact published
+      # repository, so a changed or mistyped variable can never publish or
+      # sign a different destination.
       - name: Validate release registry configuration
         run: |
-          if [ -z "${{ vars.DOCKERHUB_IMAGE }}" ]; then
-            echo "::error::vars.DOCKERHUB_IMAGE is not set; refusing to release without the Docker Hub destination"
+          if [ "${{ vars.DOCKERHUB_IMAGE }}" != "craevidence/cli" ]; then
+            echo "::error::vars.DOCKERHUB_IMAGE must be 'craevidence/cli', got '${{ vars.DOCKERHUB_IMAGE }}'"
             exit 1
           fi
 
@@ -372,16 +561,35 @@ jobs:
           esac
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
 
+      # A rebuild needs a trusted source: a release event anchors it to the
+      # event commit, and a resume anchors it to an immutable release. A
+      # resume of a mutable release must not rebuild, because its tag gives
+      # the build no trustworthy input; completing already-published
+      # artifacts is unaffected.
+      - name: Require a trusted source anchor for a rebuild
+        if: steps.existing.outputs.digest == '' && needs.validate-release.outputs.build_allowed != 'true'
+        run: |
+          echo "::error::no canonical image exists for this version and the release has no trusted source anchor for a rebuild. Publish a new patch release."
+          exit 1
+
+      # A rebuild only happens when no digest exists yet, and it must build the
+      # hardened release source: the strict base check runs against the release
+      # tag's Dockerfile, not the pipeline checkout's.
+      - name: Verify the release source pins the current hardened base
+        if: steps.existing.outputs.digest == ''
+        run: bash scripts/check-dhi-base.sh --strict release-src/Dockerfile
+
       # One canonical multi-arch build, pushed to GHCR, and only on the first
       # run for this version. Docker Hub and Quay receive exact copies of this
       # index by digest, so every registry serves the same content-addressed
-      # artifact and one signature target exists.
+      # artifact and one signature target exists. The build context is the
+      # release source checkout.
       - name: Build and push the canonical multi-arch image to GHCR
         if: steps.existing.outputs.digest == ''
         id: build-ghcr
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
         with:
-          context: .
+          context: ./release-src
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
@@ -401,6 +609,40 @@ jobs:
           fi
           echo "canonical release digest: ${digest}"
           echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      # Keyless signing (Sigstore OIDC, no long-lived keys): installed before
+      # any propagation so a reused digest can be authenticated first.
+      - name: Install cosign
+        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
+        with:
+          cosign-release: "v2.6.3"
+
+      # No run may propagate a digest merely because the mutable GHCR version
+      # tag currently points at it: a reused digest must already carry a
+      # signature under the exact release tag identity, which only the
+      # legitimate release pipeline can create and which binds the signature
+      # to this version. The identity accepted here is deliberately narrower
+      # than elsewhere: a branch-identity signature is not version-bound, so
+      # it does not authenticate a digest as THIS release. An unsigned
+      # partial state requires a new patch release.
+      - name: Require a reused digest to carry the release tag signature
+        if: steps.existing.outputs.digest != ''
+        env:
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          digest="${{ steps.canonical.outputs.digest }}"
+          repo="ghcr.io/${{ github.repository_owner }}/craevidence"
+          tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
+          if cosign verify \
+              --certificate-identity "${tag_identity}" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${repo}@${digest}" > /dev/null 2>&1; then
+            echo "reused digest ${digest} carries the release tag signature"
+          else
+            echo "::error::reused digest ${digest} carries no signature under the exact release tag identity; the version tag cannot be trusted. Publish a new patch release."
+            exit 1
+          fi
 
       # Only a definitive not-found response allows a copy; any other
       # inspection error fails the run so a transient registry failure can
@@ -447,41 +689,78 @@ jobs:
             echo "verified ${ref} -> ${resolved}"
           done
 
-      # Keyless signing (Sigstore OIDC, no long-lived keys): one signature per
-      # registry over the same canonical digest, then verification with the
-      # exact release identity before latest moves.
-      - name: Install cosign
-        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
-        with:
-          cosign-release: "v2.6.3"
-
+      # Two exact identities are accepted, never a pattern: the release tag
+      # identity (signatures from the original release run) and this run's
+      # identity (signatures a resume run creates; in release mode both
+      # strings are the same). Signing follows the absent/create model: a
+      # digest with NO signature object is signed; an existing signature must
+      # verify with an accepted identity or the run fails for investigation
+      # (a transport failure also fails, never a blind re-sign).
       - name: Sign the release digest on every registry
         env:
           COSIGN_YES: "true"
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           set -euo pipefail
           digest="${{ steps.canonical.outputs.digest }}"
+          tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
+          run_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
           for repo in \
             "ghcr.io/${{ github.repository_owner }}/craevidence" \
             "${{ vars.DOCKERHUB_IMAGE }}" \
             "quay.io/craevidence/cli"; do
-            cosign sign --yes "${repo}@${digest}"
+            # cosign stores signatures under a per-digest tag; the classifier
+            # distinguishes a definitively absent signature object from a
+            # transport failure, which fails the step instead.
+            sig_state="$(bash scripts/registry-crane.sh digest "${repo}:${digest//:/-}.sig")"
+            if [ "${sig_state}" = "NOTFOUND" ]; then
+              cosign sign --yes "${repo}@${digest}"
+              continue
+            fi
+            verified=""
+            for identity in "${tag_identity}" "${run_identity}"; do
+              if cosign verify \
+                  --certificate-identity "${identity}" \
+                  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+                  "${repo}@${digest}" > /dev/null 2>&1; then
+                verified="${identity}"
+                break
+              fi
+            done
+            if [ -z "${verified}" ]; then
+              echo "::error::${repo}@${digest} carries a signature object that matches neither accepted identity; refusing to sign over it"
+              exit 1
+            fi
+            echo "${repo}@${digest} already carries an accepted signature (${verified}); not re-signing"
           done
 
-      - name: Verify every signature with the release identity
+      - name: Verify every signature with an accepted release identity
+        env:
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           set -euo pipefail
           digest="${{ steps.canonical.outputs.digest }}"
-          identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
+          tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
+          run_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
           for repo in \
             "ghcr.io/${{ github.repository_owner }}/craevidence" \
             "${{ vars.DOCKERHUB_IMAGE }}" \
             "quay.io/craevidence/cli"; do
-            cosign verify \
-              --certificate-identity "${identity}" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              "${repo}@${digest}" > /dev/null
-            echo "verified signature on ${repo}@${digest}"
+            verified=""
+            for identity in "${tag_identity}" "${run_identity}"; do
+              if cosign verify \
+                  --certificate-identity "${identity}" \
+                  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+                  "${repo}@${digest}" > /dev/null 2>&1; then
+                verified="${identity}"
+                break
+              fi
+            done
+            if [ -z "${verified}" ]; then
+              echo "::error::${repo}@${digest} carries no signature matching either accepted identity"
+              exit 1
+            fi
+            echo "verified signature on ${repo}@${digest} (${verified})"
           done
 
       # The published SBOMs describe the canonical released digests, one per
@@ -510,32 +789,55 @@ jobs:
             echo "generated sbom-${version}-linux-${arch}.cdx.json from ${platform_digest} (index ${digest})"
           done
 
-      # SBOM bytes are not deterministic across generations (timestamp and
-      # serial number), so assets published by an earlier run are kept and
-      # only missing assets are uploaded; a rerun never replaces evidence.
-      - name: Attach the per-platform SBOMs to the GitHub release
+      # SBOM assets are published security evidence, so a mutable release
+      # asset is trusted only through its signed bundle. A retained SBOM whose
+      # bundle verifies under an accepted identity is kept; a retained SBOM
+      # whose bundle verification FAILS is tampered evidence and stops the
+      # run; an SBOM without a complete signed pair (including all assets
+      # published before bundles existed) is replaced by the freshly
+      # generated, freshly signed document, which describes the same
+      # authenticated digest. SBOM bytes are not deterministic across
+      # generations, which is why authenticated retained copies are kept
+      # rather than compared.
+      - name: Attach authenticated per-platform SBOMs to the GitHub release
         env:
+          COSIGN_YES: "true"
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           set -euo pipefail
-          existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
-          for f in sbom-*.cdx.json; do
-            if grep -Fqx -- "${f}" <<< "${existing}"; then
-              echo "${f} is already attached to the release; keeping the published copy"
-            else
-              gh release upload "${RELEASE_TAG}" "${f}"
-            fi
-          done
+          tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
+          run_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
+          bash scripts/reconcile_release_sboms.sh \
+            "${RELEASE_TAG}" "${tag_identity}" "${run_identity}" sbom-assets \
+            sbom-*.cdx.json
+
+      # The SBOMs the release actually SERVES are validated, not the local
+      # generations: both authenticated assets must be well-formed CycloneDX
+      # 1.6 documents whose subject is the canonical image at the matching
+      # platform digest.
+      - name: Validate the published SBOM assets
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate-release.outputs.version }}"
+          repo="ghcr.io/${{ github.repository_owner }}/craevidence"
+          digest_amd64="$(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' release-index.json)"
+          digest_arm64="$(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "arm64") | .digest' release-index.json)"
+          python scripts/validate_release_sboms.py \
+            --version "${version}" \
+            --image "${repo}" \
+            --digest-amd64 "${digest_amd64}" \
+            --digest-arm64 "${digest_arm64}" \
+            --dir sbom-assets
 
       # Dogfooding is a release dependency: every release run submits the
-      # PUBLISHED amd64 SBOM bytes to CRA Evidence, verified against the
-      # canonical amd64 digest first, so a rerun after any partial failure
-      # still completes the evidence upload with the bytes the release serves.
+      # PUBLISHED amd64 SBOM bytes to CRA Evidence. The submitted file comes
+      # from the working set whose every document was verified against its
+      # signed bundle by the reconciliation step, so a rerun after any partial
+      # failure still completes the evidence upload with trusted bytes.
       - name: Upload the release SBOM to CRA Evidence
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
           CRA_EVIDENCE_API_KEY: ${{ secrets.CRA_EVIDENCE_API_KEY }}
           CRA_EVIDENCE_URL: https://api.craevidence.com
         run: |
@@ -543,7 +845,7 @@ jobs:
           version="${{ needs.validate-release.outputs.version }}"
           asset="sbom-${version}-linux-amd64.cdx.json"
           mkdir -p published-evidence
-          gh release download "${RELEASE_TAG}" --pattern "${asset}" --dir published-evidence --clobber
+          cp "sbom-assets/${asset}" published-evidence/
           amd64_digest="$(jq -r '.manifests[] | select(.platform.os == "linux" and .platform.architecture == "amd64") | .digest' release-index.json)"
           if ! jq -e --arg d "${amd64_digest}" --arg r "ghcr.io/${{ github.repository_owner }}/craevidence" \
               '.metadata.component.version == $d and .metadata.component.name == $r' \
@@ -579,7 +881,7 @@ jobs:
   publish-pypi:
     runs-on: ubuntu-latest
     needs: [test, rulepack, build-and-sbom, validate-release, publish-images]
-    if: github.event_name == 'release'
+    if: needs.validate-release.outputs.mode != ''
     environment: pypi
     permissions:
       contents: write  # upload signed artifacts to the GitHub release
@@ -587,14 +889,24 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
+      # Pipeline code comes from this run's own commit; the release source
+      # being packaged is checked out separately at the release tag, so a
+      # resume run publishes the released bytes, never the current branch's.
+      - name: Check out the release source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ needs.validate-release.outputs.source_sha }}
+          path: release-src
+
       # Refuse to publish artifacts whose metadata version does not match the
       # release tag. PyPI uploads are immutable, so a v3.6.0 release must carry
-      # exactly version 3.6.0.
+      # exactly version 3.6.0. The check reads the release source, which is
+      # what gets packaged.
       - name: Verify release tag matches package version
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
-          VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          VERSION=$(grep '^version' release-src/pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')
           if [ "${RELEASE_TAG}" != "v${VERSION}" ]; then
             echo "::error::Release tag '${RELEASE_TAG}' does not match package version 'v${VERSION}'"
             exit 1
@@ -606,195 +918,128 @@ jobs:
         with:
           python-version: "3.14"
 
-      # A rerun after a successful PyPI publish must not rebuild: the sdist is
-      # not byte-reproducible, so the published bytes are recovered from PyPI
-      # instead. A partially published version is an incident, not a resume.
-      - name: Determine the PyPI state for this version
-        id: pypi-state
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          python - <<'EOF'
-          import json
-          import os
-          import sys
-          import urllib.error
-          import urllib.request
+      - name: Install packaging tools
+        run: python -m pip install pip==26.1.2 build==1.5.0 sigstore==4.4.0
 
-          version = os.environ["RELEASE_TAG"].removeprefix("v")
-          expected = {
-              f"craevidence-{version}-py3-none-any.whl",
-              f"craevidence-{version}.tar.gz",
+      # Acquire the canonical bytes for both distributions and decide per file
+      # whether it still needs publishing. PyPI is immutable, so a file already
+      # served there is canonical and is downloaded, never rebuilt; a file
+      # checkpointed as a release asset is reused; only files available nowhere
+      # are built from the release source. This makes a rerun after any partial
+      # failure deterministic.
+      - name: Prepare the release distributions
+        id: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Building fresh bytes needs a trusted source anchor: a release
+          # event, or an immutable release on resume. Without one, only
+          # already-published or checkpointed bytes may be used.
+          flags=()
+          if [ "${{ needs.validate-release.outputs.build_allowed }}" != "true" ]; then
+            flags+=(--no-build)
+          fi
+          python scripts/prepare_release_dist.py \
+            --version "${{ needs.validate-release.outputs.version }}" \
+            --tag "${{ needs.validate-release.outputs.tag }}" \
+            --release-src release-src \
+            --dist-dir dist \
+            "${flags[@]}"
+
+      # No run may publish checkpointed bytes merely because a release asset
+      # with the right name exists: release assets are mutable, so each
+      # distribution taken from an asset must verify against its checkpointed
+      # Sigstore bundle under one of the two exact accepted identities, which
+      # only a legitimate pipeline run can create (checkpoints written by a
+      # resume run legitimately carry the branch identity; the wheel binding
+      # and PyPI's own metadata validation pin the version). Without that
+      # anchor the run fails and a new patch release is the correction.
+      - name: Require checkpointed distributions to verify against their signed bundles
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
+          WHEEL_SOURCE: ${{ steps.dist.outputs.wheel_source }}
+          SDIST_SOURCE: ${{ steps.dist.outputs.sdist_source }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
+          run_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
+          mkdir -p anchor-bundles
+          check_asset() {
+            local file="$1" bundle="$1.sigstore.json" identity
+            gh release download "${RELEASE_TAG}" --pattern "${bundle}" --dir anchor-bundles || {
+              echo "::error::${file} came from a release asset but ${bundle} is not attached; the bytes cannot be authenticated. Publish a new release."
+              exit 1
+            }
+            for identity in "${tag_identity}" "${run_identity}"; do
+              if python -m sigstore verify identity \
+                  --bundle "anchor-bundles/${bundle}" \
+                  --cert-identity "${identity}" \
+                  --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+                  "dist/${file}" > /dev/null 2>&1; then
+                echo "${file} verifies against its checkpointed bundle (${identity})"
+                return 0
+              fi
+            done
+            echo "::error::${file} does not verify against its checkpointed bundle under either accepted identity. Publish a new release."
+            exit 1
           }
-          try:
-              with urllib.request.urlopen(
-                  f"https://pypi.org/pypi/craevidence/{version}/json"
-              ) as response:
-                  files = {u["filename"] for u in json.load(response)["urls"]}
-          except urllib.error.HTTPError as err:
-              if err.code == 404:
-                  files = set()
-              else:
-                  raise
-          out = open(os.environ["GITHUB_OUTPUT"], "a")
-          if files == expected:
-              print("PyPI already serves the complete file set; resuming without rebuilding")
-              out.write("complete=true\n")
-          elif not files:
-              print("PyPI has no files for this version; first publish proceeds")
-              out.write("complete=false\n")
-          else:
-              sys.exit(
-                  f"PyPI serves a partial file set {sorted(files)} for {version}; "
-                  "refusing to resume automatically"
-              )
-          EOF
-
-      # Build inputs are version-pinned and the epoch is fixed so the wheel
-      # builds to identical bytes everywhere, which lets the release commit
-      # pin the wheel checksum in gitlab-ci-component.yml before PyPI has it.
-      # The sdist is not byte-reproducible; the comparison step below is the
-      # hard gate that stops a rerun from publishing or clobbering different
-      # bytes.
-      - name: Build sdist and wheel
-        if: steps.pypi-state.outputs.complete != 'true'
-        env:
-          SOURCE_DATE_EPOCH: "946684800"
-        run: |
-          python -m pip install pip==26.1.2 build==1.5.0
-          python -m build
+          if [ "${WHEEL_SOURCE}" = "release-asset" ]; then
+            check_asset "craevidence-${version}-py3-none-any.whl"
+          fi
+          if [ "${SDIST_SOURCE}" = "release-asset" ]; then
+            check_asset "craevidence-${version}.tar.gz"
+          fi
+          echo "checkpointed distribution anchors verified"
 
       # The GitLab component ships with a pinned wheel version and checksum;
-      # they must describe exactly the wheel this release publishes.
-      - name: Require the built wheel to match the component pin
-        if: steps.pypi-state.outputs.complete != 'true'
+      # they must describe exactly the wheel this release serves. The pin is
+      # read from the release source, which is what published the component.
+      - name: Require the wheel to match the component pin
         run: |
           set -euo pipefail
           wheel=$(ls dist/*.whl)
           actual=$(sha256sum "${wheel}" | awk '{print $1}')
           version=$(basename "${wheel}" | sed 's/craevidence-\(.*\)-py3-none-any\.whl/\1/')
-          pinned_version=$(grep -oE 'CLI_VERSION="[0-9.]+"' gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
-          pinned_hash=$(grep -oE 'CLI_WHEEL_SHA256="[a-f0-9]{64}"' gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
+          pinned_version=$(grep -oE 'CLI_VERSION="[0-9.]+"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
+          pinned_hash=$(grep -oE 'CLI_WHEEL_SHA256="[a-f0-9]{64}"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
           if [ "${pinned_version}" != "${version}" ] || [ "${pinned_hash}" != "${actual}" ]; then
-            echo "::error::gitlab-ci-component.yml pins ${pinned_version} ${pinned_hash}, but the built wheel is ${version} ${actual}"
+            echo "::error::gitlab-ci-component.yml pins ${pinned_version} ${pinned_hash}, but the wheel is ${version} ${actual}"
             exit 1
           fi
-          echo "component pin matches the built wheel"
+          echo "component pin matches the wheel"
 
-      # Rerun idempotence: if PyPI already has files for this version, the
-      # freshly built artifacts must match them exactly. Publishing and the
-      # release-asset clobber below both depend on this step passing.
-      - name: Require built artifacts to match PyPI on rerun
-        if: steps.pypi-state.outputs.complete != 'true'
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          python - <<'EOF'
-          import hashlib
-          import json
-          import os
-          import pathlib
-          import sys
-          import urllib.error
-          import urllib.request
-
-          version = os.environ["RELEASE_TAG"].removeprefix("v")
-          expected = {
-              f"craevidence-{version}-py3-none-any.whl",
-              f"craevidence-{version}.tar.gz",
-          }
-          local = {
-              p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-              for p in pathlib.Path("dist").iterdir()
-          }
-          if set(local) != expected:
-              sys.exit(f"dist holds {sorted(local)}, expected exactly {sorted(expected)}")
-          try:
-              with urllib.request.urlopen(
-                  f"https://pypi.org/pypi/craevidence/{version}/json"
-              ) as response:
-                  data = json.load(response)
-          except urllib.error.HTTPError as err:
-              if err.code == 404:
-                  print(f"PyPI has no {version} yet; first publish proceeds")
-                  sys.exit(0)
-              raise
-          pypi = {u["filename"]: u["digests"]["sha256"] for u in data["urls"]}
-          problems = sorted(
-              set(pypi) ^ set(local)
-          ) + sorted(n for n in pypi.keys() & local.keys() if pypi[n] != local[n])
-          if problems:
-              sys.exit(
-                  f"built artifacts differ from PyPI for {problems}; "
-                  "refusing to publish or clobber"
-              )
-          print("built artifacts match PyPI; rerun is idempotent")
-          EOF
-
-      # Sign before publishing so a signing failure stops the job while the
-      # release is still fully reversible; the PyPI upload below is immutable.
-      # The same artifacts are published to PyPI and attached to the GitHub
-      # release with their Sigstore bundles, so the release page carries
-      # verifiable signatures for every distribution.
+      # Sign before any publication so a signing failure stops the job while
+      # the release is still fully reversible; the PyPI upload below is
+      # immutable. The same artifacts are published to PyPI and attached to
+      # the GitHub release with their Sigstore bundles.
       - name: Sign artifacts with Sigstore
-        if: steps.pypi-state.outputs.complete != 'true'
         run: |
-          python -m pip install sigstore==4.4.0
           python -m sigstore sign dist/*.tar.gz dist/*.whl
-          # Keep dist/ distribution-only for the PyPI upload step.
+          # Keep dist/ distribution-only for the PyPI upload steps.
           mkdir -p sigstore-bundles
           mv dist/*.sigstore.json sigstore-bundles/
 
-      # skip-existing is not set. It is redundant with the PyPI state gate above
-      # (a complete version is recovered from PyPI and a partial version is
-      # refused), and the publish action recommends letting a production
-      # duplicate upload fail loudly so a raced or unexpected re-upload is never
-      # masked.
-      - name: Publish to PyPI
-        if: steps.pypi-state.outputs.complete != 'true'
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
-        with:
-          attestations: true
-
-      # On a resume, the canonical distribution bytes come from PyPI, and
-      # fresh Sigstore bundles are created for them so missing release assets
-      # can be completed with signed, canonical content.
-      - name: Recover the published artifacts from PyPI
-        if: steps.pypi-state.outputs.complete == 'true'
-        env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -euo pipefail
-          version="${RELEASE_TAG#v}"
-          mkdir -p dist sigstore-bundles
-          python - <<'EOF'
-          import json
-          import os
-          import urllib.request
-
-          version = os.environ["RELEASE_TAG"].removeprefix("v")
-          with urllib.request.urlopen(
-              f"https://pypi.org/pypi/craevidence/{version}/json"
-          ) as response:
-              for entry in json.load(response)["urls"]:
-                  urllib.request.urlretrieve(entry["url"], f"dist/{entry['filename']}")
-                  print(f"recovered dist/{entry['filename']}")
-          EOF
-          python -m pip install sigstore==4.4.0
-          python -m sigstore sign dist/*.tar.gz dist/*.whl
-          mv dist/*.sigstore.json sigstore-bundles/
-
-      # Sigstore bundles are not deterministic across runs, so assets already
-      # attached to the release are kept, but never blindly: a retained
-      # distribution must match the local canonical bytes, and a retained
-      # bundle must verify against those bytes with the release identity.
-      - name: Upload signed artifacts to the GitHub release
+      # Checkpoint BEFORE publishing: the exact bytes that will be uploaded to
+      # PyPI are attached to the GitHub release first, so a failure at any
+      # later point leaves a rerun the canonical bytes to resume from (the
+      # sdist cannot be rebuilt identically). Sigstore bundles are not
+      # deterministic across runs, so assets already attached are kept, but
+      # never blindly: a retained distribution must match the local canonical
+      # bytes, and a retained bundle must verify against those bytes with one
+      # of the two exact accepted identities: the release tag identity (assets
+      # from the original release run) or this run's identity (assets from a
+      # resume run). Never a pattern.
+      - name: Checkpoint signed artifacts on the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           set -euo pipefail
-          identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
+          tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
+          run_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
           existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
           mkdir -p retained-assets
           for f in dist/* sigstore-bundles/*; do
@@ -807,15 +1052,22 @@ jobs:
             case "${name}" in
               *.sigstore.json)
                 subject="dist/$(basename "${name}" .sigstore.json)"
-                if ! python -m sigstore verify identity \
-                    --bundle "retained-assets/${name}" \
-                    --cert-identity "${identity}" \
-                    --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
-                    "${subject}"; then
-                  echo "::error::retained release asset ${name} does not verify against ${subject} with the release identity"
+                verified=""
+                for identity in "${tag_identity}" "${run_identity}"; do
+                  if python -m sigstore verify identity \
+                      --bundle "retained-assets/${name}" \
+                      --cert-identity "${identity}" \
+                      --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+                      "${subject}"; then
+                    verified="${identity}"
+                    break
+                  fi
+                done
+                if [ -z "${verified}" ]; then
+                  echo "::error::retained release asset ${name} does not verify against ${subject} with either accepted identity"
                   exit 1
                 fi
-                echo "${name} is already attached and verifies; keeping the published copy"
+                echo "${name} is already attached and verifies (${verified}); keeping the published copy"
                 ;;
               *)
                 if ! cmp -s "retained-assets/${name}" "${f}"; then
@@ -827,14 +1079,88 @@ jobs:
             esac
           done
 
+      # Publishing is per file: each still-missing distribution is uploaded on
+      # its own from a directory containing only that file, so a failure
+      # between the two uploads leaves a state the next resume run completes.
+      # skip-existing is not set: a file that appeared on PyPI since the
+      # prepare step means a raced writer, and the duplicate upload must fail
+      # loudly rather than be masked.
+      - name: Split distributions for per-file publishing
+        if: steps.dist.outputs.wheel_publish == 'true' || steps.dist.outputs.sdist_publish == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p publish-wheel publish-sdist
+          cp dist/*.whl publish-wheel/
+          cp dist/*.tar.gz publish-sdist/
+
+      - name: Publish the wheel to PyPI
+        if: steps.dist.outputs.wheel_publish == 'true'
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+        with:
+          packages-dir: publish-wheel/
+          attestations: true
+
+      - name: Publish the sdist to PyPI
+        if: steps.dist.outputs.sdist_publish == 'true'
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+        with:
+          packages-dir: publish-sdist/
+          attestations: true
+
+      # The publish action leaves a PEP 740 attestation sidecar next to each
+      # file it uploaded. Sidecars from THIS run are collected; a sidecar
+      # whose run died between the PyPI upload and this attachment is
+      # recovered from the accepted provenance PyPI serves, so no successful
+      # upload can lose its evidence. Already-attached sidecars stay. The
+      # verification step below proves every attached sidecar is an
+      # attestation PyPI actually accepted.
+      - name: Attach the PyPI attestations to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          existing="$(gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name')"
+          mkdir -p attestation-assets
+          shopt -s nullglob
+          for f in publish-wheel/*.publish.attestation publish-sdist/*.publish.attestation; do
+            cp "${f}" attestation-assets/
+          done
+          # Attached sidecars count as present; only genuinely absent ones
+          # are recovered from PyPI provenance.
+          for name in \
+            "craevidence-${RELEASE_TAG#v}-py3-none-any.whl.publish.attestation" \
+            "craevidence-${RELEASE_TAG#v}.tar.gz.publish.attestation"; do
+            if grep -Fqx -- "${name}" <<< "${existing}" && [ ! -f "attestation-assets/${name}" ]; then
+              gh release download "${RELEASE_TAG}" --pattern "${name}" --dir attestation-assets
+            fi
+          done
+          python scripts/recover_pypi_attestations.py \
+            --version "${RELEASE_TAG#v}" \
+            --dir attestation-assets
+          for f in attestation-assets/*.publish.attestation; do
+            name="$(basename "${f}")"
+            if grep -Fqx -- "${name}" <<< "${existing}"; then
+              echo "${name} is already attached to the release; keeping the published copy"
+            else
+              gh release upload "${RELEASE_TAG}" "${f}"
+            fi
+          done
+
       # Post-publish check: PyPI must serve exactly the two expected
-      # distributions with sha256 matching the local build. This checks only the
-      # two distribution filenames, never other dist/ contents, so publish
-      # sidecar files cannot cause a false mismatch.
+      # distributions with sha256 matching the local build and Trusted
+      # Publishing provenance bound to this repository, and the release's
+      # attestation assets must be attestations PyPI actually accepted, not
+      # arbitrary bytes under the right names.
       - name: Verify PyPI serves the published artifacts
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: python scripts/verify_pypi_release.py
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p attestation-assets
+          gh release download "${RELEASE_TAG}" --pattern '*.publish.attestation' --dir attestation-assets
+          python scripts/verify_pypi_release.py --attestations-dir attestation-assets
 
   # ---------------------------------------------------------------------------
   # Job 7: Finalize the release (on release)
@@ -847,12 +1173,39 @@ jobs:
   finalize-release:
     runs-on: ubuntu-latest
     needs: [validate-release, publish-images, publish-pypi]
-    if: github.event_name == 'release'
+    if: needs.validate-release.outputs.mode != ''
     environment: release-images
     permissions:
+      contents: read  # read the newest-release state before moving latest
       packages: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      # latest only ever moves forward: whatever the mode, the tag being
+      # published must be the newest stable release at the moment of
+      # promotion, so neither a resume of an older release nor a release
+      # marked not-latest can roll the latest tags backward.
+      - name: Require this tag to be the newest stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Bounded retries absorb a just-published release not yet reflected
+          # by the API; a persistent mismatch still refuses the move.
+          for attempt in 1 2 3 4 5 6; do
+            newest="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq .tag_name)"
+            if [ "${newest}" = "${RELEASE_TAG}" ]; then
+              echo "'${RELEASE_TAG}' is the newest stable release; latest may move"
+              exit 0
+            fi
+            if [ "${attempt}" -lt 6 ]; then
+              echo "newest stable release is '${newest}' (attempt ${attempt}/6); retrying"
+              sleep 10
+            fi
+          done
+          echo "::error::'${RELEASE_TAG}' is not the newest stable release ('${newest}'); refusing to move latest"
+          exit 1
 
       # crane moves the latest tags by digest; no image build happens here, so
       # buildx is not needed.

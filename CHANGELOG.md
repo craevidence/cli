@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Release pipeline: a manual resume mode (workflow dispatch input
+  `resume_release`) that completes a partially published release with current
+  pipeline code. The release tag is resolved to a commit once at validation
+  and bound to the published artifacts. Every publishing run trusts immutable
+  or authenticated state only: a reused registry digest must carry the exact
+  release tag signature, a checkpointed distribution must verify against its
+  signed bundle, SBOM assets are signed and verified against their bundles,
+  and rebuilding anything new on a resume requires an immutable GitHub
+  release; a state with no such anchor needs a new patch release instead.
+  Canonical distribution bytes are checkpointed on the GitHub release before
+  any PyPI upload, each distribution is published on its own, a lost
+  attestation sidecar is recovered from the provenance PyPI accepted, and the
+  post-publish check also verifies PyPI Trusted Publishing provenance for
+  both distributions. Prereleases are rejected before any publishing job in
+  both modes.
+
 ### Changed
 
 - Release pipeline: registry reads and cross-registry copies use a pinned
