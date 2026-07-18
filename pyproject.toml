@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "craevidence"
-version = "3.8.1"
+version = "3.8.2"
 description = "CLI tool for CI/CD integration with CRA Evidence"
 readme = "README.md"
 requires-python = ">=3.12"

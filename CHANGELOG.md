@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.8.2] - 2026-07-18
+
+Corrects regulatory reference text in command output and documentation,
+refreshes the compliance evidence pack, and rebuilds the release pipeline
+around resumable, authenticated publishing. No scanning or API behavior
+changes.
+
 ### Added
 
 - Release pipeline: a manual resume mode (workflow dispatch input
