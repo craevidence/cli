@@ -192,9 +192,9 @@ points at the latest `v3.x` release commit, never at `main`.
 
 ## Retro-signed images
 
-The Docker Hub and Quay copies of releases published before per-registry
-signing carry post-hoc signatures created by the manually dispatched,
-approval-gated workflow in `.github/workflows/retro-sign.yml`. Verify those
-with the identity
+The Docker Hub and Quay copies of releases 3.6.0, 3.6.1, and 3.7.0 were
+published before per-registry signing and carry post-hoc signatures created
+by a manually dispatched, approval-gated workflow that has since completed
+its purpose and been removed. Verify those images with the identity
 `https://github.com/craevidence/cli/.github/workflows/retro-sign.yml@refs/heads/main`
 instead of a release tag identity.

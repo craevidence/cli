@@ -32,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   explicitly, and the post-publish PyPI check verifies exactly the two
   released distributions by name and hash.
 
+### Removed
+
+- The standalone release recovery and retro-signing workflows. The resume
+  mode replaces the recovery workflow, and the retro-signing workflow
+  completed its bounded task: the Docker Hub and Quay copies of 3.6.0, 3.6.1,
+  and 3.7.0 are signed and verified.
+
 ## [3.8.1] - 2026-07-18
 
 Completes the 3.8.0 release across all distribution channels with a more
