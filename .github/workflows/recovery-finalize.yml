@@ -137,21 +137,28 @@ jobs:
             --pattern "sbom-${VERSION}-linux-*.cdx.json"
           gh release view "v${VERSION}" --json isDraft,isPrerelease,assets > "${work}/release.json"
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: "3.14"
+
       # Verify the Sigstore bundle content (not just its filename) with the
-      # already-installed cosign, so an empty or wrong bundle fails closed.
+      # same sigstore tool that produced the .sigstore.json bundles, so an
+      # empty or wrong bundle fails closed.
       - name: Preflight - Sigstore bundles verify
         run: |
           set -euo pipefail
+          python -m pip install sigstore==4.4.0
           work="${RUNNER_TEMP}/release"
           identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/v${VERSION}"
           for name in \
             "craevidence-${VERSION}-py3-none-any.whl" \
             "craevidence-${VERSION}.tar.gz"; do
-            cosign verify-blob \
+            python -m sigstore verify identity \
               --bundle "${work}/${name}.sigstore.json" \
-              --certificate-identity "${identity}" \
-              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-              "${work}/${name}" > /dev/null
+              --cert-identity "${identity}" \
+              --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "${work}/${name}"
             echo "ok sigstore ${name}"
           done
 
