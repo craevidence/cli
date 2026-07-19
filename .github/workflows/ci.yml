@@ -1158,9 +1158,12 @@ jobs:
           RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
         run: |
           set -euo pipefail
-          mkdir -p attestation-assets
-          gh release download "${RELEASE_TAG}" --pattern '*.publish.attestation' --dir attestation-assets
-          python scripts/verify_pypi_release.py --attestations-dir attestation-assets
+          # A fresh directory, distinct from the attachment step's working
+          # set, so the verifier sees exactly the sidecars the release
+          # serves and the download never collides with local copies.
+          mkdir -p verify-attestation-assets
+          gh release download "${RELEASE_TAG}" --pattern '*.publish.attestation' --dir verify-attestation-assets --clobber
+          python scripts/verify_pypi_release.py --attestations-dir verify-attestation-assets
 
   # ---------------------------------------------------------------------------
   # Job 7: Finalize the release (on release)
