@@ -44,10 +44,10 @@ jobs:
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -65,10 +65,10 @@ jobs:
   rulepack:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: "3.12"
 
@@ -130,7 +130,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       - name: Get version from pyproject.toml
         id: version
@@ -275,7 +275,7 @@ jobs:
       source_sha: ${{ steps.check.outputs.source_sha }}
       build_allowed: ${{ steps.check.outputs.build_allowed }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       # Release mode: the checkout is the tag commit, so the tag must match the
       # package version it carries, and the event commit SHA is the immutable
@@ -379,13 +379,13 @@ jobs:
       # yet and the checked-out source is the canonical input, exactly as in a
       # release run.
       - name: Check out the release source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           ref: ${{ steps.check.outputs.source_sha }}
           path: release-src
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: "3.14"
 
@@ -474,7 +474,7 @@ jobs:
     outputs:
       digest: ${{ steps.canonical.outputs.digest }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       # Pipeline code (scripts and gates) comes from this run's own commit; the
       # release source being built is checked out separately at the release
@@ -482,7 +482,7 @@ jobs:
       # pipeline is the current branch and the source is the exact released
       # tag, so a corrected pipeline can republish unchanged release bytes.
       - name: Check out the release source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           ref: ${{ needs.validate-release.outputs.source_sha }}
           path: release-src
@@ -613,7 +613,7 @@ jobs:
       # Keyless signing (Sigstore OIDC, no long-lived keys): installed before
       # any propagation so a reused digest can be authenticated first.
       - name: Install cosign
-        uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da  # v3.7.0
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
         with:
           cosign-release: "v2.6.3"
 
@@ -887,13 +887,13 @@ jobs:
       contents: write  # upload signed artifacts to the GitHub release
       id-token: write  # OIDC for Trusted Publishing, PEP 740 attestations, Sigstore signing
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       # Pipeline code comes from this run's own commit; the release source
       # being packaged is checked out separately at the release tag, so a
       # resume run publishes the released bytes, never the current branch's.
       - name: Check out the release source
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         with:
           ref: ${{ needs.validate-release.outputs.source_sha }}
           path: release-src
@@ -914,7 +914,7 @@ jobs:
           echo "Release tag '${RELEASE_TAG}' matches package version 'v${VERSION}'."
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
         with:
           python-version: "3.14"
 
@@ -1095,14 +1095,14 @@ jobs:
 
       - name: Publish the wheel to PyPI
         if: steps.dist.outputs.wheel_publish == 'true'
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
         with:
           packages-dir: publish-wheel/
           attestations: true
 
       - name: Publish the sdist to PyPI
         if: steps.dist.outputs.sdist_publish == 'true'
-        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e  # release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
         with:
           packages-dir: publish-sdist/
           attestations: true
@@ -1182,7 +1182,7 @@ jobs:
       contents: read  # read the newest-release state before moving latest
       packages: write
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
 
       # latest only ever moves forward: whatever the mode, the tag being
       # published must be the newest stable release at the moment of
