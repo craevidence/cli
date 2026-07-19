@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Release pipeline: the pinned cosign is upgraded from 2.6.3 to 3.1.2.
+  Signatures created from now on use the Sigstore bundle format: verifying
+  them requires cosign 2.6 or newer, where 2.6.0 to 2.6.2 need the
+  `--new-bundle-format` flag and 2.6.3 and newer detect the format
+  automatically. All previously published signatures remain valid and
+  verifiable as they are. Signing idempotence is now verification-first,
+  which covers both the legacy and the bundle-format signature storage.
+
 ## [3.8.2] - 2026-07-18
 
 Corrects regulatory reference text in command output and documentation,

@@ -615,7 +615,7 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6  # v4.1.2
         with:
-          cosign-release: "v2.6.3"
+          cosign-release: "v3.1.2"
 
       # No run may propagate a digest merely because the mutable GHCR version
       # tag currently points at it: a reused digest must already carry a
@@ -692,10 +692,14 @@ jobs:
       # Two exact identities are accepted, never a pattern: the release tag
       # identity (signatures from the original release run) and this run's
       # identity (signatures a resume run creates; in release mode both
-      # strings are the same). Signing follows the absent/create model: a
-      # digest with NO signature object is signed; an existing signature must
-      # verify with an accepted identity or the run fails for investigation
-      # (a transport failure also fails, never a blind re-sign).
+      # strings are the same). Idempotence is verification-first, which works
+      # for both signature storage formats: the legacy per-digest .sig tag
+      # (cosign 2.x) and the bundle-format referring artifact (cosign 3.x).
+      # A digest that already verifies is not re-signed. When nothing
+      # verifies, a legacy signature object that still exists belongs to
+      # nobody we accept and fails the run for investigation; otherwise the
+      # digest is signed (a transport failure in the probe also fails, never
+      # a blind re-sign).
       - name: Sign the release digest on every registry
         env:
           COSIGN_YES: "true"
@@ -709,14 +713,6 @@ jobs:
             "ghcr.io/${{ github.repository_owner }}/craevidence" \
             "${{ vars.DOCKERHUB_IMAGE }}" \
             "quay.io/craevidence/cli"; do
-            # cosign stores signatures under a per-digest tag; the classifier
-            # distinguishes a definitively absent signature object from a
-            # transport failure, which fails the step instead.
-            sig_state="$(bash scripts/registry-crane.sh digest "${repo}:${digest//:/-}.sig")"
-            if [ "${sig_state}" = "NOTFOUND" ]; then
-              cosign sign --yes "${repo}@${digest}"
-              continue
-            fi
             verified=""
             for identity in "${tag_identity}" "${run_identity}"; do
               if cosign verify \
@@ -727,11 +723,16 @@ jobs:
                 break
               fi
             done
-            if [ -z "${verified}" ]; then
-              echo "::error::${repo}@${digest} carries a signature object that matches neither accepted identity; refusing to sign over it"
+            if [ -n "${verified}" ]; then
+              echo "${repo}@${digest} already carries an accepted signature (${verified}); not re-signing"
+              continue
+            fi
+            sig_state="$(bash scripts/registry-crane.sh digest "${repo}:${digest//:/-}.sig")"
+            if [ "${sig_state}" != "NOTFOUND" ]; then
+              echo "::error::${repo}@${digest} carries a legacy signature object that matches neither accepted identity; refusing to sign over it"
               exit 1
             fi
-            echo "${repo}@${digest} already carries an accepted signature (${verified}); not re-signing"
+            cosign sign --yes "${repo}@${digest}"
           done
 
       - name: Verify every signature with an accepted release identity

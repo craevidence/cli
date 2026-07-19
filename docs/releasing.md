@@ -100,7 +100,11 @@ a glance:
    the run that created that registry copy's signature. Two rules are
    narrower: a reused canonical GHCR digest must already carry the tag
    identity before the pipeline propagates it, and a GHCR digest carrying
-   only the branch identity cannot anchor another resume.
+   only the branch identity cannot anchor another resume. Releases signed by
+   cosign 3.x store the signature in the Sigstore bundle format. Verifying
+   those requires cosign 2.6 or newer: 2.6.0 to 2.6.2 need
+   `--new-bundle-format`, and 2.6.3 and newer detect the format
+   automatically. Earlier releases retain their existing legacy signatures.
 2. PyPI serves exactly the built wheel and sdist, with hashes equal to the
    GitHub release assets, and the wheel hash equals the checksum pinned in
    `gitlab-ci-component.yml`.
