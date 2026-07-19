@@ -106,12 +106,18 @@ def test_only_last_stderr_line_decides_absence(
     "err",
     [
         "Error: GET https://ghcr.io/v2/owner/name/manifests/1.0.0: DENIED: denied",
-        "Error: GET https://index.docker.io/v2/craevidence/cli/manifests/1.0.0: "
-        "UNAUTHORIZED: authentication required",
-        "Error: GET https://quay.io/v2/craevidence/cli/manifests/1.0.0: "
-        "NAME_UNKNOWN: repository not found",
-        "Error: GET https://ghcr.io/v2/owner/name/manifests/1.0.0: "
-        "unexpected status code 404 Not Found",
+        (
+            "Error: GET https://index.docker.io/v2/craevidence/cli/manifests/1.0.0: "
+            "UNAUTHORIZED: authentication required"
+        ),
+        (
+            "Error: GET https://quay.io/v2/craevidence/cli/manifests/1.0.0: "
+            "NAME_UNKNOWN: repository not found"
+        ),
+        (
+            "Error: GET https://ghcr.io/v2/owner/name/manifests/1.0.0: "
+            "unexpected status code 404 Not Found"
+        ),
         "dial tcp: lookup ghcr.io on 1.1.1.1:53: no such host",
         "Error: fetching token: 401 Unauthorized",
     ],

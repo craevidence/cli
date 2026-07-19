@@ -43,7 +43,6 @@ _HONEST_NOTE = (
     "vulnerabilities. Code is never sent to CRA Evidence unless --upload is passed."
 )
 
-_LEVEL_ORDER = {"error": 3, "warning": 2, "note": 1}
 
 
 def _severity_label(level: str) -> str:

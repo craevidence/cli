@@ -354,8 +354,10 @@ _REAL_SHAPE_SARIF = {
                             "properties": {
                                 "precision": "very-high",
                                 "tags": [
-                                    "CWE-89: Improper Neutralization of Special"
-                                    " Elements used in an SQL Command",
+                                    (
+                                        "CWE-89: Improper Neutralization of Special"
+                                        " Elements used in an SQL Command"
+                                    ),
                                     "HIGH CONFIDENCE",
                                     "security",
                                 ],

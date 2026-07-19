@@ -27,7 +27,6 @@ _DEFAULT_EXCLUDES = (
 )
 
 _CWE_TAG_RE = re.compile(r"^(CWE-\d+:.+)$")
-_CWE_ID_RE = re.compile(r"^CWE-\d+")
 
 _LEVEL_ORDER = {"error": 3, "warning": 2, "note": 1}
 
