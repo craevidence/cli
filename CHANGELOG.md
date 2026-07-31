@@ -75,6 +75,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   without target markets reports `--target-markets` and `--create-product`.
   The rewrite covers `upload-sbom`, `upload-hbom`, `upload-document`,
   `upload-diagram`, and `compliance-as-code upload`.
+- Bundled Syft updated to 1.50.0 and Grype to 0.116.1 everywhere the tools are
+  pinned: the Docker image, the GitHub Action, the GitLab CI component, the
+  Codespaces setup, the demo workflow, the Syft fallback container image, and
+  the image gate scanner. The rebuilt binaries carry `golang.org/x/text`
+  0.40.0 and `google.golang.org/grpc` 1.82.1, which clears two fixed High
+  findings that the image gate reported against the previous binaries.
+- Docker Hardened Images base digests refreshed to the current
+  `python:3.14-dev` and `python:3.14` builds. The refreshed runtime base ships
+  expat 2.8.2, clearing the fixed expat findings the gate reported against the
+  previous base.
 - Release pipeline: the pinned cosign is upgraded from 2.6.3 to 3.1.2.
   Signatures created from now on use the Sigstore bundle format: verifying
   them requires cosign 2.6 or newer, where 2.6.0 to 2.6.2 need the

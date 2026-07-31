@@ -8,20 +8,20 @@ pip install -e ".[dev]"
 
 # Install Syft and Grype at pinned versions with checksum verification.
 # Checksums match the linux amd64/arm64 release tarballs published on GitHub.
-SYFT_VERSION="1.48.0"
-GRYPE_VERSION="0.116.0"
+SYFT_VERSION="1.50.0"
+GRYPE_VERSION="0.116.1"
 
 MACHINE="$(uname -m)"
 case "${MACHINE}" in
     x86_64)
         ARCH="amd64"
-        SYFT_SHA256="6cef9a7f37220d9067eaf9cfaaa2fce986e9f320a8d42cbc36658c99af78ea04"
-        GRYPE_SHA256="40aff724297312f91ea390d003bed8d8651c74cc7f5b26732db80b3a408d2fc5"
+        SYFT_SHA256="bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788"
+        GRYPE_SHA256="0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458"
         ;;
     aarch64|arm64)
         ARCH="arm64"
-        SYFT_SHA256="6865a3d97c4e28b4b38571c17a2bf512da4494ef1d37613c3122fce0d67e63b0"
-        GRYPE_SHA256="7af3eed24f469b0cf3ab5ec4508d9c12f4bb9c2c6be714f32973c7b5d63cb6a5"
+        SYFT_SHA256="887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86"
+        GRYPE_SHA256="a8d7504a149629324eb5f4ce3dc25dfd211bbfe047e64ee2bf7844b466c3d84d"
         ;;
     *)
         echo "Unsupported architecture: ${MACHINE}" >&2

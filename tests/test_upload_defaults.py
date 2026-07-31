@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
+from cra_evidence_cli import sbom_generator
 from cra_evidence_cli.cli import cli
 from cra_evidence_cli.commands.upload import (
     clarify_product_not_found_error,
@@ -346,3 +347,30 @@ class TestGenerateSbomFromDirectory:
 
         # Cleanup
         result.file_path.unlink(missing_ok=True)
+
+
+def test_docker_syft_fallback_uses_an_immutable_image_digest(tmp_path):
+    output_path = tmp_path / "sbom.json"
+    completed = MagicMock(
+        returncode=0,
+        stdout='{"bomFormat":"CycloneDX","components":[]}',
+        stderr="",
+    )
+
+    with patch(
+        "cra_evidence_cli.sbom_generator.subprocess.run",
+        return_value=completed,
+    ) as run:
+        sbom_generator._generate_sbom_with_docker(
+            "example/image:1.0",
+            "cyclonedx",
+            output_path,
+        )
+
+    command = run.call_args.args[0]
+    syft_image = command[command.index("/var/run/docker.sock:/var/run/docker.sock") + 1]
+    assert syft_image.startswith("anchore/syft:v1.50.0@sha256:")
+    assert syft_image.endswith(
+        "1288ea4c8b38767b4e620c1e312c8cb26b6e887a99b4f07ab6cd19fc6f225026"
+    )
+    assert output_path.read_text() == completed.stdout

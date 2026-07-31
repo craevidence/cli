@@ -17,22 +17,20 @@
 # Provenance of the scan-derived sections (everything except
 # build_info_audit):
 #   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
-#   scanner: Grype 0.116.0
-#   database: schema v6.1.9, built 2026-07-17T06:57:18Z
-#   image: built 2026-07-17 from this repository's Dockerfile with bases
-#     dhi.io/python:3.14-dev@sha256:9b72c38a520f44fafa1c4a3026e9b390eb3b4967c62d38be01400ecbb0232b65
-#     and dhi.io/python:3.14@sha256:c82da5a1a30a6214f45c42def5b6f5b85981c7dc7a1802015a6ebf264675436d,
-#     bundled Syft 1.48.0 and Grype 0.116.0
-#   review date: 2026-07-17
+#   scanner: Grype 0.116.1
+#   database: schema v6.1.9, built 2026-07-31T07:09:24Z
+#   image: built 2026-07-31 from this repository's Dockerfile with bases
+#     dhi.io/python:3.14-dev@sha256:15bf794abbbe30567641eb4d302a24a47e544673ca2a780caa005687ce28b47b
+#     and dhi.io/python:3.14@sha256:a48b4d2f444300b14ca90979f44e920657f09e7f649d9251878af7438874df63,
+#     bundled Syft 1.50.0 and Grype 0.116.1
+#   review date: 2026-07-31
 # Review at every release.
 
 watchlist:
   bundled_binaries:
     - package: github.com/docker/docker v28.5.2+incompatible
-      source: pinned Grype 0.116.0 binary
+      source: pinned Grype 0.116.1 binary
       advisories:
-        - { id: GHSA-rg2x-37c3-w2rh, severity: High, fix_state: not-fixed }
-        - { id: GHSA-x86f-5xw2-fm2r, severity: High, fix_state: not-fixed }
         - { id: GHSA-pxq6-2prw-chj9, severity: Medium, fix_state: not-fixed }
         - { id: GHSA-vp62-88p7-qqf5, severity: Medium, fix_state: not-fixed }
       note: "Docker daemon code paths; this image does not run a Docker daemon or expose daemon endpoints. GHSA-x744-4wpc-v9h2 from the same package gained a fix (29.3.1) and is therefore a reviewed waiver in grype.yaml, not a watch-list row."
@@ -56,32 +54,11 @@ watchlist:
         - { id: CVE-2019-1010025, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-9192, severity: Negligible, fix_state: not-fixed }
       note: "glibc issues Debian marks wont-fix or leaves unfixed; the higher-severity items concern scanf width handling, deprecated DNS printing functions, and special encodings that no known code path in this image exercises."
-    - package: libexpat1 2.7.1-2+dhi5
-      also: [libexpat1-dev 2.7.1-2+dhi5]
+    - package: libexpat1 2.8.2-1~deb13u1+dhi0
+      also: [libexpat1-dev 2.8.2-1~deb13u1+dhi0]
       advisories:
-        - { id: CVE-2025-59375, severity: High, fix_state: wont-fix }
-        - { id: CVE-2026-25210, severity: High, fix_state: wont-fix }
-        - { id: CVE-2026-41080, severity: High, fix_state: wont-fix }
-        - { id: CVE-2026-45186, severity: High, fix_state: not-fixed }
         - { id: CVE-2025-66382, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-32776, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-32777, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-32778, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-50219, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56131, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56132, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56403, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56404, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56405, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56406, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56407, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56408, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56409, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56410, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56411, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-56412, severity: Medium, fix_state: not-fixed }
-        - { id: CVE-2026-24515, severity: Low, fix_state: wont-fix }
-      note: "expat XML parsing issues without a Debian fix; no known code path in this image parses untrusted XML with expat."
+      note: "The refreshed base ships expat 2.8.2, which clears the previously listed expat findings; the remaining item has no Debian fix and no known code path in this image parses untrusted XML with expat."
     - package: libsqlite3-0 3.46.1-7+deb13u1+dhi2
       advisories:
         - { id: CVE-2026-11822, severity: High, fix_state: wont-fix }
@@ -123,12 +100,20 @@ watchlist:
   # from the scanner output above. They record embedded dependencies the
   # scanner currently filters out, so the dependency stays visible.
   build_info_audit:
-    - package: golang.org/x/crypto v0.53.0
-      source: go build info of the pinned Syft 1.48.0 and Grype 0.116.0 binaries
+    - package: golang.org/x/crypto v0.54.0
+      source: go build info of the pinned Syft 1.50.0 and Grype 0.116.1 binaries
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
-      note: "Grype 0.116.0 does not report this advisory against the image (Go reachability filtering, checked 2026-07-17)."
+      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-07-31)."
 
   resolved_since_last_review:
+    - ids: [CVE-2025-59375, CVE-2026-25210, CVE-2026-41080, CVE-2026-45186]
+      note: "Previously listed against libexpat1 2.7.1-2+dhi5. The refreshed runtime base ships expat 2.8.2-1~deb13u1+dhi0 and the scan above no longer reports them."
+    - id: GO-2026-5970
+      note: "Previously reported against golang.org/x/text v0.38.0 in the bundled binaries. Syft 1.50.0 and Grype 0.116.1 embed v0.40.0."
+    - id: GHSA-hrxh-6v49-42gf
+      note: "Previously reported against google.golang.org/grpc v1.80.0 in the bundled binaries. Syft 1.50.0 and Grype 0.116.1 embed v1.82.1."
+    - ids: [GHSA-rg2x-37c3-w2rh, GHSA-x86f-5xw2-fm2r]
+      note: "Previously listed against github.com/docker/docker v28.5.2+incompatible. The package version is unchanged, but the vulnerability database used above no longer reports these advisories against it (checked 2026-07-31)."
     - id: CVE-2026-34743
-      note: "Previously waived against liblzma5. The package is still shipped (5.8.1-1+dhi1), but the vulnerability database used above no longer reports the advisory against this tuple (checked 2026-07-17)."
+      note: "Previously waived against liblzma5. The package is still shipped (5.8.1-1+dhi1), but the vulnerability database used above no longer reports the advisory against this tuple (checked 2026-07-31)."

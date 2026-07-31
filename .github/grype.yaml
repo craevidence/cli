@@ -10,12 +10,12 @@
 # this directory; when one of those gains a fix, the gate surfaces it and it
 # gets reviewed here instead of staying suppressed.
 #
-# Gate scanner: Grype 0.116.0, pinned in scripts/check-image-gate.sh.
-# Derived from an unfiltered Grype 0.116.0 scan on 2026-07-17 (DB schema
-# v6.1.9, built 2026-07-17T06:57:18Z) of the image built from this Dockerfile:
-# bases dhi.io/python:3.14-dev@sha256:9b72c38a520f44fafa1c4a3026e9b390eb3b4967c62d38be01400ecbb0232b65
-# and dhi.io/python:3.14@sha256:c82da5a1a30a6214f45c42def5b6f5b85981c7dc7a1802015a6ebf264675436d,
-# bundled Syft 1.48.0 and Grype 0.116.0.
+# Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
+# Derived from an unfiltered Grype 0.116.1 scan on 2026-07-31 (DB schema
+# v6.1.9, built 2026-07-31T07:09:24Z) of the image built from this Dockerfile:
+# bases dhi.io/python:3.14-dev@sha256:15bf794abbbe30567641eb4d302a24a47e544673ca2a780caa005687ce28b47b
+# and dhi.io/python:3.14@sha256:a48b4d2f444300b14ca90979f44e920657f09e7f649d9251878af7438874df63,
+# bundled Syft 1.50.0 and Grype 0.116.1.
 # Re-evaluate at every release and remove entries as soon as upstream ships
 # rebuilt binaries.
 
@@ -24,14 +24,14 @@ ignore:
     package:
       name: stdlib
       version: go1.26.3
-    reason: "High severity, fix ships in Go 1.26.5 and 1.25.12. The bundled Syft 1.48.0 and Grype 0.116.0 binaries are built with Go 1.26.3, and the latest upstream releases (checked 2026-07-17) are still built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: the os.Root symlink issue requires the binary to open attacker-controlled paths ending in a slash inside an os.Root; no known code path in this image does that. Remove when upstream ships binaries built with Go 1.26.5, 1.25.12, or later."
+    reason: "High severity, fix ships in Go 1.26.5 and 1.25.12. The bundled Syft 1.50.0 and Grype 0.116.1 binaries are built with Go 1.26.3, and the latest upstream releases (checked 2026-07-31) are still built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: the os.Root symlink issue requires the binary to open attacker-controlled paths ending in a slash inside an os.Root; no known code path in this image does that. Remove when upstream ships binaries built with Go 1.26.5, 1.25.12, or later."
   - vulnerability: GO-2026-5037
     package:
       name: stdlib
       version: go1.26.3
-    reason: "High severity, fix ships in Go 1.26.4 and 1.25.11. The bundled Syft 1.48.0 and Grype 0.116.0 binaries are built with Go 1.26.3, and the latest upstream releases (checked 2026-07-17) are still built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: the advisory is quadratic work in crypto/x509 hostname verification when a TLS peer presents a certificate with a large DNS SAN list, an algorithmic-complexity denial of service. The tools in this image open TLS connections to endpoints the user configures (container registries, the vulnerability database host, release downloads), so a malicious or compromised endpoint could burn CPU and stall a scan; the advisory class does not include code execution or result tampering. Accepted until a rebuilt binary exists because the worst known outcome is a slow or failed scan run. Remove when upstream ships binaries built with Go 1.26.4, 1.25.11, or later."
+    reason: "High severity, fix ships in Go 1.26.4 and 1.25.11. The bundled Syft 1.50.0 and Grype 0.116.1 binaries are built with Go 1.26.3, and the latest upstream releases (checked 2026-07-31) are still built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: the advisory is quadratic work in crypto/x509 hostname verification when a TLS peer presents a certificate with a large DNS SAN list, an algorithmic-complexity denial of service. The tools in this image open TLS connections to endpoints the user configures (container registries, the vulnerability database host, release downloads), so a malicious or compromised endpoint could burn CPU and stall a scan; the advisory class does not include code execution or result tampering. Accepted until a rebuilt binary exists because the worst known outcome is a slow or failed scan run. Remove when upstream ships binaries built with Go 1.26.4, 1.25.11, or later."
   - vulnerability: GHSA-x744-4wpc-v9h2
     package:
       name: github.com/docker/docker
       version: v28.5.2+incompatible
-    reason: "High severity, library fix exists (29.3.1). Found in the pinned Grype 0.116.0 binary, which embeds docker/docker v28.5.2; no Grype release embeds the fixed library yet (checked 2026-07-17). Exposure: the advisory concerns Docker daemon authorization plugin handling; this image does not run a Docker daemon or expose Docker daemon endpoints. Remove when the pinned Grype embeds docker/docker 29.3.1 or later."
+    reason: "High severity, library fix exists (29.3.1). Found in the pinned Grype 0.116.1 binary, which embeds docker/docker v28.5.2; no Grype release embeds the fixed library yet (checked 2026-07-31). Exposure: the advisory concerns Docker daemon authorization plugin handling; this image does not run a Docker daemon or expose Docker daemon endpoints. Remove when the pinned Grype embeds docker/docker 29.3.1 or later."

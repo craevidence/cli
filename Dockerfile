@@ -49,10 +49,10 @@
 #     --build-arg SECURITY_HARDENED=false \
 #     --build-arg SECURITY_NO_SHELL=false \
 #     --build-arg SECURITY_NO_PACKAGE_MANAGER=false .
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:9b72c38a520f44fafa1c4a3026e9b390eb3b4967c62d38be01400ecbb0232b65
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:15bf794abbbe30567641eb4d302a24a47e544673ca2a780caa005687ce28b47b
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:c82da5a1a30a6214f45c42def5b6f5b85981c7dc7a1802015a6ebf264675436d
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:a48b4d2f444300b14ca90979f44e920657f09e7f649d9251878af7438874df63
 FROM ${BASE_IMAGE_BUILDER} AS builder
 
 # Build-time environment variables
@@ -71,8 +71,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install local check engines via direct downloads with SHA256 verification.
-ARG SYFT_VERSION=1.48.0
-ARG GRYPE_VERSION=0.116.0
+ARG SYFT_VERSION=1.50.0
+ARG GRYPE_VERSION=0.116.1
 ARG TARGETARCH
 RUN set -eux; \
     ARCH="${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')}"; \
@@ -80,11 +80,11 @@ RUN set -eux; \
     GRYPE_TARBALL="grype_${GRYPE_VERSION}_linux_${ARCH}.tar.gz"; \
     case "${ARCH}" in \
         amd64) \
-            SYFT_EXPECTED="6cef9a7f37220d9067eaf9cfaaa2fce986e9f320a8d42cbc36658c99af78ea04"; \
-            GRYPE_EXPECTED="40aff724297312f91ea390d003bed8d8651c74cc7f5b26732db80b3a408d2fc5" ;; \
+            SYFT_EXPECTED="bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788"; \
+            GRYPE_EXPECTED="0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458" ;; \
         arm64) \
-            SYFT_EXPECTED="6865a3d97c4e28b4b38571c17a2bf512da4494ef1d37613c3122fce0d67e63b0"; \
-            GRYPE_EXPECTED="7af3eed24f469b0cf3ab5ec4508d9c12f4bb9c2c6be714f32973c7b5d63cb6a5" ;; \
+            SYFT_EXPECTED="887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86"; \
+            GRYPE_EXPECTED="a8d7504a149629324eb5f4ce3dc25dfd211bbfe047e64ee2bf7844b466c3d84d" ;; \
         *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${SYFT_TARBALL}" \
