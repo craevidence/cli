@@ -731,6 +731,120 @@ class TestGemaraUploadStructuredMappingFlag:
         mock_client.upload_document.assert_called_once()
 
 
+class TestGemaraUploadProductCreationFlags:
+    """compliance-as-code upload can create a product with target markets."""
+
+    BASE_ENV = {
+        "CRA_EVIDENCE_API_KEY": "test_key_123",
+        "CRA_EVIDENCE_URL": "http://localhost:8000",
+    }
+
+    def _invoke_version_upload(self, extra_args: list[str]):
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+
+        from cra_evidence_cli.cli import cli
+
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.gemara.CRAEvidenceClient"
+        ) as mock_client_cls, patch(
+            "cra_evidence_cli.commands.gemara.asyncio.run"
+        ) as mock_run:
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_run.return_value = {
+                "artifact_id": "doc-123",
+                "artifact_type": "document",
+                "doc_type": "risk_assessment",
+                "product": {"name": "test", "created": True},
+                "version": {"number": "1.0", "created": True},
+            }
+
+            with runner.isolated_filesystem():
+                Path("risk.yaml").write_text(
+                    "metadata:\n  type: RiskCatalog\n", encoding="utf-8"
+                )
+                result = runner.invoke(
+                    cli,
+                    [
+                        "compliance-as-code",
+                        "upload",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "risk.yaml",
+                        *extra_args,
+                    ],
+                    env=self.BASE_ENV,
+                )
+
+        return result, mock_client
+
+    def test_target_markets_forwarded_with_create_product(self):
+        result, mock_client = self._invoke_version_upload(
+            ["--create-product", "--target-markets", "DE,FR,ES"]
+        )
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_client.upload_document.call_args.kwargs
+        assert kwargs["create_product"] is True
+        assert kwargs["target_markets"] == "DE,FR,ES"
+
+    def test_product_creation_stays_opt_in(self):
+        result, mock_client = self._invoke_version_upload([])
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_client.upload_document.call_args.kwargs
+        assert kwargs["create_product"] is False
+        assert kwargs["create_version"] is True
+        assert kwargs["target_markets"] is None
+
+    def test_rejected_creation_error_names_cli_flags(self):
+        from pathlib import Path
+        from unittest.mock import MagicMock, patch
+
+        from cra_evidence_cli.cli import cli
+        from cra_evidence_cli.exceptions import APIError
+
+        api_error = APIError(
+            message=(
+                "target_markets is required to auto-create product 'ghost'. "
+                "Provide comma-separated EU country codes (e.g. 'DE,FR,ES'). "
+                "Alternatively, create the product manually in the UI and "
+                "re-run without create_product, or use its slug or UUID."
+            ),
+            status_code=400,
+        )
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.gemara.CRAEvidenceClient"
+        ) as mock_client_cls, patch(
+            "cra_evidence_cli.commands.gemara.asyncio.run", side_effect=api_error
+        ):
+            mock_client_cls.return_value = MagicMock()
+
+            with runner.isolated_filesystem():
+                Path("risk.yaml").write_text(
+                    "metadata:\n  type: RiskCatalog\n", encoding="utf-8"
+                )
+                result = runner.invoke(
+                    cli,
+                    [
+                        "compliance-as-code",
+                        "upload",
+                        "--product", "ghost",
+                        "--version", "1.0",
+                        "--file", "risk.yaml",
+                        "--create-product",
+                    ],
+                    env=self.BASE_ENV,
+                )
+
+        assert result.exit_code == api_error.exit_code
+        assert "--target-markets" in result.output
+        assert "target_markets is required" not in result.output
+
+
 class TestGemaraUploadNoGuessingRouting:
     """Pin compliance-as-code upload routing boundaries."""
 
@@ -874,6 +988,7 @@ class TestGemaraUploadNoGuessingRouting:
             "document_type": "secure_development_policy",
             "create_product": False,
             "create_version": True,
+            "target_markets": None,
         }
         mock_client.upload_product_document_gemara.assert_not_called()
 

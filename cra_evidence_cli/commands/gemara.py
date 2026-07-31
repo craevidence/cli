@@ -26,7 +26,11 @@ import yaml
 from rich.console import Console
 
 from cra_evidence_cli.client import CRAEvidenceClient
-from cra_evidence_cli.commands.upload import enforce_structured_mapping, format_output
+from cra_evidence_cli.commands.upload import (
+    clarify_upload_error,
+    enforce_structured_mapping,
+    format_output,
+)
 from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import APIError, CRAEvidenceError
 from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
@@ -782,12 +786,15 @@ def _print_validate_result(
               help="Create the product if it's missing (default: disabled). "
                    "Creating a product sets its classification, ownership, and "
                    "compliance context, so it is never done unless you pass "
-                   "this flag. Ignored for product-level uploads (product "
-                   "must already exist). This command has no --target-markets "
-                   "flag, so it only works against an existing product.")
+                   "this flag. Requires --target-markets. Ignored for "
+                   "product-level uploads (product must already exist).")
 @click.option("--create-version/--no-create-version", default=True,
               help="Auto-create version if missing (default: enabled). "
                    "Ignored for product-level uploads.")
+@click.option("--target-markets", "target_markets", default=None,
+              help="Comma-separated EU country codes where the product is placed "
+                   "on the market (required when --create-product creates a "
+                   "product, e.g. DE,FR,ES). Ignored for product-level uploads.")
 @click.option(
     "--require-structured-mapping",
     is_flag=True,
@@ -806,6 +813,7 @@ def upload(
     document_type_override: str | None,
     create_product: bool,
     create_version: bool,
+    target_markets: str | None,
     require_structured_mapping: bool,
 ) -> None:
     """
@@ -821,10 +829,10 @@ def upload(
 
     For version-specific uploads, the version is auto-created by default;
     pass --no-create-version to disable that. The product is not created
-    automatically: product creation sets classification, ownership, and
-    compliance context that should be a deliberate decision, and this
-    command has no --target-markets flag, so --create-product only works
-    against an existing product.
+    automatically: pass --create-product (with --target-markets) to create
+    it, because product creation sets classification, ownership, and
+    compliance context that should be a deliberate decision. Product-level
+    uploads ignore both flags and need a product that already exists.
     """
     config = ctx.obj["config"]
     output_format = config.output_format
@@ -890,6 +898,7 @@ def upload(
                     document_type=document_type,
                     create_product=create_product,
                     create_version=create_version,
+                    target_markets=target_markets,
                 )
             )
 
@@ -901,7 +910,7 @@ def upload(
         console.print(f"[red]Error:[/red] {msg}")
         sys.exit(3)
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)

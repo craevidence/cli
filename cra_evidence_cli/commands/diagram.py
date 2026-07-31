@@ -28,6 +28,7 @@ from rich.console import Console
 from cra_evidence_cli.ci_detect import merge_ci_metadata
 from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.commands.upload import (
+    clarify_upload_error,
     format_output,
     validate_classification,
     warn_default_category,
@@ -92,12 +93,22 @@ def _render_mermaid_to_png(source: Path) -> Path:
     help=(
         "Create the product if it doesn't exist (default: disabled). "
         "Creating a product sets its classification, ownership, and "
-        "compliance context, so it is never done unless you pass this flag."
+        "compliance context, so it is never done unless you pass this flag. "
+        "Requires --target-markets."
     ),
 )
 @click.option(
     "--create-version/--no-create-version", default=True,
     help="Auto-create version if it doesn't exist (default: enabled)",
+)
+@click.option(
+    "--target-markets",
+    "target_markets",
+    default=None,
+    help=(
+        "Comma-separated EU country codes where the product is placed on the market "
+        "(required when --create-product creates a product, e.g. DE,FR,ES)"
+    ),
 )
 # CI metadata: same auto-detect contract as upload-document
 @click.option("--commit", "commit_sha", help="Git commit SHA (auto-detected in CI)")
@@ -115,6 +126,7 @@ def upload_diagram(
     render: bool,
     create_product: bool,
     create_version: bool,
+    target_markets: str | None,
     commit_sha: str | None,
     branch: str | None,
     pipeline_id: str | None,
@@ -127,13 +139,10 @@ def upload_diagram(
     technical documentation.
 
     The version is auto-created by default; pass --no-create-version to
-    disable that. The product is not created automatically, because product
+    disable that. The product is not created automatically: pass
+    --create-product (with --target-markets) to create it, because product
     creation sets classification, ownership, and compliance context that
-    should be a deliberate decision. This command has no --target-markets
-    flag, so passing --create-product for a product that does not exist yet
-    still fails: create the product first with `upload-sbom`, `upload-hbom`,
-    or `upload-document` (which accept --target-markets), or in the web app,
-    then upload the diagram to it.
+    should be a deliberate decision.
     """
     config = ctx.obj["config"]
     output_format = config.output_format
@@ -203,6 +212,7 @@ def upload_diagram(
                 document_type="architecture_diagram",
                 create_product=create_product,
                 create_version=create_version,
+                target_markets=target_markets,
                 commit_sha=ci_metadata.get("commit_sha"),
                 branch=ci_metadata.get("branch"),
                 pipeline_id=ci_metadata.get("pipeline_id"),
@@ -212,7 +222,7 @@ def upload_diagram(
         )
         format_output(data, output_format, verbose)
     except CRAEvidenceError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        console.print(f"[red]Error:[/red] {clarify_upload_error(str(exc))}")
         if hasattr(exc, "request_id") and exc.request_id:
             console.print(f"[dim]Request ID: {exc.request_id}[/dim]")
         sys.exit(exc.exit_code)

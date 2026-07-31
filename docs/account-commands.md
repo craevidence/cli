@@ -623,8 +623,9 @@ craevidence upload-diagram
   --version <version-number>
   --file <path.mmd>
   [--render | --no-render]              # Default: render
-  [--create-product]                    # Create the product if missing (default: disabled)
+  [--create-product]                    # Create the product if missing (default: disabled; requires --target-markets)
   [--create-version | --no-create-version]
+  [--target-markets DE,FR]              # Required when --create-product creates a product
   # CI metadata (auto-detected)
   [--commit <sha>] [--branch <name>] [--pipeline-id <id>]
   [--repository <url>] [--repo-path <subdir>] [--no-ci-detect]
@@ -636,10 +637,7 @@ dependency); in Docker-based CI use `--no-render` to upload the raw `.mmd`.
 
 Creating a product sets its classification, ownership, and compliance
 context, so `upload-diagram` never creates one unless you pass
-`--create-product`. This command has no `--target-markets` flag, so
-`--create-product` here only works against a product that already exists;
-create a new product with `upload-sbom`, `upload-hbom`, or `upload-document`
-instead.
+`--create-product` together with `--target-markets`.
 
 ## `status`
 
@@ -1152,9 +1150,9 @@ below do not apply to it.
 | `--product-group <name>` | upload-sbom, upload-hbom, upload-vex, upload-document | Assign the product to a named product group |
 | `--environment <env>` | upload-sbom, upload-hbom, upload-vex, upload-document | Target a specific deployment environment (e.g. `production`, `staging`) |
 | `--tags <comma-separated>` | upload-sbom, upload-hbom, upload-vex, upload-document | Attach arbitrary metadata tags |
-| `--create-product` | upload-sbom, upload-hbom, upload-document | Create the product if it's missing (disabled by default: creating a product sets its classification, ownership, and compliance context, so it's always an explicit choice). Requires `--target-markets`. |
-| `--no-create-version` | upload-sbom, upload-hbom, upload-document | Disable auto-creation of the version (creation is on by default) |
-| `--target-markets <codes>` | upload-sbom, upload-hbom, upload-document | Comma-separated EU country codes required when `--create-product` auto-creates a product, e.g. `DE,FR,ES` |
+| `--create-product` | upload-sbom, upload-hbom, upload-document, upload-diagram, compliance-as-code upload | Create the product if it's missing (disabled by default: creating a product sets its classification, ownership, and compliance context, so it's always an explicit choice). Requires `--target-markets`. |
+| `--no-create-version` | upload-sbom, upload-hbom, upload-document, upload-diagram, compliance-as-code upload | Disable auto-creation of the version (creation is on by default) |
+| `--target-markets <codes>` | upload-sbom, upload-hbom, upload-document, upload-diagram, compliance-as-code upload | Comma-separated EU country codes required when `--create-product` auto-creates a product, e.g. `DE,FR,ES` |
 
 ## `compliance-as-code` upload
 
@@ -1182,6 +1180,12 @@ craevidence compliance-as-code upload \
 CRA Evidence confirms that the structured file populated mapped fields; without
 the flag, accepted compliance YAML files can remain document evidence with manual
 follow-ups.
+
+Version-scoped uploads create the version by default. They never create the
+product unless you pass `--create-product` together with `--target-markets`,
+because creating a product sets its classification, ownership, and compliance
+context. Product-level uploads (`Policy`, `GuidanceCatalog`, `ControlCatalog`
+without `--version`) ignore both flags and need a product that already exists.
 
 Compliance YAML `ControlCatalog` uploads are declaration/intent evidence. They
 do not auto-confirm CRA Annex I fields; use a passed `EvaluationLog` mapping or

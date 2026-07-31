@@ -199,6 +199,35 @@ def clarify_product_not_found_error(message: str) -> str:
     )
 
 
+_TARGET_MARKETS_API_HINT = "target_markets is required to auto-create product"
+_TARGET_MARKETS_API_FALLBACK = "re-run without create_product"
+
+
+def clarify_target_markets_error(message: str) -> str:
+    """Rewrite the API's missing-target-markets hint to CLI flag names.
+
+    The API rejects product creation without target markets by naming the
+    ``target_markets`` and ``create_product`` form fields the CLI sends,
+    which a CLI user never types. Only the field names are replaced; the
+    country codes, the product identifier, and the rest of the API's
+    wording are kept as they are.
+    """
+    if _TARGET_MARKETS_API_HINT not in message:
+        return message
+    return message.replace(
+        _TARGET_MARKETS_API_HINT,
+        "--target-markets is required to create product",
+    ).replace(
+        _TARGET_MARKETS_API_FALLBACK,
+        "re-run without --create-product",
+    )
+
+
+def clarify_upload_error(message: str) -> str:
+    """Apply every API-message rewrite the upload commands share."""
+    return clarify_target_markets_error(clarify_product_not_found_error(message))
+
+
 def enforce_structured_mapping(data: dict, require_structured_mapping: bool) -> None:
     """Fail CI only when the caller explicitly requires mapped structured fields."""
     if not require_structured_mapping:
@@ -1524,7 +1553,7 @@ def upload_sbom(
                 check_vulnerability_threshold(vuln_summary, fail_on)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {clarify_product_not_found_error(str(e))}")
+        console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
@@ -1819,7 +1848,7 @@ def upload_hbom(
         format_output(data, output_format, verbose)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {clarify_product_not_found_error(str(e))}")
+        console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
@@ -2422,7 +2451,7 @@ def upload_document(
         enforce_structured_mapping(data, require_structured_mapping)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {clarify_product_not_found_error(str(e))}")
+        console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)

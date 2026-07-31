@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   admin or owner role, from a human session or an API key holding the
   `ra:finalize` scope. Error paths follow the same stdout/stderr split as
   `ra status` in `--output json` mode.
+- `--target-markets` on `upload-diagram` and `compliance-as-code upload`,
+  which take the same comma-separated EU country codes as `upload-sbom`.
+  `--create-product` can now create a product from either command instead of
+  only working against one that already exists. Product-level compliance
+  uploads (`Policy`, `GuidanceCatalog`, or `ControlCatalog` without
+  `--version`) still require a product that exists.
 
 ### Changed
 
@@ -63,10 +69,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `--target-markets <codes>` (for example `--create-product --target-markets
   DE,FR,ES`) to the upload command, or the equivalent `create-product: true`
   / `CRA_CREATE_PRODUCT: 'true'` input to the GitHub Action or GitLab CI
-  component. `upload-diagram` and `compliance-as-code upload` have no
-  `--target-markets` flag, so `--create-product` on those two only works
-  against a product that already exists; create new products with
-  `upload-sbom`, `upload-hbom`, or `upload-document` instead.
+  component.
+- Errors returned when a product cannot be resolved or created now name the
+  CLI flag that fixes them instead of the API form field: a rejected creation
+  without target markets reports `--target-markets` and `--create-product`.
+  The rewrite covers `upload-sbom`, `upload-hbom`, `upload-document`,
+  `upload-diagram`, and `compliance-as-code upload`.
 - Release pipeline: the pinned cosign is upgraded from 2.6.3 to 3.1.2.
   Signatures created from now on use the Sigstore bundle format: verifying
   them requires cosign 2.6 or newer, where 2.6.0 to 2.6.2 need the
