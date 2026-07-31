@@ -49,6 +49,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** `--create-product` on `upload-sbom`, `upload-hbom`,
+  `upload-document`, `upload-diagram`, and `compliance-as-code upload` now
+  defaults to disabled instead of enabled. Creating a product sets its
+  classification, ownership, and compliance context, so it is now always an
+  explicit decision, matching the same never-auto-create rule `create-version`
+  already applies to products. `--create-version` is unaffected and still
+  defaults to enabled, since a draft version is low-stakes and CI tag
+  pipelines rely on it. Uploading to a product that does not exist yet, and
+  that was previously created implicitly, now fails with an error that names
+  `--create-product` as the fix. **Migration:** pipelines that relied on
+  implicit product creation must add `--create-product` plus
+  `--target-markets <codes>` (for example `--create-product --target-markets
+  DE,FR,ES`) to the upload command, or the equivalent `create-product: true`
+  / `CRA_CREATE_PRODUCT: 'true'` input to the GitHub Action or GitLab CI
+  component. `upload-diagram` and `compliance-as-code upload` have no
+  `--target-markets` flag, so `--create-product` on those two only works
+  against a product that already exists; create new products with
+  `upload-sbom`, `upload-hbom`, or `upload-document` instead.
 - Release pipeline: the pinned cosign is upgraded from 2.6.3 to 3.1.2.
   Signatures created from now on use the Sigstore bundle format: verifying
   them requires cosign 2.6 or newer, where 2.6.0 to 2.6.2 need the

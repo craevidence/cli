@@ -26,6 +26,13 @@ a tag-triggered job and the branch name in a branch-triggered job. Docker runs
 the same CLI, so Docker upload commands have the same version creation
 behavior.
 
+Products are not created automatically: creating a product sets its
+classification, ownership, and compliance context, so it only happens when
+you pass `--create-product` (with `--target-markets`) to the CLI, or set
+`create-product: true` / `CRA_CREATE_PRODUCT: 'true'` on the GitHub Action or
+GitLab CI component. Point pipelines at a product that already exists unless
+you deliberately want the pipeline to create it.
+
 ## Usage in CI/CD
 
 ### GitHub Action

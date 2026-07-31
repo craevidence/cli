@@ -88,8 +88,12 @@ def _render_mermaid_to_png(source: Path) -> Path:
     ),
 )
 @click.option(
-    "--create-product/--no-create-product", default=True,
-    help="Auto-create product if it doesn't exist (default: enabled)",
+    "--create-product/--no-create-product", default=False,
+    help=(
+        "Create the product if it doesn't exist (default: disabled). "
+        "Creating a product sets its classification, ownership, and "
+        "compliance context, so it is never done unless you pass this flag."
+    ),
 )
 @click.option(
     "--create-version/--no-create-version", default=True,
@@ -122,6 +126,14 @@ def upload_diagram(
     Upload a Mermaid architecture diagram as `architecture_diagram`
     technical documentation.
 
+    The version is auto-created by default; pass --no-create-version to
+    disable that. The product is not created automatically, because product
+    creation sets classification, ownership, and compliance context that
+    should be a deliberate decision. This command has no --target-markets
+    flag, so passing --create-product for a product that does not exist yet
+    still fails: create the product first with `upload-sbom`, `upload-hbom`,
+    or `upload-document` (which accept --target-markets), or in the web app,
+    then upload the diagram to it.
     """
     config = ctx.obj["config"]
     output_format = config.output_format

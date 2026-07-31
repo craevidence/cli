@@ -14,7 +14,7 @@ def test_github_action_uses_cli_signing_path():
     action = yaml.safe_load(action_text)
 
     assert action["runs"]["using"] == "composite"
-    assert action["inputs"]["create-product"]["default"] == "true"
+    assert action["inputs"]["create-product"]["default"] == "false"
     assert action["inputs"]["target-markets"]["default"] == ""
     assert action["inputs"]["sign"]["default"] == "false"
     assert action["inputs"]["signature-identity"]["required"] is False
@@ -66,7 +66,7 @@ def test_gitlab_component_uses_cli_signing_path():
     assert ".cra-evidence-check" in content
 
     inputs = spec["spec"]["inputs"]
-    assert inputs["create-product"]["default"] is True
+    assert inputs["create-product"]["default"] is False
     assert inputs["target-markets"]["default"] == ""
     assert inputs["sign"]["default"] is False
     assert inputs["signature-identity"]["type"] == "string"

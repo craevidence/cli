@@ -127,20 +127,21 @@ craevidence upload-sbom \
   --scan \
   --fail-on high
 
-# Product and version are created automatically by default.
-# New products require target markets. Use --no-create-product or
-# --no-create-version to disable auto-creation.
+# The version is created automatically by default; the product is not.
+# Creating a product sets its classification, ownership, and compliance
+# context, so it only happens when you pass --create-product, and it
+# requires --target-markets.
 craevidence upload-sbom \
   --product my-new-product \
   --version 1.0.0 \
   --file sbom.json \
+  --create-product \
   --target-markets DE,FR,ES
 
 craevidence upload-sbom \
   --product existing-product \
   --version 1.0.0 \
   --file sbom.json \
-  --no-create-product \
   --no-create-version
 ```
 
@@ -224,7 +225,7 @@ craevidence upload-sbom
   --source <directory>       # Generate SBOM from source directory (requires Syft)
   [--format cyclonedx|spdx]  # SBOM format for Syft generation (default: cyclonedx). Ignored when uploading with --file.
   [--component <slug>]       # Component slug for multi-repo products
-  [--no-create-product]      # Disable auto-creation of product (creation is on by default)
+  [--create-product]         # Create the product if missing (default: disabled; requires --target-markets)
   [--no-create-version]      # Disable auto-creation of version (creation is on by default)
   [--target-markets DE,FR]   # Required when auto-creating a product
   [--scan]                   # Trigger vulnerability scan after upload
@@ -445,7 +446,7 @@ craevidence upload-hbom
   --product <slug-or-id>
   --version <version-number>
   (--file <path> | --csv <path>)   # exactly one; mutually exclusive
-  [--no-create-product]      # Disable auto-creation of product (creation is on by default)
+  [--create-product]         # Create the product if missing (default: disabled; requires --target-markets)
   [--no-create-version]      # Disable auto-creation of version (creation is on by default)
   # CRA classification
   [--category default|important_class_i|important_class_ii|critical]
@@ -548,7 +549,7 @@ craevidence upload-document
   --version <version-number>
   --file <path>
   --type <document-type>
-  [--no-create-product]      # Disable auto-creation of product (creation is on by default)
+  [--create-product]         # Create the product if missing (default: disabled; requires --target-markets)
   [--no-create-version]      # Disable auto-creation of version (creation is on by default)
   # CRA classification
   [--category default|important_class_i|important_class_ii|critical]
@@ -622,7 +623,7 @@ craevidence upload-diagram
   --version <version-number>
   --file <path.mmd>
   [--render | --no-render]              # Default: render
-  [--create-product | --no-create-product]
+  [--create-product]                    # Create the product if missing (default: disabled)
   [--create-version | --no-create-version]
   # CI metadata (auto-detected)
   [--commit <sha>] [--branch <name>] [--pipeline-id <id>]
@@ -632,6 +633,13 @@ craevidence upload-diagram
 Install mermaid-cli for rendered PNGs: `npm install -g @mermaid-js/mermaid-cli`.
 The CLI Docker image does not bundle mermaid-cli (avoids the ~200MB Node.js
 dependency); in Docker-based CI use `--no-render` to upload the raw `.mmd`.
+
+Creating a product sets its classification, ownership, and compliance
+context, so `upload-diagram` never creates one unless you pass
+`--create-product`. This command has no `--target-markets` flag, so
+`--create-product` here only works against a product that already exists;
+create a new product with `upload-sbom`, `upload-hbom`, or `upload-document`
+instead.
 
 ## `status`
 
@@ -1144,9 +1152,9 @@ below do not apply to it.
 | `--product-group <name>` | upload-sbom, upload-hbom, upload-vex, upload-document | Assign the product to a named product group |
 | `--environment <env>` | upload-sbom, upload-hbom, upload-vex, upload-document | Target a specific deployment environment (e.g. `production`, `staging`) |
 | `--tags <comma-separated>` | upload-sbom, upload-hbom, upload-vex, upload-document | Attach arbitrary metadata tags |
-| `--no-create-product` | upload-sbom, upload-hbom, upload-document | Disable auto-creation of the product (creation is on by default) |
+| `--create-product` | upload-sbom, upload-hbom, upload-document | Create the product if it's missing (disabled by default: creating a product sets its classification, ownership, and compliance context, so it's always an explicit choice). Requires `--target-markets`. |
 | `--no-create-version` | upload-sbom, upload-hbom, upload-document | Disable auto-creation of the version (creation is on by default) |
-| `--target-markets <codes>` | upload-sbom, upload-hbom, upload-document | Comma-separated EU country codes required when auto-creating a product, e.g. `DE,FR,ES` |
+| `--target-markets <codes>` | upload-sbom, upload-hbom, upload-document | Comma-separated EU country codes required when `--create-product` auto-creates a product, e.g. `DE,FR,ES` |
 
 ## `compliance-as-code` upload
 

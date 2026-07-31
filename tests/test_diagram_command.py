@@ -215,6 +215,36 @@ class TestUploadDiagram:
         assert result.exit_code != 0
         assert "Product is required" in result.output or "Error" in result.output
 
+    def test_create_product_defaults_to_false(self, runner, base_env, tmp_path):
+        """Without --create-product, upload-diagram calls upload_document with
+        create_product False; product creation is opt-in."""
+        with patch("cra_evidence_cli.commands.diagram.shutil.which") as which, \
+             patch("cra_evidence_cli.commands.diagram.CRAEvidenceClient") as client_cls, \
+             patch("cra_evidence_cli.commands.diagram.asyncio.run") as run:
+            which.return_value = None
+            mock_client = MagicMock()
+            client_cls.return_value = mock_client
+            run.return_value = _mock_response()
+
+            with runner.isolated_filesystem():
+                Path("architecture.mmd").write_text("graph TD; A-->B")
+                result = runner.invoke(
+                    cli,
+                    [
+                        "upload-diagram",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "architecture.mmd",
+                        "--no-ci-detect",
+                    ],
+                    env=base_env,
+                )
+
+        assert result.exit_code == 0, result.output
+        kwargs = mock_client.upload_document.call_args.kwargs
+        assert kwargs["create_product"] is False
+        assert kwargs["create_version"] is True
+
     def test_module_docstring_cites_annex_vii(self):
         """Module docstring must cite Annex VII (not Annex II) for architecture requirement."""
         import cra_evidence_cli.commands.diagram as diagram_mod

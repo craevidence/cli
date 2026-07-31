@@ -872,7 +872,7 @@ class TestGemaraUploadNoGuessingRouting:
             "version": "1.0",
             "file_path": Path("gemara.yaml"),
             "document_type": "secure_development_policy",
-            "create_product": True,
+            "create_product": False,
             "create_version": True,
         }
         mock_client.upload_product_document_gemara.assert_not_called()

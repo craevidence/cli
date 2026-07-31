@@ -2,8 +2,9 @@
 Tests for CLI UX improvements: smart defaults and --source flag.
 
 Tests:
-- --create-product defaults to True
-- --no-create-product sets it to False
+- --create-product defaults to False (opt-in); --create-version defaults to True
+- --create-product sets it to True
+- Missing-product errors point at --create-product
 - --source + --image mutual exclusivity
 - No source provided raises UsageError
 - generate_sbom_from_directory happy path + Syft not installed
@@ -17,6 +18,8 @@ import pytest
 from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
+from cra_evidence_cli.commands.upload import clarify_product_not_found_error
+from cra_evidence_cli.exceptions import APIError
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
     generate_sbom_from_directory,
@@ -36,15 +39,15 @@ def base_env():
     }
 
 
-class TestCreateProductDefaultTrue:
-    """Test that --create-product and --create-version default to True."""
+class TestCreateProductDefaultFalse:
+    """--create-product defaults to False (opt-in); --create-version stays True."""
 
-    def test_create_product_defaults_true(self, runner, base_env):
-        """Without the --no-create-* flags, upload_sbom is called with
-        create_product/create_version True."""
+    def test_create_product_defaults_false(self, runner, base_env):
+        """Without any --create-product flag, upload_sbom is called with
+        create_product False and create_version True."""
         stub = {
             "artifact_id": "test", "artifact_type": "sbom",
-            "product": {"name": "test", "created": True},
+            "product": {"name": "test", "created": False},
             "version": {"number": "1.0", "created": True},
         }
         with patch("cra_evidence_cli.commands.upload.CRAEvidenceClient") as mock_client_cls:
@@ -66,11 +69,42 @@ class TestCreateProductDefaultTrue:
 
             mock_client.upload_sbom.assert_called_once()
             kwargs = mock_client.upload_sbom.call_args.kwargs
-            assert kwargs["create_product"] is True
+            assert kwargs["create_product"] is False
             assert kwargs["create_version"] is True
 
+    def test_create_product_flag_sets_true(self, runner, base_env):
+        """With --create-product --target-markets, upload_sbom is called with
+        create_product True."""
+        stub = {
+            "artifact_id": "test", "artifact_type": "sbom",
+            "product": {"name": "test", "created": True},
+            "version": {"number": "1.0", "created": True},
+        }
+        with patch("cra_evidence_cli.commands.upload.CRAEvidenceClient") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.upload_sbom = MagicMock(return_value=stub)
+            mock_client_cls.return_value = mock_client
+
+            with patch("cra_evidence_cli.commands.upload.asyncio.run", return_value=stub):
+                with runner.isolated_filesystem():
+                    Path("sbom.json").write_text('{"components": []}')
+                    runner.invoke(
+                        cli,
+                        [
+                            "upload-sbom", "--product", "test", "--version", "1.0",
+                            "--file", "sbom.json", "--create-product",
+                            "--target-markets", "DE,FR,ES",
+                        ],
+                        env=base_env,
+                    )
+
+            mock_client.upload_sbom.assert_called_once()
+            kwargs = mock_client.upload_sbom.call_args.kwargs
+            assert kwargs["create_product"] is True
+            assert kwargs["target_markets"] == "DE,FR,ES"
+
     def test_no_create_product_sets_false(self, runner, base_env):
-        """With --no-create-product/--no-create-version, upload_sbom is called with both False."""
+        """--no-create-product/--no-create-version still work explicitly."""
         stub = {
             "artifact_id": "test", "artifact_type": "sbom",
             "product": {"name": "test", "created": False},
@@ -97,6 +131,59 @@ class TestCreateProductDefaultTrue:
             kwargs = mock_client.upload_sbom.call_args.kwargs
             assert kwargs["create_product"] is False
             assert kwargs["create_version"] is False
+
+
+class TestMissingProductErrorMentionsCreateProductFlag:
+    """A missing-product error must point at --create-product, not the raw
+    API form field name."""
+
+    def test_clarify_product_not_found_error_rewrites_api_hint(self):
+        api_message = (
+            "Product 'ghost-product' not found. Set create_product=true to auto-create."
+        )
+        clarified = clarify_product_not_found_error(api_message)
+
+        assert "--create-product" in clarified
+        assert "--target-markets" in clarified
+        assert "create_product=true" not in clarified
+
+    def test_clarify_product_not_found_error_leaves_other_messages_untouched(self):
+        message = "release_notes exceeds maximum length of 5000 characters."
+        assert clarify_product_not_found_error(message) == message
+
+    def test_upload_sbom_missing_product_without_flag_surfaces_create_product_hint(
+        self, runner, base_env
+    ):
+        """upload-sbom against a missing product, without --create-product,
+        surfaces an error that names the CLI flag that would fix it."""
+        api_error = APIError(
+            message=(
+                "Product 'ghost-product' not found. "
+                "Set create_product=true to auto-create."
+            ),
+            status_code=400,
+        )
+        with patch("cra_evidence_cli.commands.upload.CRAEvidenceClient") as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+
+            with patch(
+                "cra_evidence_cli.commands.upload.asyncio.run", side_effect=api_error
+            ):
+                with runner.isolated_filesystem():
+                    Path("sbom.json").write_text('{"components": []}')
+                    result = runner.invoke(
+                        cli,
+                        [
+                            "upload-sbom", "--product", "ghost-product",
+                            "--version", "1.0", "--file", "sbom.json",
+                        ],
+                        env=base_env,
+                    )
+
+        assert result.exit_code == api_error.exit_code
+        assert "--create-product" in result.output
+        assert "create_product=true" not in result.output
 
 
 class TestSourceMutualExclusivity:

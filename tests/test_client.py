@@ -239,6 +239,87 @@ async def test_upload_sbom_posts_target_markets(test_config, tmp_path, monkeypat
 
 
 @pytest.mark.asyncio
+async def test_upload_sbom_create_product_defaults_to_false_in_form(
+    test_config, tmp_path, monkeypatch
+):
+    """Product creation is opt-in: the literal form field is "false" unless
+    the caller explicitly asks for create_product=True."""
+    sbom_file = tmp_path / "sbom.json"
+    sbom_file.write_text('{"components": []}')
+
+    client = CRAEvidenceClient(test_config)
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, files, data):
+            captured["data"] = data
+            return Response(
+                status_code=201,
+                json={"artifact_id": "sbom-123"},
+            )
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    await client.upload_sbom(
+        product="security-camera",
+        version="0.1.0",
+        file_path=sbom_file,
+    )
+
+    assert captured["data"]["create_product"] == "false"
+
+
+@pytest.mark.asyncio
+async def test_upload_sbom_create_product_true_posts_true_in_form(
+    test_config, tmp_path, monkeypatch
+):
+    """Passing create_product=True sends the literal form field "true"."""
+    sbom_file = tmp_path / "sbom.json"
+    sbom_file.write_text('{"components": []}')
+
+    client = CRAEvidenceClient(test_config)
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, files, data):
+            captured["data"] = data
+            return Response(
+                status_code=201,
+                json={"artifact_id": "sbom-123"},
+            )
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    await client.upload_sbom(
+        product="security-camera",
+        version="0.1.0",
+        file_path=sbom_file,
+        create_product=True,
+        target_markets="DE,ES",
+    )
+
+    assert captured["data"]["create_product"] == "true"
+
+
+@pytest.mark.asyncio
 async def test_verify_sbom_signature_posts_bundle_and_policy(test_config, tmp_path, monkeypatch):
     """SBOM signature verification sends only the bundle and signer policy."""
     bundle_file = tmp_path / "sbom.sigstore.json"

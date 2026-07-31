@@ -778,9 +778,13 @@ def _print_validate_result(
                    "doc is attached at product level and cascades to new versions.")
 @click.option("--document-type", "document_type_override", default=None,
               help="Override the auto-derived DocumentType. Required for Policy files.")
-@click.option("--create-product/--no-create-product", default=True,
-              help="Auto-create product if missing (default: enabled). "
-                   "Ignored for product-level uploads (product must already exist).")
+@click.option("--create-product/--no-create-product", default=False,
+              help="Create the product if it's missing (default: disabled). "
+                   "Creating a product sets its classification, ownership, and "
+                   "compliance context, so it is never done unless you pass "
+                   "this flag. Ignored for product-level uploads (product "
+                   "must already exist). This command has no --target-markets "
+                   "flag, so it only works against an existing product.")
 @click.option("--create-version/--no-create-version", default=True,
               help="Auto-create version if missing (default: enabled). "
                    "Ignored for product-level uploads.")
@@ -814,6 +818,13 @@ def upload(
 
     For Policy files the underlying schema does not distinguish vulnerability
     vs coordinated-disclosure policies, so --document-type is required.
+
+    For version-specific uploads, the version is auto-created by default;
+    pass --no-create-version to disable that. The product is not created
+    automatically: product creation sets classification, ownership, and
+    compliance context that should be a deliberate decision, and this
+    command has no --target-markets flag, so --create-product only works
+    against an existing product.
     """
     config = ctx.obj["config"]
     output_format = config.output_format

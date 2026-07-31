@@ -173,6 +173,32 @@ def warn_default_category(
     )
 
 
+_PRODUCT_NOT_FOUND_API_HINT = "Set create_product=true to auto-create."
+
+
+def clarify_product_not_found_error(message: str) -> str:
+    """Rewrite the API's form-field hint to the CLI flag that sets it.
+
+    ``_resolve_product`` on the API returns "...not found. Set
+    create_product=true to auto-create.", naming the multipart form field
+    the CLI sends rather than the flag a CLI user types. The API returns
+    this same message both when the product truly does not exist and when
+    it exists but the caller's API key lacks team access to it, so the
+    replacement hint covers both cases instead of assuming creation is
+    always the fix.
+    """
+    if _PRODUCT_NOT_FOUND_API_HINT not in message:
+        return message
+    return message.replace(
+        _PRODUCT_NOT_FOUND_API_HINT,
+        (
+            "If the product doesn't exist yet, pass --create-product "
+            "(with --target-markets, e.g. DE,FR,ES) to create it. If it "
+            "exists, check that your API key's team has access to it."
+        ),
+    )
+
+
 def enforce_structured_mapping(data: dict, require_structured_mapping: bool) -> None:
     """Fail CI only when the caller explicitly requires mapped structured fields."""
     if not require_structured_mapping:
@@ -851,8 +877,13 @@ def _resolve_signature_inputs(
 )
 @click.option(
     "--create-product/--no-create-product",
-    default=True,
-    help="Auto-create product if it doesn't exist (default: enabled)",
+    default=False,
+    help=(
+        "Create the product if it doesn't exist (default: disabled). Creating "
+        "a product sets its classification, ownership, and compliance "
+        "context, so it is never done unless you pass this flag. Requires "
+        "--target-markets."
+    ),
 )
 @click.option(
     "--create-version/--no-create-version",
@@ -1111,8 +1142,11 @@ def upload_sbom(
     image with --image (requires Syft or Docker), or scan a source directory with
     --source (requires Syft).
 
-    Products and versions are auto-created by default. Use --no-create-product or
-    --no-create-version to disable.
+    The version is auto-created by default; pass --no-create-version to
+    disable that. The product is not created automatically: pass
+    --create-product (with --target-markets) to create it, because product
+    creation sets classification, ownership, and compliance context that
+    should be a deliberate decision.
 
     CI environment metadata (commit SHA, branch, pipeline ID, repository) is
     automatically detected for GitHub Actions, GitLab CI, Jenkins, Azure DevOps,
@@ -1490,7 +1524,7 @@ def upload_sbom(
                 check_vulnerability_threshold(vuln_summary, fail_on)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {clarify_product_not_found_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
@@ -1541,8 +1575,13 @@ def upload_sbom(
 )
 @click.option(
     "--create-product/--no-create-product",
-    default=True,
-    help="Auto-create product if it doesn't exist (default: enabled)",
+    default=False,
+    help=(
+        "Create the product if it doesn't exist (default: disabled). Creating "
+        "a product sets its classification, ownership, and compliance "
+        "context, so it is never done unless you pass this flag. Requires "
+        "--target-markets."
+    ),
 )
 @click.option(
     "--create-version/--no-create-version",
@@ -1697,6 +1736,12 @@ def upload_hbom(
     Provide either an existing CycloneDX HBOM with --file, or a components CSV
     with --csv (parsed and built into an HBOM server-side).
 
+    The version is auto-created by default; pass --no-create-version to
+    disable that. The product is not created automatically: pass
+    --create-product (with --target-markets) to create it, because product
+    creation sets classification, ownership, and compliance context that
+    should be a deliberate decision.
+
     """
     config = ctx.obj["config"]
     output_format = config.output_format
@@ -1774,7 +1819,7 @@ def upload_hbom(
         format_output(data, output_format, verbose)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {clarify_product_not_found_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
@@ -2134,8 +2179,13 @@ def upload_attestation(
 )
 @click.option(
     "--create-product/--no-create-product",
-    default=True,
-    help="Auto-create product if it doesn't exist (default: enabled)",
+    default=False,
+    help=(
+        "Create the product if it doesn't exist (default: disabled). Creating "
+        "a product sets its classification, ownership, and compliance "
+        "context, so it is never done unless you pass this flag. Requires "
+        "--target-markets."
+    ),
 )
 @click.option(
     "--create-version/--no-create-version",
@@ -2295,6 +2345,12 @@ def upload_document(
     Upload a supporting document to CRA Evidence. Supported file types are
     .pdf, .docx, .txt, .md, .json, .xml, and .html. CI metadata is detected
     automatically when available; use --no-ci-detect to disable it.
+
+    The version is auto-created by default; pass --no-create-version to
+    disable that. The product is not created automatically: pass
+    --create-product (with --target-markets) to create it, because product
+    creation sets classification, ownership, and compliance context that
+    should be a deliberate decision.
     """
     config = ctx.obj["config"]
     output_format = config.output_format
@@ -2366,7 +2422,7 @@ def upload_document(
         enforce_structured_mapping(data, require_structured_mapping)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        console.print(f"[red]Error:[/red] {clarify_product_not_found_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
             console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)

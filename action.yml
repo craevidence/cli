@@ -99,9 +99,9 @@ inputs:
 
   # === Auto-Creation Options ===
   create-product:
-    description: 'Create product if it does not exist. Applies to SBOM, HBOM, and document uploads.'
+    description: 'Create the product if it does not exist. Applies to SBOM, HBOM, and document uploads. Disabled by default: creating a product sets its classification, ownership, and compliance context, so it is never done unless you opt in. Requires target-markets.'
     required: false
-    default: 'true'
+    default: 'false'
 
   create-version:
     description: 'Create version if it does not exist'
