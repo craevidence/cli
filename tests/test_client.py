@@ -89,6 +89,53 @@ def test_handle_response_api_error(test_config):
     assert "Invalid request" in str(error)
 
 
+def test_handle_response_preserves_structured_error_payload(test_config):
+    """error.code / error.details from the RFC 7807 body land on the raised
+    APIError so callers can tell apart error shapes that share a status
+    code (for example, which kind of resource a 404 was actually about)."""
+    client = CRAEvidenceClient(test_config)
+
+    response = Response(
+        status_code=404,
+        json={
+            "error": {
+                "code": "RESOURCE_NOT_FOUND",
+                "detail": "No structured risk assessment exists for this version.",
+                "details": {
+                    "resource_type": "Risk assessment",
+                    "product_level_assessment_exists": False,
+                },
+            }
+        },
+    )
+
+    with pytest.raises(APIError) as exc_info:
+        client._handle_response(response)
+
+    error = exc_info.value
+    assert error.status_code == 404
+    assert error.error_code == "RESOURCE_NOT_FOUND"
+    assert error.error_details == {
+        "resource_type": "Risk assessment",
+        "product_level_assessment_exists": False,
+    }
+
+
+def test_handle_response_error_code_and_details_default_to_none(test_config):
+    """A body without the RFC 7807 envelope (or a non-JSON body) leaves
+    error_code/error_details unset rather than raising."""
+    client = CRAEvidenceClient(test_config)
+
+    response = Response(status_code=400, json={"detail": "Invalid request"})
+
+    with pytest.raises(APIError) as exc_info:
+        client._handle_response(response)
+
+    error = exc_info.value
+    assert error.error_code is None
+    assert error.error_details is None
+
+
 @pytest.mark.asyncio
 async def test_upload_attestation_posts_version_id_form(test_config, tmp_path, monkeypatch):
     """Attestation upload uses the /attestations/upload form contract."""

@@ -26,6 +26,7 @@ from cra_evidence_cli.commands import (
     gemara,
     maturity,
     profile,
+    ra,
     release,
     scan,
     secrets,
@@ -184,6 +185,9 @@ cli.add_command(verify.verify)
 cli.add_command(gemara.gemara)
 
 cli.add_command(assessment.assessment)
+
+cli.add_command(ra.ra)
+cli.add_command(ra.ra, name="risk-assessment")
 
 
 def main() -> None:

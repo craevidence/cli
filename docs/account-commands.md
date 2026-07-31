@@ -621,6 +621,113 @@ existing `sbom:read` boundary.
 }
 ```
 
+## `ra`
+
+Show the structured risk assessment status for a product version.
+
+```
+craevidence ra status
+  [--product <slug-or-id>]      # or CRA_EVIDENCE_PRODUCT, or .cra/evidence.yaml
+  [--version <version-number>]  # or CRA_EVIDENCE_VERSION, or .cra/evidence.yaml
+  [--fail-on unreviewed|none]  # default: none
+```
+
+Text output shows assessment status, review status, completion, inherited-from
+metadata when the version's risk assessment was carried over from an earlier
+version, sign-off summary, asset/threat/risk counts, and process coverage when
+the server includes it. Use the global `--output json` option before `ra` for
+machine-readable output; JSON output wraps the server payload as
+`{"risk_assessment": ..., "advisory": {"disclaimer": ...}}`. Errors (an
+unknown product or version, an expired credential, and so on) print their
+diagnostics to stderr in `--output json` mode, so stdout is always either
+valid JSON or empty.
+
+`--fail-on unreviewed` exits non-zero (exit 28) when the review status is
+still `needs_review`. Exit 28 is a gate outcome, not an error: in
+`--output json` mode the full machine payload still prints as valid JSON on
+stdout (the gate notice goes to stderr), so one invocation can both report
+state and fail a CI job. Genuine errors (configuration, identity, API)
+leave stdout empty in json mode. When no risk assessment has been recorded
+yet for the version, the command prints a note and exits 0 regardless of
+`--fail-on`; absence is governed by the existing readiness gates covered by
+`status`
+above, not by this flag. An unknown product or version is a different case:
+it still fails as a normal error, so a typo does not get reported as "no
+risk assessment yet".
+
+A `reviewed` review status means someone recorded a decision for that
+assessment. It is not a sign-off and not a compliance verdict.
+
+### `ra review`
+
+Walk the open risk assessment review cycle for a product version, item by item.
+
+```
+craevidence ra review
+  [--product <slug-or-id>]      # or CRA_EVIDENCE_PRODUCT, or .cra/evidence.yaml
+  [--version <version-number>]  # or CRA_EVIDENCE_VERSION, or .cra/evidence.yaml
+  [--non-interactive]
+```
+
+In an interactive terminal, opens (or refreshes) the review cycle for the
+version, then prompts once per unresolved item: a new or removed component,
+a component version change, a changed VEX status, a vulnerability candidate,
+a context change, a stale evidence citation, or one of five release
+questions (did the architecture, login/permissions model, data handling,
+dependencies/suppliers, or deployment environment change in this release).
+Recording a decision for an item marks it resolved:
+
+- **covered, note why**: the item was looked at and does not need a new
+  risk entry. Recorded as `accepted`, with an optional one-line note.
+- **new risk needed**: the item needs a risk entry. Recorded as
+  `added_risk`, with an optional one-line note; the risk entry itself is
+  completed separately in the web app.
+- **not relevant, say why**: the item does not apply to this product.
+  Recorded as `not_affected`, and a reason is required.
+- **skip**: leaves the item unresolved for a later run.
+
+The five release questions use a narrower yes/no vocabulary instead: `not
+relevant` is not an available answer to a question about your own release.
+Answering yes records `added_risk` (the change was assessed); answering no,
+or pressing Enter, records `accepted` (nothing changed in that category).
+
+If the evidence changes while a review is in progress (for example, another
+pipeline run updated the version underneath it), the review list is
+refreshed automatically and the walk continues with the current items.
+
+With `--non-interactive`, or when the session is not a terminal, this
+command never prompts and never opens, refreshes, or otherwise records
+anything: it only reads the current review state. It reports how many items
+still need a decision and exits 28 if any do, or 0 if none do (or if there
+is nothing to review right now).
+
+Recording a disposition is not a compliance verdict: it records that
+someone looked at the item and made a call. Use the global `--output json`
+option before `ra` for a machine-readable report; interactive prompts,
+progress messages, and error diagnostics always print to stderr, so stdout
+stays clean for the JSON report.
+
+### `ra finalize`
+
+Finalize the open risk assessment review cycle for a product version.
+
+```
+craevidence ra finalize
+  [--product <slug-or-id>]      # or CRA_EVIDENCE_PRODUCT, or .cra/evidence.yaml
+  [--version <version-number>]  # or CRA_EVIDENCE_VERSION, or .cra/evidence.yaml
+```
+
+Requires every item in the open cycle to already carry a disposition (see
+`ra review` above); closes the cycle and marks the assessment reviewed.
+Finalizing requires an organisation admin or owner role, from either a
+human session or an API key holding the `ra:finalize` scope; `product:write`
+alone is not enough.
+
+Finalizing records that the review is complete and closed. It is not a
+sign-off: sign-off remains a separate human step in the web app. As with
+`ra status` and `ra review`, error diagnostics print to stderr in
+`--output json` mode, so stdout is always either valid JSON or empty.
+
 ## `maturity`
 
 Show the **advisory** CRA secure-development maturity scorecard for a product (or a specific

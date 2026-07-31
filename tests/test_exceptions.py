@@ -10,6 +10,7 @@ from cra_evidence_cli.exceptions import (
     FileNotFoundError,
     KevGateExceeded,
     LicensePolicyExceeded,
+    RiskAssessmentReviewPending,
     SbomqsThresholdExceeded,
     ScanEngineUnavailable,
     StructuredEvidenceMappingRequired,
@@ -57,13 +58,16 @@ class TestAPIError:
     """Tests for APIError."""
 
     def test_basic_error(self):
-        """exit_code is 3; status_code and request_id default to None."""
+        """exit_code is 3; status_code, request_id, error_code, and
+        error_details default to None."""
         error = APIError("Server error")
 
         assert str(error) == "Server error"
         assert error.exit_code == 3
         assert error.status_code is None
         assert error.request_id is None
+        assert error.error_code is None
+        assert error.error_details is None
 
     def test_error_with_details(self):
         """status_code and request_id are stored when provided."""
@@ -76,6 +80,25 @@ class TestAPIError:
         assert str(error) == "Not found"
         assert error.status_code == 404
         assert error.request_id == "req-12345"
+
+    def test_error_with_structured_payload(self):
+        """error_code and error_details are stored verbatim when provided,
+        so callers can discriminate error shapes that share a status code."""
+        error = APIError(
+            "No structured risk assessment exists for this version.",
+            status_code=404,
+            error_code="RESOURCE_NOT_FOUND",
+            error_details={
+                "resource_type": "Risk assessment",
+                "product_level_assessment_exists": False,
+            },
+        )
+
+        assert error.error_code == "RESOURCE_NOT_FOUND"
+        assert error.error_details == {
+            "resource_type": "Risk assessment",
+            "product_level_assessment_exists": False,
+        }
 
     def test_error_status_codes(self):
         """APIError accepts any HTTP status code and stores it."""
@@ -242,6 +265,29 @@ class TestStructuredEvidenceMappingRequired:
 
     def test_inherits_from_cra_evidence_error(self):
         error = StructuredEvidenceMappingRequired("accepted_needs_review")
+
+        assert isinstance(error, CRAEvidenceError)
+
+
+class TestRiskAssessmentReviewPending:
+    """Tests for RiskAssessmentReviewPending."""
+
+    def test_default_message(self):
+        """Default message mentions review, and exit_code is 28."""
+        error = RiskAssessmentReviewPending()
+
+        assert "review" in str(error).lower()
+        assert error.exit_code == 28
+
+    def test_custom_message(self):
+        """Custom message is preserved and exit_code remains 28."""
+        error = RiskAssessmentReviewPending("Custom pending review message")
+
+        assert str(error) == "Custom pending review message"
+        assert error.exit_code == 28
+
+    def test_inherits_from_cra_evidence_error(self):
+        error = RiskAssessmentReviewPending()
 
         assert isinstance(error, CRAEvidenceError)
 

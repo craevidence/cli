@@ -2,6 +2,8 @@
 Custom exceptions for CRA Evidence CLI.
 """
 
+from typing import Any
+
 
 class CRAEvidenceError(Exception):
     """Base exception for all CRA Evidence CLI errors."""
@@ -27,11 +29,19 @@ class APIError(CRAEvidenceError):
         status_code: int | None = None,
         request_id: str | None = None,
         retry_after: float | None = None,
+        error_code: str | None = None,
+        error_details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message, exit_code=3)
         self.status_code = status_code
         self.request_id = request_id
         self.retry_after = retry_after
+        # Parsed straight from the server's error.code / error.details, when
+        # the response body had them: lets callers tell apart error shapes
+        # that all happen to share the same status code (for example, which
+        # kind of resource a 404 was actually about) without re-parsing text.
+        self.error_code = error_code
+        self.error_details = error_details
 
 
 class ValidationError(CRAEvidenceError):
@@ -147,6 +157,18 @@ class SignatureVerificationUntrusted(CRAEvidenceError):
             exit_code=22,
         )
         self.status = status
+
+
+class RiskAssessmentReviewPending(CRAEvidenceError):
+    """Raised by ``ra status --fail-on unreviewed`` when the risk assessment still needs review."""
+
+    def __init__(
+        self,
+        message: str = (
+            "The risk assessment for this version still needs review"
+        ),
+    ) -> None:
+        super().__init__(message, exit_code=28)
 
 
 class SbomqsThresholdExceeded(CRAEvidenceError):

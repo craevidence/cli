@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `ra status`: reads the structured risk assessment status for a product
+  version (assessment status, review status, completion, sign-off summary,
+  asset/threat/risk counts, and process coverage when the server includes
+  it). `--fail-on unreviewed` exits 28 when the review status is still
+  `needs_review`; a version with no risk assessment recorded yet prints a
+  note and exits 0 regardless of `--fail-on`. An unknown product or version
+  is told apart from a genuinely missing risk assessment and still fails as
+  a normal error (exit 3), so a typo in `--product`/`--version` is never
+  reported as "no risk assessment yet". In `--output json` mode, every error
+  path (identity, credentials, or the API call) prints its diagnostics to
+  stderr only, so stdout is always either valid JSON or empty.
+- `ra review`: walks the open risk assessment review cycle for a product
+  version item by item (new/removed/updated components, VEX status changes,
+  vulnerability candidates, context changes, stale evidence citations, and
+  five release questions), prompting for a disposition per unresolved item
+  in an interactive terminal. Refreshes automatically if the evidence
+  changes mid-review. `--non-interactive` (or a non-terminal session) only
+  reads the current review state (a plain GET; it never opens, refreshes, or
+  otherwise records anything) and reports how many items still need a
+  decision, exiting 28 if any do, 0 otherwise. Error paths follow the same
+  stdout/stderr split as `ra status` in `--output json` mode.
+- `ra finalize`: closes the open review cycle once every item carries a
+  disposition and marks the assessment reviewed. Requires an organisation
+  admin or owner role, from a human session or an API key holding the
+  `ra:finalize` scope. Error paths follow the same stdout/stderr split as
+  `ra status` in `--output json` mode.
+
 ### Changed
 
 - Release pipeline: the pinned cosign is upgraded from 2.6.3 to 3.1.2.

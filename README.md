@@ -47,7 +47,7 @@ covered in the [installation guide](https://github.com/craevidence/cli/blob/main
 | Page | Contents |
 |---|---|
 | [Local commands](https://github.com/craevidence/cli/blob/main/docs/local-commands.md) | `check`, `eol-check`, `egress-check`, `secrets-check`, `config-check`, `code-check`, `draft`, `assessment`, `db`, and the offline template scaffold. |
-| [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Uploads, scan, status, release lifecycle, distributor, profiles, validation, and verification. |
+| [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Uploads, scan, status, risk assessment status, release lifecycle, distributor, profiles, validation, and verification. |
 | [CI/CD integration](https://github.com/craevidence/cli/blob/main/docs/ci-cd.md) | GitHub Action, GitLab Component, Docker, Jenkins, OpenSSF Scorecard, and complyctl. |
 | [Installation](https://github.com/craevidence/cli/blob/main/docs/installation.md) | PyPI, Docker, container registries, and from source. |
 | [Troubleshooting](https://github.com/craevidence/cli/blob/main/docs/troubleshooting.md) | Common errors and fixes. |
@@ -184,6 +184,8 @@ private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.
 | 24 | CRA legal floor is met but the configured release policy is not. |
 | 25 | Mandatory Annex I requirement is not addressed. |
 | 26 | Annex I Part I(2) requirement is marked not-applicable without a justification. |
+| 27 | Code-check findings at or above the configured --fail-on level. |
+| 28 | Risk assessment review is still pending for the version (`ra status --fail-on unreviewed`, or `ra review --non-interactive` with unresolved review items). |
 
 Exit 0 != compliance. Local output is a snapshot for review and CI policy, not
 a legal conclusion.

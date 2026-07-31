@@ -168,6 +168,8 @@ class CRAEvidenceClient:
 
         if response.status_code >= 400:
             error_message = f"API error: {response.status_code}"
+            error_code: str | None = None
+            error_details: dict[str, Any] | None = None
             try:
                 error_data = response.json()
                 nested = error_data.get("error", {})
@@ -177,6 +179,11 @@ class CRAEvidenceClient:
                     or error_data.get("detail")
                     or error_message
                 )
+                # Preserved as-is so callers can discriminate error shapes
+                # that share a status code (e.g. which resource a 404 was
+                # about) without re-parsing the message text.
+                error_code = nested.get("code")
+                error_details = nested.get("details")
             except Exception:
                 raw_text = response.text or error_message
                 stripped = _HTML_TAG_RE.sub("", raw_text).strip()
@@ -197,6 +204,8 @@ class CRAEvidenceClient:
                 status_code=response.status_code,
                 request_id=request_id,
                 retry_after=retry_after,
+                error_code=error_code,
+                error_details=error_details,
             )
 
         try:
@@ -1191,6 +1200,217 @@ class CRAEvidenceClient:
             params={"product": product, "version": version},
         )
         return self._handle_response(response)
+
+    async def get_risk_assessment(
+        self,
+        product: str,
+        version: str,
+    ) -> dict[str, Any]:
+        """
+        Get the structured risk assessment summary for a product version.
+
+        Returns assessment status, review status, completion, sign-off
+        summary, asset/threat/risk counts, and Part II process coverage when
+        the server includes it in the response.
+
+        Args:
+            product: Product slug or ID
+            version: Version number
+
+        Raises:
+            APIError: With status_code 404 when no risk assessment has been
+                recorded yet for the version.
+        """
+        response = await self._request_with_retry(
+            "GET",
+            f"{self.base_url}/api/v1/ci/risk-assessment",
+            params={"product": product, "version": version},
+        )
+        return self._handle_response(response)
+
+    async def get_ra_delta(
+        self,
+        product: str,
+        version: str,
+    ) -> dict[str, Any]:
+        """
+        Get the current review-cycle delta for a product version.
+
+        Returns the open review cycle (with its pinned items and resolution
+        progress) when one exists, or an unpersisted preview of what opening
+        a cycle now would contain when none is open yet.
+
+        Args:
+            product: Product slug or ID
+            version: Version number
+
+        Returns:
+            Dict with keys including preview, id, digest, state, items,
+            resolution (id/state/resolution are null when preview is true).
+        """
+        response = await self._request_with_retry(
+            "GET",
+            f"{self.base_url}/api/v1/ci/risk-assessment/delta",
+            params={"product": product, "version": version},
+        )
+        return self._handle_response(response)
+
+    async def open_ra_review_cycle(
+        self,
+        product: str,
+        version: str,
+    ) -> dict[str, Any]:
+        """
+        Open, or idempotently refresh, the review cycle for a product version.
+
+        Calling this repeatedly with an unchanged delta returns the same
+        cycle. When the delta has moved, the previous open cycle is
+        superseded and a new one is opened.
+
+        Args:
+            product: Product slug or ID
+            version: Version number
+
+        Returns:
+            Dict with keys id, digest, state, items, resolution, created.
+
+        Raises:
+            APIError: With status_code 422 when there is no risk assessment
+                for this version, or it is not currently flagged for review
+                and no cycle is already open.
+        """
+        await self._ensure_access_token()
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            endpoint = f"{self.base_url}/api/v1/ci/risk-assessment/review-cycles"
+            try:
+                response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json={"product": product, "version": version},
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
+
+            return self._handle_response(response)
+
+    async def record_ra_disposition(
+        self,
+        product: str,
+        version: str,
+        cycle_id: str,
+        expected_digest: str,
+        item_id: str,
+        disposition: str,
+        justification: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Record one disposition for one review-cycle item.
+
+        Append-only: recording again for the same item is a new revision,
+        not an overwrite of the earlier one.
+
+        Args:
+            product: Product slug or ID
+            version: Version number
+            cycle_id: Review cycle UUID this disposition targets
+            expected_digest: Digest last seen for this cycle (optimistic
+                concurrency; a stale digest fails with 409)
+            item_id: Review item id within the cycle
+            disposition: One of accepted, edited, added_risk, not_affected
+                (release-question items only accept accepted/added_risk/edited)
+            justification: Required substantive text when disposition is
+                not_affected; optional otherwise
+
+        Returns:
+            Dict with keys id, cycle_id, item_id, revision, disposition,
+            justification, resolution.
+
+        Raises:
+            APIError: Status_code 422 (raised client-side, before any network
+                call) when disposition is not_affected and justification is
+                empty or missing. Status_code 409 when the cycle changed
+                since it was read (re-open the cycle and retry with the new
+                digest).
+        """
+        if disposition == "not_affected" and not (justification or "").strip():
+            raise APIError(
+                message=(
+                    "A 'not_affected' disposition requires a justification "
+                    "explaining why the product is not affected."
+                ),
+                status_code=422,
+            )
+
+        payload: dict[str, Any] = {
+            "product": product,
+            "version": version,
+            "cycle_id": cycle_id,
+            "expected_digest": expected_digest,
+            "item_id": item_id,
+            "disposition": disposition,
+        }
+        if justification is not None:
+            payload["justification"] = justification
+
+        await self._ensure_access_token()
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            endpoint = f"{self.base_url}/api/v1/ci/risk-assessment/review"
+            try:
+                response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json=payload,
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
+
+            return self._handle_response(response)
+
+    async def finalize_ra_review(
+        self,
+        product: str,
+        version: str,
+        cycle_id: str,
+    ) -> dict[str, Any]:
+        """
+        Finalize an open review cycle for a product version.
+
+        Requires an organisation admin or owner role, and either a human
+        session or an API key holding the ra:finalize scope. Requires every
+        item in the cycle to already carry a disposition.
+
+        Args:
+            product: Product slug or ID
+            version: Version number
+            cycle_id: Review cycle UUID to finalize
+
+        Returns:
+            Dict with keys assessment_id, assessment_status,
+            assessment_review_status, cycle_id, cycle_state.
+        """
+        await self._ensure_access_token()
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            endpoint = f"{self.base_url}/api/v1/ci/risk-assessment/finalize"
+            try:
+                response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json={
+                        "product": product,
+                        "version": version,
+                        "cycle_id": cycle_id,
+                    },
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
+
+            return self._handle_response(response)
 
     async def set_release_state(
         self,
