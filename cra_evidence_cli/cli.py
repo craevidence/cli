@@ -15,6 +15,7 @@ from cra_evidence_cli.commands import (
     compare,
     components,
     config_check,
+    create_version,
     db,
     diagram,
     distributor,
@@ -145,6 +146,8 @@ cli.add_command(upload.upload_document)
 cli.add_command(upload.upload_sarif)
 cli.add_command(upload.upload_attestation)
 cli.add_command(diagram.upload_diagram)
+
+cli.add_command(create_version.create_version)
 
 cli.add_command(status.get_status)
 cli.add_command(wait_ready)

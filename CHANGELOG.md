@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `create-version`: creates a draft version under an existing product without
+  uploading new evidence, scanning, approving, or releasing it. Reusable
+  product-level documents and templates are linked by the platform. The product
+  is never created, so classification and ownership stay a deliberate step.
+  Optional creation metadata includes environment, release dates, release type,
+  external URL, and explicit version-to-version inheritance, which happens only
+  when `--inherit-from` is passed. `--reuse-existing` supports repeatable CI
+  preparation without changing the existing version. JSON output includes a
+  stable `created` boolean, and in `--output json` mode error diagnostics go to
+  stderr so stdout is always either valid JSON or empty. This makes it possible
+  to attach `code-check --upload` findings to a version before any SBOM exists.
 - `ra status`: reads the structured risk assessment status for a product
   version (assessment status, review status, completion, sign-off summary,
   asset/threat/risk counts, and process coverage when the server includes

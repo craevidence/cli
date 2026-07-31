@@ -47,7 +47,7 @@ covered in the [installation guide](https://github.com/craevidence/cli/blob/main
 | Page | Contents |
 |---|---|
 | [Local commands](https://github.com/craevidence/cli/blob/main/docs/local-commands.md) | `check`, `eol-check`, `egress-check`, `secrets-check`, `config-check`, `code-check`, `draft`, `assessment`, `db`, and the offline template scaffold. |
-| [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Uploads, scan, status, risk assessment status, release lifecycle, distributor, profiles, validation, and verification. |
+| [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Version creation, uploads, scan, status, risk assessment status, release lifecycle, distributor, profiles, validation, and verification. |
 | [CI/CD integration](https://github.com/craevidence/cli/blob/main/docs/ci-cd.md) | GitHub Action, GitLab Component, Docker, Jenkins, OpenSSF Scorecard, and complyctl. |
 | [Installation](https://github.com/craevidence/cli/blob/main/docs/installation.md) | PyPI, Docker, container registries, and from source. |
 | [Troubleshooting](https://github.com/craevidence/cli/blob/main/docs/troubleshooting.md) | Common errors and fixes. |
@@ -122,9 +122,23 @@ Commands that upload evidence or read CRA Evidence release state need an API key
 
 ```bash
 export CRA_EVIDENCE_API_KEY=...
+craevidence create-version --product my-product --version 1.0.0
 craevidence upload-sbom --product my-product --version 1.0.0 --file sbom.cdx.json
 craevidence status --product my-product --version 1.0.0
 ```
+
+`create-version` creates a draft under an existing product without uploading
+new evidence. CRA Evidence automatically links reusable product-level
+documents and templates to the version. This is useful when source-code
+findings need a version before an SBOM is available:
+
+```bash
+craevidence create-version --product my-product --version 1.0.0
+craevidence code-check . --product my-product --version 1.0.0 --upload
+```
+
+`code-check` runs locally and uploads SARIF findings, not source code. Neither
+command proves compliance.
 
 The default API URL is:
 

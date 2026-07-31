@@ -1412,6 +1412,143 @@ class CRAEvidenceClient:
 
             return self._handle_response(response)
 
+    async def create_product_version(
+        self,
+        product: str,
+        version: str,
+        *,
+        release_type: str | None = None,
+        environment: str | None = None,
+        release_notes: str | None = None,
+        release_date: str | None = None,
+        end_of_support_date: str | None = None,
+        external_url: str | None = None,
+        inherit_from: str | None = None,
+        reuse_existing: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Create a draft product version. Uploads no new evidence and releases
+        nothing. The server may link reusable product-level documents and
+        templates to the new version.
+
+        The product must already exist; it is never created here. Only the
+        arguments the caller passed are sent, so server-side defaults stay
+        authoritative for everything else.
+
+        With ``reuse_existing``, the version is looked up first and returned
+        as-is when it already exists, so no create is attempted. Without it, an
+        existing version number is left to the API, which rejects it.
+
+        Args:
+            product: Product slug or UUID of an existing product
+            version: Version number to create
+            release_type: feature, security_patch, or maintenance
+            environment: Environment slug for the version
+            release_notes: Free-text release notes
+            release_date: Release date as YYYY-MM-DD
+            end_of_support_date: End-of-support date as YYYY-MM-DD
+            external_url: External link for the version
+            inherit_from: Version number or UUID whose eligible compliance
+                artifacts should be carried over. Inheritance happens only
+                when this is set.
+            reuse_existing: Return an existing version instead of creating one
+
+        Returns:
+            Dict with keys id, product_id, version_number, release_state, and
+            created. ``created`` is False when an existing version was returned.
+
+        Raises:
+            APIError: If the product does not exist, the version already exists
+                and reuse_existing was not requested, or the API rejects the
+                request
+        """
+        product_id = await self._resolve_product_id(product)
+
+        if reuse_existing:
+            existing = await self._find_version_by_number(product_id, version)
+            if existing is not None:
+                return self._version_result(existing, product_id, created=False)
+
+        payload: dict[str, Any] = {"version_number": version}
+        if release_type is not None:
+            payload["release_type"] = release_type
+        if environment is not None:
+            payload["environment_override"] = environment
+        if release_notes is not None:
+            payload["release_notes"] = release_notes
+        if release_date is not None:
+            payload["release_date"] = release_date
+        if end_of_support_date is not None:
+            payload["end_of_support_date"] = end_of_support_date
+        if external_url is not None:
+            payload["external_url"] = external_url
+        if inherit_from is not None:
+            payload["inherit_from_version_id"] = await self._resolve_version_id(
+                product_id, inherit_from, product
+            )
+
+        await self._ensure_access_token()
+
+        endpoint = f"{self.base_url}/api/v1/products/{product_id}/versions"
+        # Deliberately not routed through _request_with_retry: that helper
+        # replays 429 and 5xx responses, which is right for the reads above but
+        # would risk repeating a create.
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json=payload,
+                )
+            except httpx.RequestError as exc:
+                message = f"Network error contacting {endpoint}: {exc}"
+                raise APIError(message=message) from exc
+
+            try:
+                created_version = self._handle_response(response)
+            except APIError as exc:
+                if not (
+                    reuse_existing
+                    and exc.status_code == 409
+                    and exc.error_code == "RESOURCE_ALREADY_EXISTS"
+                ):
+                    raise
+
+                # Another writer may create the same version after the
+                # pre-create lookup. Re-read only for the API's exact duplicate
+                # resource contract; unrelated conflicts remain errors.
+                existing = await self._find_version_by_number(product_id, version)
+                if existing is None:
+                    raise
+                return self._version_result(
+                    existing,
+                    product_id,
+                    created=False,
+                )
+
+        return self._version_result(created_version, product_id, created=True)
+
+    @staticmethod
+    def _version_result(
+        version_data: dict[str, Any],
+        product_id: str,
+        *,
+        created: bool,
+    ) -> dict[str, Any]:
+        """Normalize a created or existing version into one stable shape.
+
+        The create response and the version list entry carry different fields
+        (the list entry has no product_id), so callers get the same keys either
+        way. ``release_state`` is whatever the server reported, never assumed.
+        """
+        return {
+            "id": str(version_data.get("id", "")),
+            "product_id": str(version_data.get("product_id") or product_id),
+            "version_number": str(version_data.get("version_number", "")),
+            "release_state": str(version_data.get("release_state") or "unknown"),
+            "created": created,
+        }
+
     async def set_release_state(
         self,
         product: str,
@@ -1957,7 +2094,12 @@ class CRAEvidenceClient:
             status_code=404,
         )
 
-    async def _resolve_version_id(self, product_id: str, version: str, product_label: str) -> str:
+    async def _resolve_version_id(
+        self,
+        product_id: str,
+        version: str,
+        product_label: str,
+    ) -> str:
         """
         Resolve a product version number or UUID to a version UUID string.
 
@@ -1972,14 +2114,57 @@ class CRAEvidenceClient:
         Raises:
             APIError: If version not found
         """
-        uuid_re = re.compile(
-            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            re.IGNORECASE,
+        response = await self._request_with_retry(
+            "GET",
+            f"{self.base_url}/api/v1/products/{product_id}/versions",
+        )
+        versions = self._handle_response(response)
+
+        matches: dict[str, dict[str, Any]] = {}
+        if isinstance(versions, list):
+            for item in versions:
+                item_id = str(item.get("id", ""))
+                item_number = item.get("version_number") or item.get("number")
+                if item_id == version or item_number == version:
+                    matches[item_id] = item
+
+        if len(matches) == 1:
+            return next(iter(matches))
+        if len(matches) > 1:
+            raise APIError(
+                message=(
+                    f"Version reference '{version}' is ambiguous for product "
+                    f"'{product_label}': it matches both a version id and a "
+                    "different version number."
+                ),
+                status_code=409,
+            )
+
+        raise APIError(
+            message=f"Version '{version}' not found for product '{product_label}'.",
+            status_code=404,
         )
 
-        if uuid_re.match(version):
-            return version
+    async def _find_version_by_number(
+        self,
+        product_id: str,
+        version: str,
+    ) -> dict[str, Any] | None:
+        """
+        Return the version entry with this version number, or None.
 
+        Unlike _resolve_version_id this returns the whole entry (so callers can
+        read the release state), treats a version number as a version number
+        rather than accepting a UUID, and reports absence instead of raising.
+
+        Args:
+            product_id: Product UUID string
+            version: Version number string
+
+        Returns:
+            The matching version entry, or None when the product has no version
+            with that number
+        """
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
@@ -1988,13 +2173,10 @@ class CRAEvidenceClient:
 
         if isinstance(versions, list):
             for item in versions:
-                if item.get("version_number") == version or item.get("number") == version:
-                    return str(item["id"])
+                if item.get("version_number") == version:
+                    return item
 
-        raise APIError(
-            message=f"Version '{version}' not found for product '{product_label}'.",
-            status_code=404,
-        )
+        return None
 
     async def get_cra_profile(self, product: str) -> dict[str, Any]:
         """

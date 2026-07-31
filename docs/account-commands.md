@@ -144,6 +144,73 @@ craevidence upload-sbom \
   --no-create-version
 ```
 
+## `create-version`
+
+Create a draft version under an existing product without uploading new
+evidence:
+
+```bash
+craevidence create-version \
+  --product security-camera \
+  --version 2.4.0
+```
+
+The command uploads no new evidence, runs no scan, and does not approve or
+release anything. The product must already exist. CRA Evidence automatically
+links reusable product-level documents and templates to the new version.
+
+```
+craevidence create-version
+  --product <slug-or-id>
+  --version <version-number>
+  [--release-type feature|security_patch|maintenance]
+  [--environment <slug>]
+  [--release-notes <text>]
+  [--release-date YYYY-MM-DD]
+  [--end-of-support-date YYYY-MM-DD]
+  [--external-url <url>]
+  [--inherit-from <version-number-or-id>]
+  [--reuse-existing]
+```
+
+Options that are not passed are left to the server, so the new version keeps
+the defaults it would get in the web app. A version created this way starts in
+the `draft` release state.
+
+Use `--inherit-from <version>` to carry over additional eligible compliance
+artifacts from an earlier version. Without the flag, there is no
+version-to-version carry-over; product-level documents and templates are still
+linked automatically.
+
+Use `--reuse-existing` when a repeatable CI preparation step should return an
+existing matching version instead of failing. Reuse does not update the
+existing version. If another job creates the same version number between the
+lookup and create, the command recognizes the API's exact duplicate-resource
+response, re-reads the version, and returns it as reused. Other conflicts remain
+errors.
+
+Text output states whether the version was created or reused. With the global
+`--output json` option the command prints `id`, `product_id`, `version_number`,
+`release_state`, and a `created` boolean; error diagnostics go to stderr, so
+stdout is always either valid JSON or empty.
+
+A draft can receive local source-code findings before an SBOM is available:
+
+```bash
+craevidence create-version \
+  --product security-camera \
+  --version 2.4.0 \
+  --reuse-existing
+
+craevidence code-check . \
+  --product security-camera \
+  --version 2.4.0 \
+  --upload
+```
+
+`code-check` runs Opengrep locally and uploads SARIF findings only. Source code
+is not uploaded.
+
 ## `upload-sbom`
 
 Upload a Software Bill of Materials. Accepts an existing SBOM file or generates one from a Docker image via Syft.
