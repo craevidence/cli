@@ -14,6 +14,9 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import CRAEvidenceError
 
 console = Console()
+# Errors go to stderr so stdout stays valid JSON (or empty) in --output json
+# mode, matching the ra commands.
+err_console = Console(stderr=True)
 
 
 def format_trusted_key_output(data: dict, output_format: str) -> None:
@@ -74,7 +77,8 @@ def trust_attestation_key(
     """Trust a Cosign public key for Build Provenance verification.
 
     Run this once with an organisation admin credential that has config:write.
-    PEM private key files are rejected before any network request.
+    PEM private key files are rejected before the key is sent to
+    CRA Evidence.
     """
     config = ctx.obj["config"]
     output_format = config.output_format
@@ -90,9 +94,9 @@ def trust_attestation_key(
         )
         format_trusted_key_output(data, output_format)
     except CRAEvidenceError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        err_console.print(f"[red]Error:[/red] {exc}")
         if getattr(exc, "request_id", None):
-            console.print(f"[dim]Request ID: {exc.request_id}[/dim]")
+            err_console.print(f"[dim]Request ID: {exc.request_id}[/dim]")
         sys.exit(exc.exit_code)
 
 
@@ -140,7 +144,7 @@ def verify_attestation(
         if data.get("status") != "valid":
             sys.exit(22)
     except CRAEvidenceError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        err_console.print(f"[red]Error:[/red] {exc}")
         if getattr(exc, "request_id", None):
-            console.print(f"[dim]Request ID: {exc.request_id}[/dim]")
+            err_console.print(f"[dim]Request ID: {exc.request_id}[/dim]")
         sys.exit(exc.exit_code)

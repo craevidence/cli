@@ -30,7 +30,7 @@ def test_help_states_public_key_and_admin_requirement():
     assert "Cosign public key" in result.output
     assert "organisation admin" in result.output
     assert "PEM" in result.output
-    assert "private key files are rejected before any network request" in result.output
+    assert "rejected before the key is sent to" in result.output
 
 
 def test_command_forwards_name_and_public_key_path():
@@ -350,3 +350,42 @@ async def test_client_verifies_latest_attestation_by_product_and_version(
             {"json": {}},
         ),
     ]
+
+
+def test_json_mode_errors_go_to_stderr_not_stdout(tmp_path, monkeypatch):
+    """In --output json mode stdout must stay valid JSON or empty, so error
+    chrome belongs on stderr. Regression guard: both trust commands used to
+    print errors to stdout, which corrupted machine-readable output."""
+    from click.testing import CliRunner
+
+    from cra_evidence_cli.cli import cli
+
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    key = tmp_path / "cosign.pub"
+    key.write_text(
+        "-----BEGIN PUBLIC KEY-----\nMFkwEwYHKoZIzj0CAQ==\n-----END PUBLIC KEY-----\n",
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "--output",
+            "json",
+            "trust-attestation-key",
+            "--name",
+            "release-signer",
+            "--public-key",
+            str(key),
+        ],
+        env={"CRA_EVIDENCE_API_KEY": ""},
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code != 0
+    stdout = result.stdout.strip()
+    assert stdout == "" or stdout.startswith(("{", "[")), (
+        f"stdout must be empty or JSON in --output json mode, got: {stdout[:120]!r}"
+    )
+    assert "Error:" not in result.stdout

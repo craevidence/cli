@@ -485,9 +485,6 @@ def test_created_version_can_receive_code_check_sarif_without_sbom(
     assert upload_client.upload_sarif.await_args.kwargs["version"] == "2.4.0"
 
 
-# =============================================================================
-# Help text, credentials, and error exit codes
-# =============================================================================
 
 
 def test_help_states_no_evidence_and_opt_in_inheritance(runner: CliRunner) -> None:
@@ -625,9 +622,6 @@ def test_missing_product_is_reported_and_nothing_is_created(
     assert client.upload_sbom.call_count == 0
 
 
-# =============================================================================
-# Client: slug resolution, endpoint reads, and the reuse fallback
-# =============================================================================
 
 
 def _client() -> CRAEvidenceClient:
@@ -971,9 +965,6 @@ async def test_only_product_and_version_endpoints_are_contacted(monkeypatch) -> 
         assert not any(fragment in url for url in urls)
 
 
-# =============================================================================
-# Public-repo hygiene: plain language (no legal citations) and no em-dashes
-# =============================================================================
 
 _NEW_OR_CHANGED_FILES = [
     "cra_evidence_cli/commands/create_version.py",

@@ -529,7 +529,8 @@ craevidence upload-sarif
 Register the public key used by a key-based Cosign build. Run this once with an
 organisation admin credential that has `config:write`. The backend never
 receives or stores `cosign.key`; the CLI rejects PEM private-key files before
-any network request, including Cosign's encrypted private-key form.
+the key is sent to CRA Evidence, including Cosign's encrypted private-key
+form.
 
 ```
 craevidence trust-attestation-key \

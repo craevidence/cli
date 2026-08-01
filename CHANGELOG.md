@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `trust-attestation-key`: lets an organisation admin register a public-only
   Cosign ECDSA P-256 key for Build Provenance verification. Private-key PEM
-  files are rejected before authentication or any network request.
+  files are rejected before the key is sent to CRA Evidence.
 - `verify-attestation`: re-checks the latest stored Bundle or raw DSSE by
   product slug and version, with an optional attestation ID override.
 - `create-version`: creates a draft version under an existing product without

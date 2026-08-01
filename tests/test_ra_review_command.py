@@ -31,10 +31,8 @@ BASE_ENV = {
 }
 
 
-# =============================================================================
 # Fixture payloads (server response shapes: CIReviewCycleOpenResponse /
 # CIReviewDispositionResponse / CIReviewFinalizeResponse)
-# =============================================================================
 
 # --non-interactive reads via GET .../delta only (never the open-cycle POST),
 # so these fixtures use the delta response shape (CIReviewCycleDeltaResponse:
@@ -259,9 +257,6 @@ def _invoke_finalize(run_side_effects, args, output_format: str | None = None):
     return result
 
 
-# =============================================================================
-# `ra review` --non-interactive: never prompts, never records
-# =============================================================================
 
 
 class TestRaReviewNonInteractive:
@@ -381,9 +376,6 @@ class TestRaReviewNonInteractive:
         mock_client.open_ra_review_cycle.assert_not_called()
 
 
-# =============================================================================
-# `ra review` interactive: disposition POST payload + 409 refresh flow
-# =============================================================================
 
 
 class TestRaReviewInteractive:
@@ -534,9 +526,6 @@ class TestRaReviewInteractive:
         assert second_call.kwargs["expected_digest"] == "h" * 64
 
 
-# =============================================================================
-# `ra finalize`
-# =============================================================================
 
 
 class TestRaFinalize:
@@ -585,10 +574,8 @@ class TestRaFinalize:
         assert "nothing to finalize" in result.output
 
 
-# =============================================================================
 # Client methods: POST payload shape (cycle_id/digest/item_id forwarded) and
 # the not_affected client-side guard
-# =============================================================================
 
 
 class _FakeAsyncClient:
@@ -791,9 +778,6 @@ class TestClientMethods:
         )
 
 
-# =============================================================================
-# Public-repo hygiene: plain language (no legal citations) and no em-dashes
-# =============================================================================
 
 _NEW_OR_CHANGED_FILES = [
     "cra_evidence_cli/commands/ra.py",
