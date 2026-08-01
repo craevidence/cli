@@ -92,7 +92,7 @@ def test_verify_command_resolves_normal_identity_without_attestation_id():
         mock_client_cls.return_value = mock_client
         mock_run.return_value = {
             "attestation_id": "att-123",
-            "product": "sw-ksk-test",
+            "product": "my-product",
             "version": "1.0.0",
             "status": "valid",
             "trust_policy": "signing-key:key-123",
@@ -103,7 +103,7 @@ def test_verify_command_resolves_normal_identity_without_attestation_id():
             [
                 "verify-attestation",
                 "--product",
-                "sw-ksk-test",
+                "my-product",
                 "--version",
                 "1.0.0",
             ],
@@ -112,7 +112,7 @@ def test_verify_command_resolves_normal_identity_without_attestation_id():
 
     assert result.exit_code == 0, result.output
     mock_client.verify_attestation.assert_called_once_with(
-        product="sw-ksk-test",
+        product="my-product",
         version="1.0.0",
         attestation_id=None,
     )
@@ -129,7 +129,7 @@ def test_verify_command_exits_22_unless_result_is_valid(status):
         "cra_evidence_cli.commands.trust.asyncio.run",
         return_value={
             "attestation_id": "att-123",
-            "product": "sw-ksk-test",
+            "product": "my-product",
             "version": "1.0.0",
             "status": status,
             "trust_policy": None,
@@ -140,7 +140,7 @@ def test_verify_command_exits_22_unless_result_is_valid(status):
             [
                 "verify-attestation",
                 "--product",
-                "sw-ksk-test",
+                "my-product",
                 "--version",
                 "1.0.0",
             ],
@@ -159,7 +159,7 @@ def test_verify_command_json_failure_is_valid_json_and_exits_22():
         "cra_evidence_cli.commands.trust.asyncio.run",
         return_value={
             "attestation_id": "att-123",
-            "product": "sw-ksk-test",
+            "product": "my-product",
             "version": "1.0.0",
             "status": "pending",
             "trust_policy": None,
@@ -172,7 +172,7 @@ def test_verify_command_json_failure_is_valid_json_and_exits_22():
                 "json",
                 "verify-attestation",
                 "--product",
-                "sw-ksk-test",
+                "my-product",
                 "--version",
                 "1.0.0",
             ],
@@ -326,12 +326,12 @@ async def test_client_verifies_latest_attestation_by_product_and_version(
     monkeypatch.setattr(client, "_request_with_retry", fake_request)
 
     result = await client.verify_attestation(
-        product="sw-ksk-test",
+        product="my-product",
         version="1.0.0",
     )
 
     assert result["status"] == "valid"
-    assert result["product"] == "sw-ksk-test"
+    assert result["product"] == "my-product"
     assert result["version"] == "1.0.0"
     assert requests == [
         (

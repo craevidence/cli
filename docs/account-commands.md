@@ -543,7 +543,7 @@ Re-check already stored pending evidence without looking up UUIDs:
 
 ```bash
 craevidence verify-attestation \
-  --product sw-ksk-test \
+  --product my-product \
   --version 1.0.0
 ```
 
