@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.0] - 2026-08-01
+
+Adds commands for reading and closing a risk assessment review cycle, adds
+`create-version` for preparing a draft version before any new evidence is
+uploaded, and makes product creation an explicit choice on every upload
+command. The last item is a breaking change for pipelines that relied on a
+product being created implicitly.
+
 ### Added
 
 - `trust-attestation-key`: lets an organisation admin register a public-only
@@ -21,10 +29,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Optional creation metadata includes environment, release dates, release type,
   external URL, and explicit version-to-version inheritance, which happens only
   when `--inherit-from` is passed. `--reuse-existing` supports repeatable CI
-  preparation without changing the existing version. JSON output includes a
-  stable `created` boolean, and in `--output json` mode error diagnostics go to
-  stderr so stdout is always either valid JSON or empty. This makes it possible
-  to attach `code-check --upload` findings to a version before any SBOM exists.
+  preparation without changing the existing version, including a concurrent
+  create resolved through the API's duplicate-resource response. JSON output
+  includes a stable `created` boolean, and in `--output json` mode error
+  diagnostics go to stderr so stdout is always either valid JSON or empty. This
+  makes it possible to attach `code-check --upload` findings to a version before
+  any SBOM exists.
 - `ra status`: reads the structured risk assessment status for a product
   version (assessment status, review status, completion, sign-off summary,
   asset/threat/risk counts, and process coverage when the server includes
@@ -367,7 +377,9 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v3.8.1...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.0.0...HEAD
+[4.0.0]: https://github.com/craevidence/cli/compare/v3.8.2...v4.0.0
+[3.8.2]: https://github.com/craevidence/cli/compare/v3.8.1...v3.8.2
 [3.8.1]: https://github.com/craevidence/cli/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/craevidence/cli/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/craevidence/cli/compare/v3.6.1...v3.7.0

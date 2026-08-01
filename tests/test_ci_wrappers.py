@@ -137,3 +137,17 @@ def test_package_version_matches_pyproject():
         r'^__version__ = "([^"]+)"', init_text, re.MULTILINE
     ).group(1)
     assert dunder_version == project_version
+
+
+def test_v4_release_docs_use_the_v4_major_tag_before_release():
+    release_text = (REPO_ROOT / "docs" / "releasing.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "## The `v4` major tag" in release_text
+    assert "refs/tags/v4" in release_text
+    assert "refs/tags/v3" not in release_text
+    assert "latest `v3.x`" not in release_text
+    assert release_text.index("git tag v4 <commit>") < release_text.index(
+        "Create the GitHub release"
+    )

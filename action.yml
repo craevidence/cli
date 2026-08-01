@@ -3,7 +3,7 @@
 #
 # Usage:
 #   - name: Upload SBOM to CRA Evidence
-#     uses: craevidence/cli@v3
+#     uses: craevidence/cli@v4
 #     with:
 #       api-key: ${{ secrets.CRA_EVIDENCE_API_KEY }}
 #       product: my-product

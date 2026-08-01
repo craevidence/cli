@@ -60,7 +60,7 @@ jobs:
         run: |
           # Replace this with the SBOM command your build already uses.
           your-sbom-command > sbom.cdx.json
-      - uses: craevidence/cli@v3
+      - uses: craevidence/cli@v4
         with:
           api-key: ${{ secrets.CRA_EVIDENCE_API_KEY }}
           product: my-product
@@ -85,7 +85,7 @@ component:
 
 ```yaml
 include:
-  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v3.8.2/gitlab-ci-component.yml'
+  - remote: 'https://raw.githubusercontent.com/craevidence/cli/v4.0.0/gitlab-ci-component.yml'
     inputs:
       product: $CI_PROJECT_NAME
       version: $CI_COMMIT_TAG
@@ -243,7 +243,7 @@ speeds up cold starts.
     restore-keys: vuln-db-${{ runner.os }}-
 ```
 
-Place this step before the `craevidence/cli@v3` action step.
+Place this step before the `craevidence/cli@v4` action step.
 
 **GitLab CI component** (engine and DB stored under `/tmp/craevidence/*`):
 

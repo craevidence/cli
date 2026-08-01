@@ -114,7 +114,7 @@ expose a no-key `check` mode:
 
 ```yaml
 # GitHub Actions - no api-key needed
-- uses: craevidence/cli@v3
+- uses: craevidence/cli@v4
   with:
     command: check
     path: .
@@ -127,7 +127,7 @@ expose a no-key `check` mode:
 ```yaml
 # GitLab CI - no API key needed
 include:
-  - component: $CI_SERVER_FQDN/craevidence/cli/cra-evidence@v3
+  - component: $CI_SERVER_FQDN/craevidence/cli/cra-evidence@v4
 cra-check:
   extends: .cra-evidence-check
   variables:

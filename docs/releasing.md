@@ -64,8 +64,12 @@ bash scripts/check-image-gate.sh craevidence:release-check
 2. Create the release tag at exactly that commit and push it:
    `git tag vX.Y.Z <commit> && git push origin vX.Y.Z`. The pipeline's
    signing identity and checkout both derive from this tag.
-3. Create the GitHub release from the existing tag `vX.Y.Z` and publish it.
-4. Approve the protected deployments when GitHub asks. Three release jobs are
+3. For the first release of a new major version, create its major tag at the
+   same commit and push it before the GitHub release. For 4.0.0:
+   `git tag v4 <commit> && git push origin v4`. Re-read both remote tags and
+   verify that `v4.0.0` and `v4` resolve to the release commit.
+4. Create the GitHub release from the existing tag `vX.Y.Z` and publish it.
+5. Approve the protected deployments when GitHub asks. Three release jobs are
    approval-gated: image publishing and the final `latest` move both use the
    `release-images` environment, and the immutable PyPI upload uses `pypi`.
 
@@ -188,17 +192,18 @@ by a later resume and would need a new patch release.
 Never amend or force-push a released commit or tag: correct forward with a
 new commit and, when needed, a new patch release.
 
-## The `v3` major tag
+## The `v4` major tag
 
-`uses: craevidence/cli@v3` resolves through the mutable `v3` tag. It always
-points at the latest `v3.x` release commit, never at `main`.
+`uses: craevidence/cli@v4` resolves through the mutable `v4` tag, created with
+the 4.0.0 release. It always points at the latest `v4.x` release commit, never
+at `main`. The `v3` tag stays frozen at 3.8.2.
 
 - Creation and every later move: verify the target release tag and commit
-  first, then update only `refs/tags/v3`
-  (`git tag -f v3 <release-commit> && git push --force origin refs/tags/v3`),
+  first, then update only `refs/tags/v4`
+  (`git tag -f v4 <release-commit> && git push --force origin refs/tags/v4`),
   then re-read the remote tag and confirm it points at the intended commit.
-- Moving `v3` is the one documented exception to the no-force-push rule, and
-  it applies to `refs/tags/v3` only.
+- Moving `v4` is the one documented exception to the no-force-push rule, and
+  it applies to `refs/tags/v4` only.
 
 ## Retro-signed images
 
