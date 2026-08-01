@@ -11,7 +11,8 @@
 # gets reviewed here instead of staying suppressed.
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
-# Derived from an unfiltered Grype 0.116.1 scan on 2026-07-31 (DB schema
+# Derived from an unfiltered Grype 0.116.1 scan on 2026-07-31, re-run
+# 2026-08-01 against a refreshed DB (DB schema
 # v6.1.9, built 2026-07-31T07:09:24Z) of the image built from this Dockerfile:
 # bases dhi.io/python:3.14-dev@sha256:15bf794abbbe30567641eb4d302a24a47e544673ca2a780caa005687ce28b47b
 # and dhi.io/python:3.14@sha256:a48b4d2f444300b14ca90979f44e920657f09e7f649d9251878af7438874df63,
@@ -35,3 +36,23 @@ ignore:
       name: github.com/docker/docker
       version: v28.5.2+incompatible
     reason: "High severity, library fix exists (29.3.1). Found in the pinned Grype 0.116.1 binary, which embeds docker/docker v28.5.2; no Grype release embeds the fixed library yet (checked 2026-07-31). Exposure: the advisory concerns Docker daemon authorization plugin handling; this image does not run a Docker daemon or expose Docker daemon endpoints. Remove when the pinned Grype embeds docker/docker 29.3.1 or later."
+  - vulnerability: CVE-2026-27145
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Same advisory as GO-2026-5037 above (vuln.go.dev lists CVE-2026-27145 as its alias); the vulnerability database now also reports the CVE identifier, which the GO-prefixed entry does not match. Same scope, same exposure, same removal trigger: remove when upstream ships binaries built with Go 1.26.4, 1.25.11, or later."
+  - vulnerability: CVE-2026-39822
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Same advisory as GO-2026-4970 above (vuln.go.dev lists CVE-2026-39822 as its alias); the vulnerability database now also reports the CVE identifier, which the GO-prefixed entry does not match. Same scope, same exposure, same removal trigger: remove when upstream ships binaries built with Go 1.26.5, 1.25.12, or later."
+  - vulnerability: GO-2026-5038
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "High severity, fix ships in Go 1.26.4 and 1.25.11. Quadratic complexity in mime.WordDecoder.DecodeHeader: decoding a crafted MIME header with many invalid encoded-words burns CPU. The bundled Syft 1.50.0 and Grype 0.116.1 are the latest upstream releases (both 2026-07-28, checked 2026-08-01) and are built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: these tools decode RFC 2047 encoded-words nowhere in their scanning paths; they read container images, SBOM documents, and vulnerability database payloads. The worst outcome in the advisory class is an algorithmic denial of service, so a hostile endpoint could at most stall a scan run. Remove when upstream ships binaries built with Go 1.26.4, 1.25.11, or later."
+  - vulnerability: CVE-2026-42504
+    package:
+      name: stdlib
+      version: go1.26.3
+    reason: "Same advisory as GO-2026-5038 above (vuln.go.dev lists CVE-2026-42504 as its alias). Same scope, same exposure, same removal trigger."
