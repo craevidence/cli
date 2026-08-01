@@ -32,6 +32,7 @@ from cra_evidence_cli.commands import (
     scan,
     secrets,
     status,
+    trust,
     upload,
     validate,
     verify,
@@ -145,6 +146,8 @@ cli.add_command(upload.upload_vex)
 cli.add_command(upload.upload_document)
 cli.add_command(upload.upload_sarif)
 cli.add_command(upload.upload_attestation)
+cli.add_command(trust.trust_attestation_key)
+cli.add_command(trust.verify_attestation)
 cli.add_command(diagram.upload_diagram)
 
 cli.add_command(create_version.create_version)

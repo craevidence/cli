@@ -1280,6 +1280,17 @@ class TestUploadAttestationCommand:
         "CRA_EVIDENCE_URL": "http://localhost:8000",
     }
 
+    def test_help_names_current_bundle_and_exact_identity_contract(self):
+        from cra_evidence_cli.cli import cli
+
+        result = CliRunner().invoke(cli, ["upload-attestation", "--help"])
+
+        assert result.exit_code == 0, result.output
+        assert "Cosign/Sigstore bundle or DSSE in-toto JSON file" in result.output
+        assert "slug or UUID" in result.output
+        assert "match an existing version exactly" in result.output
+        assert ".jsonl" not in result.output
+
     def test_upload_attestation_calls_client_with_existing_version(self):
         from pathlib import Path
         from unittest.mock import MagicMock, patch

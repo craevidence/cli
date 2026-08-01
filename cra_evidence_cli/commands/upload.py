@@ -588,6 +588,11 @@ def format_attestation_output(data: dict, output_format: str) -> None:
             "[yellow]![/yellow] Stored as provenance metadata. "
             "It is not verified provenance unless verification_status is valid."
         )
+        if verification_status == "pending":
+            console.print(
+                "[dim]An organisation admin can register cosign.pub once with "
+                "craevidence trust-attestation-key.[/dim]"
+            )
 
     console.print()
 
@@ -2127,7 +2132,7 @@ def upload_sarif(
     "file_path",
     required=True,
     type=click.Path(exists=True, path_type=Path),
-    help="Path to DSSE/in-toto attestation file (.json or .jsonl)",
+    help="Cosign/Sigstore bundle or DSSE in-toto JSON file",
 )
 @click.pass_context
 def upload_attestation(
@@ -2137,11 +2142,13 @@ def upload_attestation(
     file_path: Path,
 ) -> None:
     """
-    Upload DSSE/in-toto attestation metadata for an existing product version.
+    Upload a Cosign/Sigstore bundle or DSSE in-toto JSON file.
 
-    CRA Evidence stores the attestation as provenance metadata. It is not
-    presented as verified provenance unless the API returns
-    verification_status=valid.
+    The product must be identified by slug or UUID and the version number must
+    match an existing version exactly. Uploaded provenance is not presented as
+    verified unless the API returns verification_status=valid. For key-based
+    Cosign bundles, an organisation admin can register cosign.pub once with
+    trust-attestation-key.
 
     """
     config = ctx.obj["config"]

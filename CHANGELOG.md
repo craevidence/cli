@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `trust-attestation-key`: lets an organisation admin register a public-only
+  Cosign ECDSA P-256 key for Build Provenance verification. Private-key PEM
+  files are rejected before authentication or any network request.
+- `verify-attestation`: re-checks the latest stored Bundle or raw DSSE by
+  product slug and version, with an optional attestation ID override.
 - `create-version`: creates a draft version under an existing product without
   uploading new evidence, scanning, approving, or releasing it. Reusable
   product-level documents and templates are linked by the platform. The product
@@ -55,6 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `upload-attestation` help now identifies Cosign/Sigstore bundles and DSSE
+  in-toto JSON as the supported inputs, states that product slugs and version
+  numbers must match existing resources exactly, and includes a direct
+  `cosign attest-blob --bundle` example. A bundle signed by a matching active
+  key registered with `trust-attestation-key` can return `valid`; accepted
+  `pending` provenance remains explicitly distinct from verified provenance.
 - **BREAKING:** `--create-product` on `upload-sbom`, `upload-hbom`,
   `upload-document`, `upload-diagram`, and `compliance-as-code upload` now
   defaults to disabled instead of enabled. Creating a product sets its

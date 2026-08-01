@@ -11,10 +11,14 @@ import httpx
 
 from cra_evidence_cli import __version__
 from cra_evidence_cli.config import CRAEvidenceConfig
-from cra_evidence_cli.exceptions import APIError, AuthenticationError
+from cra_evidence_cli.exceptions import APIError, AuthenticationError, ValidationError
 
 # Regex for stripping HTML tags from error responses
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
+_PRIVATE_KEY_PEM_RE = re.compile(
+    r"-----BEGIN [^-\r\n]*PRIVATE KEY-----",
+    re.IGNORECASE,
+)
 
 
 def mask_api_key(key: str) -> str:
@@ -866,7 +870,7 @@ class CRAEvidenceClient:
         file_path: Path,
     ) -> dict[str, Any]:
         """
-        Upload a DSSE/in-toto attestation to an existing product version.
+        Upload a Cosign/Sigstore bundle or DSSE in-toto attestation.
 
         Resolves product slug -> product_id and version string -> version_id, then
         POSTs to /api/v1/attestations/upload using multipart form data.
@@ -874,7 +878,7 @@ class CRAEvidenceClient:
         Args:
             product: Product slug or UUID
             version: Version number string
-            file_path: Path to attestation file (.json or .jsonl)
+            file_path: Path to one attestation JSON file
 
         Returns:
             Upload response data
@@ -925,6 +929,89 @@ class CRAEvidenceClient:
                     raise APIError(message=message) from exc
 
                 return self._handle_response(response)
+
+    async def trust_attestation_key(
+        self,
+        name: str,
+        public_key_path: Path,
+    ) -> dict[str, Any]:
+        """Register a public-only Cosign key for attestation verification."""
+        if not public_key_path.exists():
+            raise FileNotFoundError(str(public_key_path))
+
+        try:
+            public_key_pem = public_key_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as exc:
+            raise APIError(
+                message=f"Could not read public key file: {exc}"
+            ) from exc
+
+        if _PRIVATE_KEY_PEM_RE.search(public_key_pem):
+            message = (
+                "Refusing to send a private key. Pass cosign.pub, not cosign.key."
+            )
+            raise ValidationError(message)
+
+        await self._ensure_access_token()
+        endpoint = f"{self.base_url}/api/v1/signing/attestation-trust-keys"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            try:
+                response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json={
+                        "name": name,
+                        "public_key_pem": public_key_pem,
+                    },
+                )
+            except httpx.RequestError as exc:
+                raise APIError(
+                    message=f"Network error contacting {endpoint}: {exc}"
+                ) from exc
+
+        return self._handle_response(response)
+
+    async def verify_attestation(
+        self,
+        product: str,
+        version: str,
+        attestation_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Verify a stored Build Provenance attestation."""
+        product_id = await self._resolve_product_id(product)
+        version_id = await self._resolve_version_id(
+            product_id,
+            version,
+            product,
+        )
+
+        selected_id = attestation_id
+        if selected_id is None:
+            list_response = await self._request_with_retry(
+                "GET",
+                f"{self.base_url}/api/v1/attestations/version/{version_id}",
+            )
+            attestations = self._handle_response(list_response)
+            if not isinstance(attestations, list) or not attestations:
+                raise APIError(
+                    message=(
+                        f"No Build Provenance attestation found for product "
+                        f"'{product}' version '{version}'."
+                    ),
+                    status_code=404,
+                )
+            selected_id = str(attestations[0]["id"])
+
+        verify_response = await self._request_with_retry(
+            "POST",
+            f"{self.base_url}/api/v1/attestations/{selected_id}/verify",
+            json={},
+        )
+        result = self._handle_response(verify_response)
+        if isinstance(result, dict):
+            result.setdefault("product", product)
+            result.setdefault("version", version)
+        return result
 
     async def verify_sbom_signature(
         self,
