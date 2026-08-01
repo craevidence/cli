@@ -743,22 +743,32 @@ jobs:
           digest="${{ steps.canonical.outputs.digest }}"
           tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
           run_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
+          # Cosign 3.x attaches signatures through the OCI referrers API rather
+          # than a .sig tag. GHCR and Docker Hub serve a new referrer
+          # immediately; Quay indexes it asynchronously and answered an empty
+          # referrers list for several seconds after the push, which failed the
+          # 4.0.0 release even though the signature was present and valid.
+          # Retry each registry until its index catches up.
           for repo in \
             "ghcr.io/${{ github.repository_owner }}/craevidence" \
             "${{ vars.DOCKERHUB_IMAGE }}" \
             "quay.io/craevidence/cli"; do
             verified=""
-            for identity in "${tag_identity}" "${run_identity}"; do
-              if cosign verify \
-                  --certificate-identity "${identity}" \
-                  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
-                  "${repo}@${digest}" > /dev/null 2>&1; then
-                verified="${identity}"
-                break
-              fi
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              for identity in "${tag_identity}" "${run_identity}"; do
+                if cosign verify \
+                    --certificate-identity "${identity}" \
+                    --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+                    "${repo}@${digest}" > /dev/null 2>&1; then
+                  verified="${identity}"
+                  break 2
+                fi
+              done
+              echo "no signature visible on ${repo} yet (attempt ${attempt}/10); waiting for the registry index"
+              sleep 15
             done
             if [ -z "${verified}" ]; then
-              echo "::error::${repo}@${digest} carries no signature matching either accepted identity"
+              echo "::error::${repo}@${digest} carries no signature matching either accepted identity after 10 attempts"
               exit 1
             fi
             echo "verified signature on ${repo}@${digest} (${verified})"
