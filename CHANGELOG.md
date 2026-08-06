@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `draft vex --format cyclonedx` emits a CycloneDX VEX skeleton, for tooling
+  that expects CycloneDX rather than OpenVEX or CSAF. Every package named in
+  `affects[].ref` is also emitted as a component so the reference resolves.
+
+### Fixed
+
+- `draft vex` collapses statements per vulnerability instead of repeating an
+  identical statement for every place a package is referenced.
+
 ## [4.0.0] - 2026-08-01
 
 Adds commands for reading and closing a risk assessment review cycle, adds

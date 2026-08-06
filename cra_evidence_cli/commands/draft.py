@@ -20,6 +20,7 @@ import click
 from cra_evidence_cli.commands.check import run_local_check
 from cra_evidence_cli.exceptions import CRAEvidenceError, ScanEngineUnavailable
 from cra_evidence_cli.local.csaf import build_csaf_advisory, build_csaf_vex
+from cra_evidence_cli.local.cyclonedx_vex import build_cyclonedx_vex
 from cra_evidence_cli.local.disclaimer import (
     DRAFT_WATERMARK,
     advisory_block,
@@ -47,18 +48,32 @@ def draft(ctx: click.Context) -> None:
 
 
 def _build_openvex(findings: list) -> dict:
-    """Build an OpenVEX v0.2.0 skeleton (one under_investigation statement per finding)."""
-    statements = []
+    """Build an OpenVEX v0.2.0 skeleton, one under_investigation statement per vulnerability.
+
+    Scanners commonly report the same vulnerability once per place a package is
+    referenced. Statements are collapsed per vulnerability so the document lists
+    each affected product once, rather than repeating an identical statement.
+    """
+    statements: list[dict] = []
+    by_id: dict[str, dict] = {}
+    products_by_id: dict[str, set[str]] = {}
+
     for finding in findings:
-        stmt: dict = {
-            "vulnerability": {"name": finding.id},
-            "status": "under_investigation",
-        }
-        if finding.aliases:
-            stmt["vulnerability"]["aliases"] = sorted(finding.aliases)
-        if finding.purl:
-            stmt["products"] = [{"@id": finding.purl}]
-        statements.append(stmt)
+        stmt = by_id.get(finding.id)
+        if stmt is None:
+            stmt = {
+                "vulnerability": {"name": finding.id},
+                "status": "under_investigation",
+            }
+            if finding.aliases:
+                stmt["vulnerability"]["aliases"] = sorted(finding.aliases)
+            by_id[finding.id] = stmt
+            products_by_id[finding.id] = set()
+            statements.append(stmt)
+
+        if finding.purl and finding.purl not in products_by_id[finding.id]:
+            products_by_id[finding.id].add(finding.purl)
+            stmt.setdefault("products", []).append({"@id": finding.purl})
     return {
         "@context": "https://openvex.dev/ns/v0.2.0",
         "@id": f"https://openvex.dev/docs/public/vex-{uuid.uuid4().hex}",
@@ -91,10 +106,13 @@ def _build_openvex(findings: list) -> dict:
 @click.option(
     "--format",
     "vex_format",
-    type=click.Choice(["openvex", "csaf"]),
+    type=click.Choice(["openvex", "csaf", "cyclonedx"]),
     default="openvex",
     show_default=True,
-    help="VEX output format. csaf emits a CSAF 2.0 VEX document.",
+    help=(
+        "VEX output format. csaf emits a CSAF 2.0 VEX document, cyclonedx "
+        "emits a CycloneDX VEX document."
+    ),
 )
 @click.pass_context
 def vex(
@@ -105,13 +123,16 @@ def vex(
     output_file: Path | None,
     vex_format: str,
 ) -> None:
-    """Produce a VEX skeleton (OpenVEX or CSAF) from local scan findings.
+    """Produce a VEX skeleton (OpenVEX, CSAF or CycloneDX) from local scan findings.
 
     Runs the same scan pipeline as 'check', then emits one VEX statement per
     finding with status 'under_investigation'. Choose the format with --format
     (openvex by default, or csaf for a CSAF 2.0 VEX document). Fill in the
     justification or impact_statement for each entry, then pass the completed
     file back to 'check --vex' to suppress findings.
+
+    Note that 'check --vex' reads OpenVEX and CSAF. The cyclonedx format is for
+    tools that expect a CycloneDX VEX document.
 
     The output is not an audit artifact and does not prove non-exploitability.
     The developer must evaluate each finding and supply an accurate status.
@@ -162,6 +183,9 @@ def vex(
     if vex_format == "csaf":
         doc = build_csaf_vex(result.findings)
         label = "CSAF VEX"
+    elif vex_format == "cyclonedx":
+        doc = build_cyclonedx_vex(result.findings)
+        label = "CycloneDX VEX"
     else:
         doc = _build_openvex(result.findings)
         label = "OpenVEX"
