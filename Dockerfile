@@ -49,7 +49,7 @@
 #     --build-arg SECURITY_HARDENED=false \
 #     --build-arg SECURITY_NO_SHELL=false \
 #     --build-arg SECURITY_NO_PACKAGE_MANAGER=false .
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:b1b502f0903fb63589bb660570872c94569a2475f3ff53597754257baff8d06c
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:5acf54c5ce21277f52115d45e217915779f8ce43a3667ea0b37a642bc7b7c8a7
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
 ARG BASE_IMAGE=dhi.io/python:3.14@sha256:f3c4e102e557c0eee652cfd14b7da473c89d9126a07f5b0ebd9f8e79183f4038
