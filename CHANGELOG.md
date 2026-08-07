@@ -7,16 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- The Docker image bundles CRA Evidence's grype fork with improvements as its
-  scan engine. Scan behavior and results are unchanged.
+## [4.1.0] - 2026-08-07
 
 ### Added
 
 - `draft vex --format cyclonedx` emits a CycloneDX VEX skeleton, for tooling
   that expects CycloneDX rather than OpenVEX or CSAF. Every package named in
   `affects[].ref` is also emitted as a component so the reference resolves.
+
+### Changed
+
+- The Docker image bundles CRA Evidence's grype fork with improvements as its
+  scan engine. Scan behavior and results are unchanged.
 
 ### Fixed
 
@@ -393,7 +395,8 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.0.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.1.0...HEAD
+[4.1.0]: https://github.com/craevidence/cli/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/craevidence/cli/compare/v3.8.2...v4.0.0
 [3.8.2]: https://github.com/craevidence/cli/compare/v3.8.1...v3.8.2
 [3.8.1]: https://github.com/craevidence/cli/compare/v3.8.0...v3.8.1
