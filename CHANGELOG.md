@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The Docker image bundles CRA Evidence's grype fork with improvements as its
+  scan engine. Scan behavior and results are unchanged.
+
 ### Added
 
 - `draft vex --format cyclonedx` emits a CycloneDX VEX skeleton, for tooling

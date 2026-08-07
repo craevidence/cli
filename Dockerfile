@@ -49,10 +49,18 @@
 #     --build-arg SECURITY_HARDENED=false \
 #     --build-arg SECURITY_NO_SHELL=false \
 #     --build-arg SECURITY_NO_PACKAGE_MANAGER=false .
+# Scan engine: grype fork with improvements. The default is the digest-pinned
+# engine artifact; anyone without registry access can build with the upstream
+# engine instead:
+#   --build-arg GRYPE_ENGINE_IMAGE=docker.io/anchore/grype:v0.116.1
+ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:59204fe467cf425107f2e469735c59c65de2652afb9d1c769ef62996c413d067
+
 ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:5acf54c5ce21277f52115d45e217915779f8ce43a3667ea0b37a642bc7b7c8a7
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
 ARG BASE_IMAGE=dhi.io/python:3.14@sha256:f3c4e102e557c0eee652cfd14b7da473c89d9126a07f5b0ebd9f8e79183f4038
+FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
+
 FROM ${BASE_IMAGE_BUILDER} AS builder
 
 # Build-time environment variables
@@ -72,37 +80,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install local check engines via direct downloads with SHA256 verification.
 ARG SYFT_VERSION=1.50.0
-ARG GRYPE_VERSION=0.116.1
+ARG GRYPE_LICENSE_REF=v0.116.1
 ARG TARGETARCH
+COPY --from=grype-engine /grype /usr/local/bin/grype
 RUN set -eux; \
     ARCH="${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')}"; \
     SYFT_TARBALL="syft_${SYFT_VERSION}_linux_${ARCH}.tar.gz"; \
-    GRYPE_TARBALL="grype_${GRYPE_VERSION}_linux_${ARCH}.tar.gz"; \
     case "${ARCH}" in \
         amd64) \
-            SYFT_EXPECTED="bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788"; \
-            GRYPE_EXPECTED="0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458" ;; \
+            SYFT_EXPECTED="bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788" ;; \
         arm64) \
-            SYFT_EXPECTED="887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86"; \
-            GRYPE_EXPECTED="a8d7504a149629324eb5f4ce3dc25dfd211bbfe047e64ee2bf7844b466c3d84d" ;; \
+            SYFT_EXPECTED="887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86" ;; \
         *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
     esac; \
+    GRYPE_LICENSE_EXPECTED="c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"; \
     curl -fsSL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${SYFT_TARBALL}" \
         -o "/tmp/${SYFT_TARBALL}"; \
-    curl -fsSL "https://github.com/anchore/grype/releases/download/v${GRYPE_VERSION}/${GRYPE_TARBALL}" \
-        -o "/tmp/${GRYPE_TARBALL}"; \
+    curl -fsSL "https://raw.githubusercontent.com/anchore/grype/${GRYPE_LICENSE_REF}/LICENSE" \
+        -o /tmp/grype-LICENSE; \
     echo "${SYFT_EXPECTED}  /tmp/${SYFT_TARBALL}" | sha256sum -c -; \
-    echo "${GRYPE_EXPECTED}  /tmp/${GRYPE_TARBALL}" | sha256sum -c -; \
+    echo "${GRYPE_LICENSE_EXPECTED}  /tmp/grype-LICENSE" | sha256sum -c -; \
     mkdir -p /usr/local/bin /licenses/syft /licenses/grype; \
     tar -xzf "/tmp/${SYFT_TARBALL}" -C /usr/local/bin syft; \
     tar -xzf "/tmp/${SYFT_TARBALL}" -C /licenses/syft LICENSE; \
-    tar -xzf "/tmp/${GRYPE_TARBALL}" -C /usr/local/bin grype; \
-    tar -xzf "/tmp/${GRYPE_TARBALL}" -C /licenses/grype LICENSE; \
+    install -m 0644 /tmp/grype-LICENSE /licenses/grype/LICENSE; \
     test -s /licenses/syft/LICENSE; \
     test -s /licenses/grype/LICENSE; \
     tar -xzf "/tmp/${SYFT_TARBALL}" -C /licenses/syft NOTICE 2>/dev/null || true; \
-    tar -xzf "/tmp/${GRYPE_TARBALL}" -C /licenses/grype NOTICE 2>/dev/null || true; \
-    rm -f "/tmp/${SYFT_TARBALL}" "/tmp/${GRYPE_TARBALL}"; \
+    rm -f "/tmp/${SYFT_TARBALL}" /tmp/grype-LICENSE; \
     chmod 755 /usr/local/bin/syft /usr/local/bin/grype; \
     syft version; \
     grype version
