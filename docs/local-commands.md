@@ -48,8 +48,10 @@ Notes:
   not block every build.
 - `--deny-license` reads the per-component licenses already parsed from the SBOM, e.g.
   `--deny-license AGPL-3.0-only,GPL-3.0-only`.
-- `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`; if it
-  is not installed the dimension is skipped (reported as `unavailable`, never a silent pass).
+- `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`.
+  The compliance report interface is available in v1.3.0; release validation pins v2.0.11.
+  If it is not installed the dimension is skipped (reported as `unavailable`, never a
+  silent pass). Scores can change between versions, so CI thresholds require a version pin.
 - Each finding's exploit probability is shown inline when available and used to
   rank the "Top actions".
 - `--vex` consumes an [OpenVEX](https://openvex.dev/) (or CSAF VEX) document and suppresses a

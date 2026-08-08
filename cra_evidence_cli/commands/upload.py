@@ -1054,8 +1054,8 @@ def _resolve_signature_inputs(
     default=False,
     help=(
         "Score the SBOM against BSI TR-03183-2 v2 via the sbomqs binary "
-        "before upload. Requires sbomqs on PATH "
-        "(`go install github.com/interlynk-io/sbomqs@latest`). "
+        "before upload. Release validation pins sbomqs v2.0.11 "
+        "(`go install github.com/interlynk-io/sbomqs/v2@v2.0.11`). "
         "Prints score and the worst-performing checks."
     ),
 )

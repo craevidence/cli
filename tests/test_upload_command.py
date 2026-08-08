@@ -2066,9 +2066,9 @@ class TestSbomqsCheck:
             num_components=107,
             score_out_of_100=score,
             worst_features=[
-                FeatureScore("comp_with_supplier", 0, 10),
-                FeatureScore("comp_with_source_code_uri", 0, 10),
-                FeatureScore("sbom_with_signature", 0, 10),
+                FeatureScore("Level of Detail", 0, 10),
+                FeatureScore("Required component fields", 2, 10),
+                FeatureScore("Required SBOM fields", 5, 10),
             ],
         )
 
@@ -2138,7 +2138,7 @@ class TestSbomqsCheck:
         )
         assert result.exit_code == 0, result.output
         assert "sbomqs bsi-v2.0: 85.0/100" in result.output
-        assert "comp_with_supplier 0/10" in result.output
+        assert "Level of Detail 0/10" in result.output
         mock_run_sbomqs.assert_called_once()
         mock_client.upload_sbom.assert_called_once()
 
@@ -2165,14 +2165,16 @@ class TestSbomqsCheck:
         result, mock_client, mock_run_sbomqs = self._invoke(
             ["--sbomqs-check"],
             run_sbomqs_side_effect=CRAEvidenceError(
-                "sbomqs binary not found on PATH. Install sbomqs to use "
-                "--sbomqs-check: `go install github.com/interlynk-io/sbomqs@latest`",
+                "sbomqs binary not found on PATH. Install the pinned sbomqs "
+                "v2.0.11 release to use --sbomqs-check: `go install "
+                "github.com/interlynk-io/sbomqs/v2@v2.0.11`",
                 exit_code=2,
             ),
         )
         assert result.exit_code == 2, result.output
         assert "sbomqs binary not found" in result.output
-        assert "go install github.com/interlynk-io/sbomqs" in result.output
+        assert "go install" in result.output
+        assert "github.com/interlynk-io/sbomqs/v2@v2.0.11" in result.output
         mock_client.upload_sbom.assert_not_called()
 
     def test_fail_on_score_without_check_is_usage_error(self):

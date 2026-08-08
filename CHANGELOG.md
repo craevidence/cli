@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.2.0] - 2026-08-08
+
+### Changed
+
+- `upload-sbom --sbomqs-check` and `check --sbom-quality` now run
+  `sbomqs compliance --bsi-v2 --json`. The report interface was validated with
+  sbomqs v1.3.0 and v2.0.11; installation and release checks pin v2.0.11.
+  Scores keep the 0-100 scale but can change between sbomqs versions, so CI
+  users relying on `--fail-on-score` must pin the same version and may need to
+  review existing thresholds.
+- The dev container now installs sbomqs 2.0.11 with checksum verification,
+  alongside the pinned Syft and Grype versions.
+- `setup-profile` no longer offers the nonfunctional CE marking default. CE
+  marking is declared per version, and the API no longer accepts the retired
+  `ce_marking_standard` product-profile field.
+
 ## [4.1.0] - 2026-08-07
 
 ### Added
@@ -396,7 +412,8 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.1.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/craevidence/cli/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/craevidence/cli/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/craevidence/cli/compare/v3.8.2...v4.0.0
 [3.8.2]: https://github.com/craevidence/cli/compare/v3.8.1...v3.8.2

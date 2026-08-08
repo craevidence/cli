@@ -384,18 +384,24 @@ manual supplier review workflow where applicable.
 
 Opt-in score gate for German BSI / EU regulated procurement. When set, the CLI
 shells to the [`sbomqs`](https://github.com/interlynk-io/sbomqs) binary, runs
-`sbomqs score -c bsi-v2.0 --json`, prints the score (0-100) and the three
-worst-scoring checks, then optionally fails the CI job when the score is below
-`--fail-on-score N`. The check runs **before** the upload network call so a
-failing score does not produce a server-side row.
+`sbomqs compliance --bsi-v2 --json`, prints the score (0-100) and the three
+worst-scoring BSI requirement areas, then optionally fails the CI job when the
+score is below `--fail-on-score N`. The check runs **before** the upload
+network call so a failing score does not produce a server-side row.
+
+The compliance report interface is available in sbomqs v1.3.0 and has been
+validated with v1.3.0 and v2.0.11. Pin v2.0.11 for installation and release
+validation. Scores can change between sbomqs versions, so CI jobs that use
+`--fail-on-score` must pin the same version.
 
 `sbomqs` is not bundled in the CLI Docker image. Install it separately:
 
 ```bash
-go install github.com/interlynk-io/sbomqs@latest
+go install github.com/interlynk-io/sbomqs/v2@v2.0.11
 # or
+# Homebrew does not provide an exact version pin; verify `sbomqs version` is v2.0.11.
 brew install interlynk-io/interlynk/sbomqs
-# or download a release from https://github.com/interlynk-io/sbomqs/releases
+# or download the v2.0.11 release from https://github.com/interlynk-io/sbomqs/releases
 ```
 
 CI snippet (fails the job if the SBOM scores below 60/100):
@@ -410,15 +416,14 @@ craevidence upload-sbom \
 Sample output (failing the threshold):
 
 ```
-sbomqs bsi-v2.0: 47.9/100 (sbom.cdx.json, 107 components)
-  worst: comp_with_supplier 0/10, comp_with_source_code_uri 0/10, comp_with_executable_uri 0/10
-Error: sbomqs BSI TR-03183-2 v2 score 47.9 is below threshold 60.0
+sbomqs bsi-v2.0: 38.3/100 (sbom.cdx.json, 8 components)
+  worst: Level of Detail 0/10, Optional SBOM fields 0/10, Optional component fields 0/10
+Error: sbomqs BSI TR-03183-2 v2 score 38.3 is below threshold 60.0
 ```
 
-The sbomqs check covers ~10 BSI/CRA-relevant signals the platform's own
-`quality_score` does not compute (per-component VCS/executable URIs and hashes,
-dependency-graph completeness, SBOM authors / build-phase / bomlinks /
-signature). It complements rather than duplicates the platform score.
+The sbomqs check covers BSI requirement areas that complement the platform's
+own `quality_score`, including component identity, licenses and hashes, level
+of detail, SBOM build metadata and signature.
 
 ## `upload-hbom`
 
@@ -1136,7 +1141,7 @@ shown by `components list`. See the README for the full multi-repo workflow.
 
 ## `setup-profile`
 
-Set up or update the CRA compliance profile for a product. Configures conformity assessment type, support period, CE marking, Annex I attestations, and webhooks.
+Set up or update the CRA compliance profile for a product. Configures conformity assessment type, support period, Annex I attestations, and webhooks. CE marking remains a per-version declaration and is not a product-profile default.
 
 Three modes are supported:
 
@@ -1150,7 +1155,6 @@ craevidence setup-profile
   [--from-version <version-number>]        # Copy settings from this version
   [--conformity-type self_assessment|third_party_type_examination|third_party_full_qa|eu_certification]
   [--support-years <int>]                  # CRA minimum is 5 years
-  [--ce-marking|--no-ce-marking]
   [--support-communicated|--no-support-communicated]
   [--secure-by-default|--no-secure-by-default]
   [--webhook-url <url>]                    # Pass empty string to clear

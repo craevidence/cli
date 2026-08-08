@@ -155,7 +155,6 @@ def format_profile_output(product_name: str, profile: dict | None, output_format
         table.add_row("Default Support Period", "[dim]not set[/dim]")
 
     # Boolean flags
-    table.add_row("CE Marking (default)", _format_bool(profile.get("ce_marking_standard")))
     table.add_row(
         "Support Period Communicated (default)",
         _format_bool(profile.get("support_period_communicated")),
@@ -243,12 +242,6 @@ def format_profile_output(product_name: str, profile: dict | None, output_format
     help="Default support period in years (CRA minimum is 5 years)",
 )
 @click.option(
-    "--ce-marking/--no-ce-marking",
-    "ce_marking",
-    default=None,
-    help="Default CE marking applied flag for new versions",
-)
-@click.option(
     "--support-communicated/--no-support-communicated",
     "support_communicated",
     default=None,
@@ -305,7 +298,6 @@ def setup_profile(
     from_version: str | None,
     conformity_type: str | None,
     support_years: int | None,
-    ce_marking: bool | None,
     support_communicated: bool | None,
     secure_by_default: bool | None,
     webhook_url: str | None,
@@ -339,8 +331,6 @@ def setup_profile(
 
             # Map version fields to profile fields
             conformity_type = conformity_type or version_data.get("conformity_assessment_type")
-            if ce_marking is None:
-                ce_marking = version_data.get("ce_marking_applied")
             if support_communicated is None:
                 support_communicated = version_data.get("support_period_communicated")
             if secure_by_default is None:
@@ -350,7 +340,6 @@ def setup_profile(
             if ctx.obj.get("verbose"):
                 console.print(
                     f"[dim]Loaded: conformity_type={conformity_type}, "
-                    f"ce_marking={ce_marking}, "
                     f"support_communicated={support_communicated}, "
                     f"secure_by_default={secure_by_default}[/dim]"
                 )
@@ -358,7 +347,7 @@ def setup_profile(
         # Mode 1: Interactive - if no flags were provided and no --from-version
         any_flag_set = any(
             v is not None
-            for v in [conformity_type, support_years, ce_marking, support_communicated,
+            for v in [conformity_type, support_years, support_communicated,
                       secure_by_default, webhook_url, webhook_secret]
         ) or confirm_all or attestation_pairs
 
@@ -386,7 +375,6 @@ def setup_profile(
             )
 
             # Boolean flags
-            ce_marking = click.confirm("CE marking applied by default?", default=False)
             support_communicated = click.confirm(
                 "Support period communicated to end users by default?", default=False
             )
@@ -412,8 +400,6 @@ def setup_profile(
             profile["default_conformity_assessment_type"] = conformity_type
         if support_years is not None:
             profile["default_support_period_years"] = support_years
-        if ce_marking is not None:
-            profile["ce_marking_standard"] = ce_marking
         if support_communicated is not None:
             profile["support_period_communicated"] = support_communicated
         if secure_by_default is not None:

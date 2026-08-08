@@ -2293,7 +2293,6 @@ class CRAEvidenceClient:
                 - default_support_period_years (int)
                 - support_period_communicated (bool)
                 - secure_by_default_confirmed (bool)
-                - ce_marking_standard (bool)
 
         Returns:
             CRAProfileResponse dict with keys: product_id, cra_profile, message
