@@ -92,7 +92,7 @@ transport_class() {
 }
 
 manifest_exists() {
-  docker manifest inspect "$1" > /dev/null 2> "${err_file}"
+  docker buildx imagetools inspect "$1" > /dev/null 2> "${err_file}"
 }
 
 current_digest() {

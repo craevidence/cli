@@ -178,7 +178,7 @@ spec:
 
       CLI_VERSION="4.1.0"
       CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
-      CLI_WHEEL_SHA256="bcd592d6fc52e3abae893d377c13a48427849bbaa1506ac691b6f743ce1f6a18"
+      CLI_WHEEL_SHA256="52f4f83b0238dc9793b6e36c94bd9a6cc1cd4e4d1fe297c2230824159f007179"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
       python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"
@@ -334,7 +334,7 @@ cra-evidence-upload:
       set -eu
       CLI_VERSION="4.1.0"
       CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
-      CLI_WHEEL_SHA256="bcd592d6fc52e3abae893d377c13a48427849bbaa1506ac691b6f743ce1f6a18"
+      CLI_WHEEL_SHA256="52f4f83b0238dc9793b6e36c94bd9a6cc1cd4e4d1fe297c2230824159f007179"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
       python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"

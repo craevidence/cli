@@ -169,7 +169,7 @@ jobs:
         id: ecr-login
         if: steps.ecr-creds.outcome == 'success'
         continue-on-error: true
-        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64  # v2.0.1
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64  # v2.1.6
 
       # Publishing paths (main pushes, releases, manual dispatch) must never
       # build from the public fallback bases: an image labeled as hardened has
@@ -539,7 +539,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ECR_ENGINE_ROLE_ARN }}
           aws-region: eu-west-1
       - name: Login to Amazon ECR for the engine pull
-        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64  # v2.0.1
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64  # v2.1.6
 
       # The Docker Hub destination is pinned to the exact published
       # repository, so a changed or mistyped variable can never publish or
