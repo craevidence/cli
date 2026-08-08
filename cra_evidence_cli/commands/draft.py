@@ -56,6 +56,7 @@ def _build_openvex(findings: list) -> dict:
     """
     statements: list[dict] = []
     by_id: dict[str, dict] = {}
+    aliases_by_id: dict[str, set[str]] = {}
     products_by_id: dict[str, set[str]] = {}
 
     for finding in findings:
@@ -65,11 +66,14 @@ def _build_openvex(findings: list) -> dict:
                 "vulnerability": {"name": finding.id},
                 "status": "under_investigation",
             }
-            if finding.aliases:
-                stmt["vulnerability"]["aliases"] = sorted(finding.aliases)
             by_id[finding.id] = stmt
+            aliases_by_id[finding.id] = set()
             products_by_id[finding.id] = set()
             statements.append(stmt)
+
+        aliases_by_id[finding.id].update(finding.aliases)
+        if aliases_by_id[finding.id]:
+            stmt["vulnerability"]["aliases"] = sorted(aliases_by_id[finding.id])
 
         if finding.purl and finding.purl not in products_by_id[finding.id]:
             products_by_id[finding.id].add(finding.purl)
@@ -125,11 +129,12 @@ def vex(
 ) -> None:
     """Produce a VEX skeleton (OpenVEX, CSAF or CycloneDX) from local scan findings.
 
-    Runs the same scan pipeline as 'check', then emits one VEX statement per
-    finding with status 'under_investigation'. Choose the format with --format
-    (openvex by default, or csaf for a CSAF 2.0 VEX document). Fill in the
-    justification or impact_statement for each entry, then pass the completed
-    file back to 'check --vex' to suppress findings.
+    Runs the same scan pipeline as 'check', then emits one VEX entry per
+    vulnerability with every affected package listed once. Entries begin in the
+    investigative state defined by their format. Choose the format with --format
+    (openvex by default, csaf for CSAF 2.0, or cyclonedx for CycloneDX 1.6).
+    Fill in the status and supporting detail for each entry, then pass a completed
+    OpenVEX or CSAF file back to 'check --vex' to suppress findings.
 
     Note that 'check --vex' reads OpenVEX and CSAF. The cyclonedx format is for
     tools that expect a CycloneDX VEX document.
@@ -183,22 +188,25 @@ def vex(
     if vex_format == "csaf":
         doc = build_csaf_vex(result.findings)
         label = "CSAF VEX"
+        n = len(doc["vulnerabilities"])
     elif vex_format == "cyclonedx":
         doc = build_cyclonedx_vex(result.findings)
         label = "CycloneDX VEX"
+        n = len(doc["vulnerabilities"])
     else:
         doc = _build_openvex(result.findings)
         label = "OpenVEX"
+        n = len(doc["statements"])
 
     json_text = json.dumps(doc, indent=2)
     assert_disclaimer_present(json_text)
+    entry_label = "entry" if n == 1 else "entries"
 
-    n = len(result.findings)
     if output_file is not None:
         output_file.parent.mkdir(parents=True, exist_ok=True)
         output_file.write_text(json_text, encoding="utf-8")
         click.echo(DRAFT_WATERMARK, err=True)
-        click.echo(f"Wrote {n} {label} statement(s) to {output_file}", err=True)
+        click.echo(f"Wrote {n} {label} {entry_label} to {output_file}", err=True)
     else:
         click.echo(json_text)
         click.echo(DRAFT_WATERMARK, err=True)

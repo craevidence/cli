@@ -55,6 +55,7 @@ def build_cyclonedx_vex(findings: list[Finding]) -> dict:
     vulnerabilities: list[dict] = []
     by_id: dict[str, dict] = {}
     refs_by_id: dict[str, set[str]] = {}
+    fixes_by_id: dict[str, dict[str, set[str]]] = {}
 
     for finding in findings:
         ref = _package_ref(finding)
@@ -85,17 +86,21 @@ def build_cyclonedx_vex(findings: list[Finding]) -> dict:
                 entry["ratings"] = [{"severity": finding.severity, "method": "other"}]
             if finding.title:
                 entry["description"] = finding.title
-            if finding.fixed_versions:
-                entry["recommendation"] = "Upgrade to one of: " + ", ".join(
-                    finding.fixed_versions
-                )
             by_id[finding.id] = entry
             refs_by_id[finding.id] = set()
+            fixes_by_id[finding.id] = {}
             vulnerabilities.append(entry)
 
         if ref and ref not in refs_by_id[finding.id]:
             refs_by_id[finding.id].add(ref)
             entry["affects"].append({"ref": ref})
+
+        if ref and finding.fixed_versions:
+            fixes_by_id[finding.id].setdefault(ref, set()).update(finding.fixed_versions)
+            entry["recommendation"] = "; ".join(
+                f"{package_ref}: upgrade to one of: {', '.join(sorted(versions))}"
+                for package_ref, versions in fixes_by_id[finding.id].items()
+            )
 
     return {
         "bomFormat": "CycloneDX",

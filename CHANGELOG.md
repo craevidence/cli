@@ -22,8 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- `draft vex` collapses statements per vulnerability instead of repeating an
-  identical statement for every place a package is referenced.
+- `draft vex` collapses entries per vulnerability across OpenVEX, CSAF, and
+  CycloneDX while preserving every affected package, alias, and package-specific
+  fix recommendation.
 
 ## [4.0.0] - 2026-08-01
 

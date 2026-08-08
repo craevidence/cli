@@ -1,12 +1,11 @@
 """Pure builders for the CSAF 2.0 documents the no-key draft commands emit.
 
 :func:`build_csaf_vex` and :func:`build_csaf_advisory` assemble CSAF 2.0
-skeletons from local scan findings: a VEX (every finding marked
+skeletons from local scan findings: a VEX (one entry per vulnerability, marked
 ``under_investigation``) and a security advisory (one vulnerability entry per
 finding with placeholder notes and a remediation). Both share the document
 header, the vulnerability identity mapping, the product reference, and the
-product_tree assembly, so they cannot drift apart. No network, no subprocess,
-no printing.
+product_tree assembly. No network, no subprocess, no printing.
 
 These produce a draft skeleton, not a profile-conformant advisory: the author
 completes the content. The output is validated against the official CSAF 2.0
@@ -97,22 +96,49 @@ def _skeleton(
 def build_csaf_vex(findings: list[Finding]) -> dict:
     """Build a CSAF 2.0 VEX skeleton parseable by our own check --vex path.
 
-    Each finding becomes a vulnerability with product_status under_investigation;
-    the user fills in a real status. under_investigation is not a suppression, so
-    the skeleton round-trips through check --vex without hiding anything.
+    Findings are collapsed by vulnerability ID and every affected product is
+    retained once in product_status under_investigation. The user fills in a real
+    status. under_investigation is not a suppression, so the skeleton round-trips
+    through check --vex without hiding anything.
     """
     full_product_names: list[dict] = []
     seen: set[str] = set()
     vulnerabilities: list[dict] = []
+    by_id: dict[str, dict] = {}
+    products_by_id: dict[str, set[str]] = {}
+    aliases_by_id: dict[str, set[str]] = {}
+
     for finding in findings:
-        entry = _vuln_identity(finding)
+        entry = by_id.get(finding.id)
+        if entry is None:
+            entry = _vuln_identity(finding)
+            by_id[finding.id] = entry
+            products_by_id[finding.id] = set()
+            aliases_by_id[finding.id] = set(finding.aliases)
+            vulnerabilities.append(entry)
+        else:
+            aliases_by_id[finding.id].update(finding.aliases)
+
+        if aliases_by_id[finding.id]:
+            ids = entry.setdefault("ids", [])
+            existing_aliases = {
+                item["text"] for item in ids if item.get("system_name") == "alias"
+            }
+            ids.extend(
+                {"system_name": "alias", "text": alias}
+                for alias in sorted(aliases_by_id[finding.id] - existing_aliases)
+            )
+
         product = _product_ref(finding)
         if product:
             if product not in seen:
                 seen.add(product)
                 full_product_names.append({"product_id": product, "name": product})
-            entry["product_status"] = {"under_investigation": [product]}
-        vulnerabilities.append(entry)
+            if product not in products_by_id[finding.id]:
+                products_by_id[finding.id].add(product)
+                statuses = entry.setdefault("product_status", {})
+                statuses.setdefault("under_investigation", []).append(product)
+
     return _skeleton("csaf_vex", "CRA Evidence CLI draft vex", vulnerabilities, full_product_names)
 
 

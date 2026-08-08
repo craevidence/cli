@@ -145,3 +145,25 @@ class TestFindingDetail:
         )
 
         assert "2.1.0" in doc["vulnerabilities"][0]["recommendation"]
+
+    def test_fix_recommendations_remain_bound_to_each_affected_package(self):
+        findings = [
+            _finding(
+                "CVE-2024-0001",
+                "requests",
+                "2.0.0",
+                fixed_versions=["2.1.0"],
+            ),
+            _finding(
+                "CVE-2024-0001",
+                "urllib3",
+                "1.0.0",
+                fixed_versions=["1.1.0"],
+            ),
+        ]
+
+        doc = build_cyclonedx_vex(findings)
+
+        recommendation = doc["vulnerabilities"][0]["recommendation"]
+        assert "pkg:pypi/requests@2.0.0: upgrade to one of: 2.1.0" in recommendation
+        assert "pkg:pypi/urllib3@1.0.0: upgrade to one of: 1.1.0" in recommendation

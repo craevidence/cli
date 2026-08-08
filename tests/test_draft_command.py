@@ -332,7 +332,7 @@ def test_vex_csaf_round_trip(tmp_path: Path):
         )
 
     assert result.exit_code == 0, result.output
-    assert "Wrote 2 CSAF VEX statement(s)" in result.output
+    assert "Wrote 2 CSAF VEX entries" in result.output
     doc = json.loads(out.read_text(encoding="utf-8"))
     assert doc["document"]["csaf_version"] == "2.0"
 
@@ -353,6 +353,70 @@ def test_vex_csaf_round_trip(tmp_path: Path):
     kept, suppressions = apply_vex(findings, vex_doc)
     assert kept == findings
     assert suppressions == []
+
+
+def test_vex_formats_collapse_duplicate_ids_and_report_emitted_count(tmp_path: Path):
+    """Every format reports the number of entries it writes, not raw findings."""
+    findings = [
+        Finding(
+            id="CVE-2024-0001",
+            package="openssl",
+            version="3.0.0",
+            purl="pkg:deb/debian/openssl@3.0.0-1",
+            aliases={"GHSA-aaaa-0001-0001"},
+        ),
+        Finding(
+            id="CVE-2024-0001",
+            package="libssl",
+            version="3.0.0",
+            purl="pkg:deb/debian/libssl@3.0.0-1",
+            aliases={"GHSA-bbbb-0002-0002"},
+        ),
+    ]
+    fake_result = _make_result(findings)
+    dummy = tmp_path / "dummy.json"
+    dummy.write_text("{}", encoding="utf-8")
+
+    cases = {
+        "openvex": ("OpenVEX", "statements"),
+        "csaf": ("CSAF VEX", "vulnerabilities"),
+        "cyclonedx": ("CycloneDX VEX", "vulnerabilities"),
+    }
+    runner = CliRunner()
+
+    for vex_format, (label, entries_key) in cases.items():
+        out = tmp_path / f"out.{vex_format}.json"
+        with patch("cra_evidence_cli.commands.draft.run_local_check", return_value=fake_result):
+            result = runner.invoke(
+                draft,
+                [
+                    "vex",
+                    "--sbom",
+                    str(dummy),
+                    "--format",
+                    vex_format,
+                    "-o",
+                    str(out),
+                ],
+                obj=_obj(),
+                catch_exceptions=False,
+            )
+
+        assert result.exit_code == 0, result.output
+        assert f"Wrote 1 {label} entry" in result.output
+        doc = json.loads(out.read_text(encoding="utf-8"))
+        assert len(doc[entries_key]) == 1
+
+    openvex = json.loads((tmp_path / "out.openvex.json").read_text(encoding="utf-8"))
+    statement = openvex["statements"][0]
+    assert statement["vulnerability"]["aliases"] == [
+        "GHSA-aaaa-0001-0001",
+        "GHSA-bbbb-0002-0002",
+    ]
+    assert statement["products"] == [
+        {"@id": "pkg:deb/debian/openssl@3.0.0-1"},
+        {"@id": "pkg:deb/debian/libssl@3.0.0-1"},
+    ]
 
 
 def test_vex_csaf_only_under_investigation(tmp_path: Path):

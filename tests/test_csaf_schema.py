@@ -74,6 +74,41 @@ def test_vex_csaf_single_no_purl_finding_is_schema_valid():
     assert errors == [], errors
 
 
+def test_vex_csaf_collapses_duplicate_ids_without_losing_products_or_aliases():
+    findings = [
+        Finding(
+            id="CVE-2024-5678",
+            package="acme-core",
+            version="1.0.0",
+            purl="pkg:pypi/acme-core@1.0.0",
+            aliases={"GHSA-aaaa-bbbb-cccc"},
+        ),
+        Finding(
+            id="CVE-2024-5678",
+            package="acme-extra",
+            version="2.0.0",
+            purl="pkg:pypi/acme-extra@2.0.0",
+            aliases={"GHSA-dddd-eeee-ffff"},
+        ),
+    ]
+
+    doc = build_csaf_vex(findings)
+
+    assert _errors(doc) == []
+    assert len(doc["vulnerabilities"]) == 1
+    vulnerability = doc["vulnerabilities"][0]
+    assert vulnerability["product_status"]["under_investigation"] == [
+        "pkg:pypi/acme-core@1.0.0",
+        "pkg:pypi/acme-extra@2.0.0",
+    ]
+    aliases = {
+        item["text"]
+        for item in vulnerability["ids"]
+        if item["system_name"] == "alias"
+    }
+    assert aliases == {"GHSA-aaaa-bbbb-cccc", "GHSA-dddd-eeee-ffff"}
+
+
 def test_finding_without_purl_or_package_is_schema_valid():
     # The rare finding with neither a purl nor a package carries no product reference,
     # so product_status and product_tree are omitted and the document stays valid.
