@@ -140,14 +140,9 @@ def update(cache_dir_opt: str | None) -> None:
     # its metadata read targets it too. We deliberately do NOT mutate the global
     # os.environ, which would leak the cache dir into the rest of the process.
     scanner = GrypeLocalScanner(cache_dir=cache_dir)
-    if not scanner.is_available():
-        # Reuse the canonical ScanEngineUnavailable message + exit code (15),
-        # matching how check.py surfaces a missing engine.
-        exc = ScanEngineUnavailable(
-            "Grype is not installed. Install Grype to manage the local "
-            "vulnerability database. The `check` command can still use the "
-            "OSV.dev fallback when Grype is absent."
-        )
+    try:
+        engine_path = scanner.path
+    except ScanEngineUnavailable as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(exc.exit_code)
 
@@ -156,7 +151,7 @@ def update(cache_dir_opt: str | None) -> None:
     with db_update_lock(cache_dir):
         try:
             result = subprocess.run(  # noqa: S603
-                [scanner.path, "db", "update"],
+                [engine_path, "db", "update"],
                 capture_output=True,
                 text=True,
                 timeout=_DB_UPDATE_TIMEOUT_SECONDS,
@@ -217,7 +212,9 @@ def status(cache_dir_opt: str | None) -> None:
     else:
         status_value = "current"
 
-    click.echo(f"Grype installed: {'yes' if scanner.is_available() else 'no'}")
+    click.echo(
+        f"CRA Evidence engine available: {'yes' if scanner.is_available() else 'no'}"
+    )
     click.echo(f"Grype DB cache: {cache_dir}")
     click.echo(f"Vulnerability DB present: {'yes' if db_dir else 'no'}")
     click.echo(f"DB path: {db_dir / 'vulnerability.db' if db_dir else 'not found'}")

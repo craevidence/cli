@@ -11,30 +11,22 @@
 # When any entry gains a published fix, the gate in
 # scripts/check-image-gate.sh surfaces it on the next scan and the response is
 # decided in the open: refresh the base image digests (base packages) or adopt
-# a rebuilt upstream binary (bundled Syft/Grype), with a reviewed waiver in
-# grype.yaml only if neither exists yet.
+# a rebuilt CRA Evidence engine, with a reviewed waiver in grype.yaml only if
+# neither exists yet.
 #
 # Provenance of the scan-derived sections (everything except
 # build_info_audit):
 #   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
 #   scanner: Grype 0.116.1
-#   database: schema v6.1.9, built 2026-07-31T07:09:24Z
-#   image: built 2026-07-31 from this repository's Dockerfile with bases
-#     dhi.io/python:3.14-dev@sha256:15bf794abbbe30567641eb4d302a24a47e544673ca2a780caa005687ce28b47b
-#     and dhi.io/python:3.14@sha256:a48b4d2f444300b14ca90979f44e920657f09e7f649d9251878af7438874df63,
-#     bundled Syft 1.50.0 and Grype 0.116.1
-#   review date: 2026-07-31
+#   database: schema v6.1.9, built 2026-08-09T06:23:06Z
+#   image: built 2026-08-09 from this repository's Dockerfile with bases
+#     dhi.io/python:3.14-dev@sha256:4e6d70f6819594aa6210ba629695eaec7e56f72cd1ec0dca22e9cf0699ff01d7
+#     and dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656018123b3eaf4f33f71ae902b7,
+#     with CRA Evidence Grype engine craevidence-v0.116.1-p3
+#   review date: 2026-08-09
 # Review at every release.
 
 watchlist:
-  bundled_binaries:
-    - package: github.com/docker/docker v28.5.2+incompatible
-      source: pinned Grype 0.116.1 binary
-      advisories:
-        - { id: GHSA-pxq6-2prw-chj9, severity: Medium, fix_state: not-fixed }
-        - { id: GHSA-vp62-88p7-qqf5, severity: Medium, fix_state: not-fixed }
-      note: "Docker daemon code paths; this image does not run a Docker daemon or expose daemon endpoints. GHSA-x744-4wpc-v9h2 from the same package gained a fix (29.3.1) and is therefore a reviewed waiver in grype.yaml, not a watch-list row."
-
   dhi_base_packages:
     # Debian Trixie packages from the hardened runtime base. fix_state is the
     # per-advisory state reported by the scan above: "wont-fix" is an explicit
@@ -101,12 +93,18 @@ watchlist:
   # scanner currently filters out, so the dependency stays visible.
   build_info_audit:
     - package: golang.org/x/crypto v0.54.0
-      source: go build info of the pinned Syft 1.50.0 and Grype 0.116.1 binaries
+      source: go build info of CRA Evidence Grype engine craevidence-v0.116.1-p3
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
       note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-07-31)."
 
   resolved_since_last_review:
+    - ids: [GO-2026-4970, CVE-2026-39822, GO-2026-5037, CVE-2026-27145, GO-2026-5038, CVE-2026-42504]
+      note: "The p3 engine is built with Go 1.26.5; the 2026-08-09 scan no longer reports these Go 1.26.3 findings."
+    - id: GHSA-hc8v-wwc9-vgxm
+      note: "The p3 engine embeds go-git 5.19.2; the 2026-08-09 scan no longer reports the 5.19.1 finding."
+    - ids: [GHSA-x744-4wpc-v9h2, GHSA-pxq6-2prw-chj9, GHSA-vp62-88p7-qqf5]
+      note: "The p3 engine removed the monolithic github.com/docker/docker module; the 2026-08-09 scan no longer reports these findings."
     - ids: [CVE-2025-59375, CVE-2026-25210, CVE-2026-41080, CVE-2026-45186]
       note: "Previously listed against libexpat1 2.7.1-2+dhi5. The refreshed runtime base ships expat 2.8.2-1~deb13u1+dhi0 and the scan above no longer reports them."
     - id: GO-2026-5970

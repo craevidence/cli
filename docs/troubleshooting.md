@@ -2,14 +2,20 @@
 
 Back to the [README](../README.md).
 
-### "Syft not installed" when using `--image`
+### "A compatible CRA Evidence engine is required"
 
-Use the Docker image (Syft is bundled) or install Syft natively:
+The CLI could not resolve a supported product engine from
+`CRA_EVIDENCE_ENGINE`, a bundled wheel payload, or `PATH`; or the resolved
+executable was stock Grype, an unstamped build, or an older CRA Evidence engine
+without SBOM generation. The message names which one. Use the published CRA
+Evidence CLI Docker image, which bundles a compatible engine. Standalone engine
+archives are not a supported distribution channel. A standalone Syft executable
+and stock Grype are not fallbacks.
 
-```bash
-brew install syft           # macOS
-# Linux: see https://github.com/anchore/syft#installation
-```
+`check` still attempts an OSV.dev fallback without an engine and says so on
+stderr, naming the reason the local matcher was skipped. The fallback may use
+the network and its findings can differ from the local engine because the
+matching strategies are not equivalent.
 
 ### "Cannot connect to Docker daemon"
 
@@ -33,10 +39,10 @@ craevidence upload-sbom --product my-app --version 1.0 --image nginx:latest
 
 ### Timeout during SBOM generation
 
-Large images take longer to analyse. For very large images, run Syft directly and upload the resulting file instead of using `--image`:
+Large images take longer to analyse. For very large images, generate the SBOM in
+your build system or another trusted SBOM tool, then upload the resulting file:
 
 ```bash
-syft my-app:latest -o cyclonedx-json > sbom.json
 craevidence upload-sbom --product my-app --version 1.0 --file sbom.json
 ```
 

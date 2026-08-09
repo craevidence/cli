@@ -155,9 +155,9 @@ jobs:
           username: ${{ secrets.DHI_REGISTRY_USERNAME }}
           password: ${{ secrets.DHI_REGISTRY_TOKEN }}
 
-      # Scan engine: publishing builds bundle the private grype fork artifact
-      # from ECR via OIDC; pull requests (no OIDC to AWS from forks) fall back
-      # to the upstream grype image. The role has ECR pull only.
+      # Scan engine: builds bundle the private Grype fork artifact from ECR via
+      # OIDC. Stock Grype does not provide the required SBOM command and is not
+      # a valid fallback. The role has ECR pull only.
       - name: Configure AWS credentials for the engine pull
         id: ecr-creds
         continue-on-error: true
@@ -186,8 +186,61 @@ jobs:
       - name: Require the fork engine for publishing builds
         if: github.event_name != 'pull_request' && steps.ecr-login.outcome != 'success'
         run: |
-          echo "::error::ECR engine login failed; refusing to build a publishing image with the upstream fallback engine"
+          echo "::error::ECR engine login failed; refusing to build a publishing image without the supported engine"
           exit 1
+
+      - name: Extract the promoted engine payload
+        if: steps.ecr-login.outcome == 'success'
+        env:
+          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340
+        run: |
+          set -euo pipefail
+          payload="${RUNNER_TEMP}/craevidence-promoted-engine"
+          mkdir -p "${payload}"
+          docker pull "${ENGINE_IMAGE}" >/dev/null
+          container=$(docker create "${ENGINE_IMAGE}")
+          if [ -z "${container}" ]; then
+            echo "::error::could not create a container from the promoted engine image"
+            exit 1
+          fi
+          trap 'docker rm "${container}" >/dev/null' EXIT
+          docker cp "${container}:/engine/." "${payload}/"
+          test -f "${payload}/SHA256SUMS"
+          printf '%s\n' "${ENGINE_IMAGE##*@}" > "${payload}/IMAGE_DIGEST"
+
+      - name: Set up Python for engine distribution validation
+        if: steps.ecr-login.outcome == 'success'
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6.3.0
+        with:
+          python-version: "3.14"
+
+      - name: Build and verify all engine distributions
+        if: steps.ecr-login.outcome == 'success'
+        run: |
+          set -euo pipefail
+          python -m pip install build==1.5.0
+          python scripts/build_engine_distributions.py \
+            --version "${{ steps.version.outputs.version }}" \
+            --release-src . \
+            --engine-dir "${RUNNER_TEMP}/craevidence-promoted-engine" \
+            --out-dir "${RUNNER_TEMP}/craevidence-engine-dist"
+          python scripts/check_dist.py \
+            --dist-dir "${RUNNER_TEMP}/craevidence-engine-dist" \
+            --engine-dir "${RUNNER_TEMP}/craevidence-promoted-engine"
+
+      - name: Preserve the promoted engine payload for release packaging
+        if: steps.ecr-login.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: promoted-engine-payload
+          path: ${{ runner.temp }}/craevidence-promoted-engine
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
+
+      - name: Explain skipped pull-request image validation
+        if: github.event_name == 'pull_request' && steps.ecr-login.outcome != 'success'
+        run: echo "Image validation is skipped because this pull request cannot read the private engine artifact."
 
       # Publishing builds must also use the current hardened base, not a stale
       # pin that still happens to resolve. Strict mode fails when a pinned
@@ -197,11 +250,9 @@ jobs:
         run: bash scripts/check-dhi-base.sh --strict
 
       - name: Build CLI Docker image
+        if: steps.ecr-login.outcome == 'success'
         env:
-          ENGINE_ARG: >-
-            ${{ steps.ecr-login.outcome == 'success'
-              && format('--build-arg GRYPE_ENGINE_IMAGE={0}/craevidence/grype-engine@sha256:59204fe467cf425107f2e469735c59c65de2652afb9d1c769ef62996c413d067', '636143320258.dkr.ecr.eu-west-1.amazonaws.com')
-              || '--build-arg GRYPE_ENGINE_IMAGE=docker.io/anchore/grype:v0.116.1' }}
+          ENGINE_ARG: --build-arg GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340
         run: |
           if [ "${{ steps.dhi-login.outcome }}" = "success" ]; then
             docker build ${ENGINE_ARG} -t craevidence:${{ steps.version.outputs.version }} .
@@ -223,6 +274,7 @@ jobs:
       # Every security label and the actual shell/package-manager surface must
       # match the base the image was actually built from, for both variants.
       - name: Assert image labels match the built base
+        if: steps.ecr-login.outcome == 'success'
         run: |
           image="craevidence:${{ steps.version.outputs.version }}"
           hardened=$(docker inspect "$image" --format '{{index .Config.Labels "eu.cra.security.hardened"}}')
@@ -265,13 +317,16 @@ jobs:
       # public-base fallback image, so its findings are informational there;
       # every publishing path blocks on the gate.
       - name: Scan image for vulnerabilities (Grype)
+        if: steps.ecr-login.outcome == 'success'
         continue-on-error: ${{ steps.dhi-login.outcome != 'success' }}
         run: bash scripts/check-image-gate.sh craevidence:${{ steps.version.outputs.version }}
 
       - name: Install Syft
+        if: steps.ecr-login.outcome == 'success'
         uses: anchore/sbom-action/download-syft@e22c389904149dbc22b58101806040fa8d37a610  # v0
 
       - name: Generate SBOM (CycloneDX)
+        if: steps.ecr-login.outcome == 'success'
         # The hardened base ships the dpkg database in both the classic
         # /var/lib/dpkg/status format and the distroless-style status.d
         # directory, so Syft catalogs every Debian package twice. Exclude the
@@ -282,6 +337,7 @@ jobs:
             -o cyclonedx-json=sbom.cdx.json
 
       - name: Upload SBOM as artifact
+        if: steps.ecr-login.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: sbom
@@ -433,12 +489,16 @@ jobs:
             exit 1
           fi
           python -m pip install --quiet pip==26.1.2 build==1.5.0
-          # The wheel bytes depend on the source file modes and the process
+          # The sdist bytes depend on the source file modes and the process
           # umask as well as the pinned tools and epoch; umask 022 matches the
           # published builds.
           umask 022
-          SOURCE_DATE_EPOCH=946684800 python -m build --wheel --outdir bind-check release-src > /dev/null
-          built=$(sha256sum bind-check/*.whl | awk '{print $1}')
+          python scripts/build_engine_distributions.py \
+            --version "${version}" \
+            --release-src release-src \
+            --out-dir bind-check \
+            --sdist-only > /dev/null
+          built=$(sha256sum bind-check/*.tar.gz | awk '{print $1}')
           published=$(python - <<'EOF'
           import json
           import os
@@ -446,7 +506,7 @@ jobs:
           import urllib.request
 
           version = os.environ["RELEASE_TAG"].removeprefix("v")
-          wheel = f"craevidence-{version}-py3-none-any.whl"
+          sdist = f"craevidence-{version}.tar.gz"
           try:
               with urllib.request.urlopen(
                   f"https://pypi.org/pypi/craevidence/{version}/json", timeout=30
@@ -457,26 +517,26 @@ jobs:
                   raise SystemExit(0)
               raise
           for entry in data["urls"]:
-              if entry["filename"] == wheel:
+              if entry["filename"] == sdist:
                   print(entry["digests"]["sha256"])
           EOF
           )
           if [ -n "${published}" ]; then
             if [ "${built}" != "${published}" ]; then
-              echo "::error::the release source does not rebuild the published wheel (built ${built}, PyPI serves ${published}); the tag no longer points at the released source"
+              echo "::error::the release source does not rebuild the published sdist (built ${built}, PyPI serves ${published}); the tag no longer points at the released source"
               exit 1
             fi
-            echo "release source verified against the published wheel"
+            echo "release source verified against the published sdist"
           else
-            wheel_asset="craevidence-${version}-py3-none-any.whl"
-            if gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name' | grep -Fqx -- "${wheel_asset}"; then
-              gh release download "${RELEASE_TAG}" --pattern "${wheel_asset}" --dir bind-asset
-              asset=$(sha256sum "bind-asset/${wheel_asset}" | awk '{print $1}')
+            sdist_asset="craevidence-${version}.tar.gz"
+            if gh release view "${RELEASE_TAG}" --json assets --jq '.assets[].name' | grep -Fqx -- "${sdist_asset}"; then
+              gh release download "${RELEASE_TAG}" --pattern "${sdist_asset}" --dir bind-asset
+              asset=$(sha256sum "bind-asset/${sdist_asset}" | awk '{print $1}')
               if [ "${built}" != "${asset}" ]; then
-                echo "::error::the release source does not rebuild the checkpointed wheel (built ${built}, asset ${asset})"
+                echo "::error::the release source does not rebuild the checkpointed sdist (built ${built}, asset ${asset})"
                 exit 1
               fi
-              echo "release source verified against the checkpointed wheel"
+              echo "release source verified against the checkpointed sdist"
             else
               echo "nothing published yet for ${RELEASE_TAG}; the release source is the canonical input"
             fi
@@ -621,6 +681,23 @@ jobs:
         if: steps.existing.outputs.digest == ''
         run: bash scripts/check-dhi-base.sh --strict release-src/Dockerfile
 
+      - name: Bind the release image engine to the release source
+        if: steps.existing.outputs.digest == ''
+        env:
+          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340
+        run: |
+          set -euo pipefail
+          expected=$(sed -n 's|^ARG GRYPE_ENGINE_IMAGE=.*@\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
+          actual="${ENGINE_IMAGE##*@}"
+          if [ -z "${expected}" ] || [ "$(printf '%s\n' "${expected}" | wc -l)" -ne 1 ]; then
+            echo "::error::release Dockerfile does not contain exactly one digest-pinned engine image"
+            exit 1
+          fi
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::release image engine ${actual} does not match release source ${expected}"
+            exit 1
+          fi
+
       # One canonical multi-arch build, pushed to GHCR, and only on the first
       # run for this version. Docker Hub and Quay receive exact copies of this
       # index by digest, so every registry serves the same content-addressed
@@ -635,7 +712,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:59204fe467cf425107f2e469735c59c65de2652afb9d1c769ef62996c413d067
+            GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340
           tags: |
             ghcr.io/${{ github.repository_owner }}/craevidence:${{ needs.validate-release.outputs.version }}
 
@@ -976,7 +1053,29 @@ jobs:
       - name: Install packaging tools
         run: python -m pip install pip==26.1.2 build==1.5.0 sigstore==4.4.0
 
-      # Acquire the canonical bytes for both distributions and decide per file
+      - name: Restore the promoted engine payload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          name: promoted-engine-payload
+          path: engine
+
+      - name: Bind the engine payload to the release source
+        run: |
+          set -euo pipefail
+          test -f engine/SHA256SUMS
+          test -f engine/IMAGE_DIGEST
+          expected=$(sed -n 's|^ARG GRYPE_ENGINE_IMAGE=.*@\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
+          actual=$(cat engine/IMAGE_DIGEST)
+          if [ -z "${expected}" ] || [ "$(printf '%s\n' "${expected}" | wc -l)" -ne 1 ]; then
+            echo "::error::release Dockerfile does not contain exactly one digest-pinned engine image"
+            exit 1
+          fi
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::promoted engine payload ${actual} does not match release source ${expected}"
+            exit 1
+          fi
+
+      # Acquire the canonical bytes for all distributions and decide per file
       # whether it still needs publishing. PyPI is immutable, so a file already
       # served there is canonical and is downloaded, never rebuilt; a file
       # checkpointed as a release asset is reused; only files available nowhere
@@ -999,8 +1098,12 @@ jobs:
             --version "${{ needs.validate-release.outputs.version }}" \
             --tag "${{ needs.validate-release.outputs.tag }}" \
             --release-src release-src \
+            --engine-dir engine \
             --dist-dir dist \
             "${flags[@]}"
+
+      - name: Verify the complete release distribution set
+        run: python release-src/scripts/check_dist.py --dist-dir dist --engine-dir engine
 
       # No run may publish checkpointed bytes merely because a release asset
       # with the right name exists: release assets are mutable, so each
@@ -1014,11 +1117,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-release.outputs.tag }}
-          WHEEL_SOURCE: ${{ steps.dist.outputs.wheel_source }}
-          SDIST_SOURCE: ${{ steps.dist.outputs.sdist_source }}
+          RELEASE_ASSET_FILES: ${{ steps.dist.outputs.release_asset_files }}
         run: |
           set -euo pipefail
-          version="${RELEASE_TAG#v}"
           tag_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@refs/tags/${RELEASE_TAG}"
           run_identity="https://github.com/${{ github.repository }}/.github/workflows/ci.yml@${{ github.ref }}"
           mkdir -p anchor-bundles
@@ -1041,30 +1142,37 @@ jobs:
             echo "::error::${file} does not verify against its checkpointed bundle under either accepted identity. Publish a new release."
             exit 1
           }
-          if [ "${WHEEL_SOURCE}" = "release-asset" ]; then
-            check_asset "craevidence-${version}-py3-none-any.whl"
-          fi
-          if [ "${SDIST_SOURCE}" = "release-asset" ]; then
-            check_asset "craevidence-${version}.tar.gz"
-          fi
+          for file in ${RELEASE_ASSET_FILES}; do
+            check_asset "${file}"
+          done
           echo "checkpointed distribution anchors verified"
 
-      # The GitLab component ships with a pinned wheel version and checksum;
-      # they must describe exactly the wheel this release serves. The pin is
+      # The GitLab component ships with a pinned wheel version and Linux
+      # platform checksums; they must describe exactly the wheels this release
+      # serves. The pins are
       # read from the release source, which is what published the component.
-      - name: Require the wheel to match the component pin
+      - name: Require the Linux wheels to match the component pins
         run: |
           set -euo pipefail
-          wheel=$(ls dist/*.whl)
-          actual=$(sha256sum "${wheel}" | awk '{print $1}')
-          version=$(basename "${wheel}" | sed 's/craevidence-\(.*\)-py3-none-any\.whl/\1/')
+          version="${{ needs.validate-release.outputs.version }}"
           pinned_version=$(grep -oE 'CLI_VERSION="[0-9.]+"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
-          pinned_hash=$(grep -oE 'CLI_WHEEL_SHA256="[a-f0-9]{64}"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
-          if [ "${pinned_version}" != "${version}" ] || [ "${pinned_hash}" != "${actual}" ]; then
-            echo "::error::gitlab-ci-component.yml pins ${pinned_version} ${pinned_hash}, but the wheel is ${version} ${actual}"
+          pinned_many_x86=$(grep -oE 'CLI_WHEEL_SHA256_MANYLINUX_X86_64="[a-f0-9]{64}"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
+          pinned_musl_x86=$(grep -oE 'CLI_WHEEL_SHA256_MUSLLINUX_X86_64="[a-f0-9]{64}"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
+          pinned_many_arm=$(grep -oE 'CLI_WHEEL_SHA256_MANYLINUX_AARCH64="[a-f0-9]{64}"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
+          pinned_musl_arm=$(grep -oE 'CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="[a-f0-9]{64}"' release-src/gitlab-ci-component.yml | head -1 | cut -d'"' -f2)
+          actual_many_x86=$(sha256sum "dist/craevidence-${version}-py3-none-manylinux_2_17_x86_64.whl" | awk '{print $1}')
+          actual_musl_x86=$(sha256sum "dist/craevidence-${version}-py3-none-musllinux_1_2_x86_64.whl" | awk '{print $1}')
+          actual_many_arm=$(sha256sum "dist/craevidence-${version}-py3-none-manylinux_2_17_aarch64.whl" | awk '{print $1}')
+          actual_musl_arm=$(sha256sum "dist/craevidence-${version}-py3-none-musllinux_1_2_aarch64.whl" | awk '{print $1}')
+          if [ "${pinned_version}" != "${version}" ] || \
+             [ "${pinned_many_x86}" != "${actual_many_x86}" ] || \
+             [ "${pinned_musl_x86}" != "${actual_musl_x86}" ] || \
+             [ "${pinned_many_arm}" != "${actual_many_arm}" ] || \
+             [ "${pinned_musl_arm}" != "${actual_musl_arm}" ]; then
+            echo "::error::gitlab-ci-component.yml does not pin the release's Linux wheel hashes"
             exit 1
           fi
-          echo "component pin matches the wheel"
+          echo "component pins match the Linux wheels"
 
       # Sign before any publication so a signing failure stops the job while
       # the release is still fully reversible; the PyPI upload below is
@@ -1136,19 +1244,26 @@ jobs:
 
       # Publishing is per file: each still-missing distribution is uploaded on
       # its own from a directory containing only that file, so a failure
-      # between the two uploads leaves a state the next resume run completes.
+      # between uploads leaves a state the next resume run completes.
       # skip-existing is not set: a file that appeared on PyPI since the
       # prepare step means a raced writer, and the duplicate upload must fail
       # loudly rather than be masked.
       - name: Split distributions for per-file publishing
         if: steps.dist.outputs.wheel_publish == 'true' || steps.dist.outputs.sdist_publish == 'true'
+        env:
+          WHEEL_PUBLISH_FILES: ${{ steps.dist.outputs.wheel_publish_files }}
+          SDIST_PUBLISH: ${{ steps.dist.outputs.sdist_publish }}
         run: |
           set -euo pipefail
           mkdir -p publish-wheel publish-sdist
-          cp dist/*.whl publish-wheel/
-          cp dist/*.tar.gz publish-sdist/
+          for file in ${WHEEL_PUBLISH_FILES}; do
+            cp "dist/${file}" publish-wheel/
+          done
+          if [ "${SDIST_PUBLISH}" = "true" ]; then
+            cp dist/*.tar.gz publish-sdist/
+          fi
 
-      - name: Publish the wheel to PyPI
+      - name: Publish the wheels to PyPI
         if: steps.dist.outputs.wheel_publish == 'true'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1
         with:
@@ -1183,9 +1298,8 @@ jobs:
           done
           # Attached sidecars count as present; only genuinely absent ones
           # are recovered from PyPI provenance.
-          for name in \
-            "craevidence-${RELEASE_TAG#v}-py3-none-any.whl.publish.attestation" \
-            "craevidence-${RELEASE_TAG#v}.tar.gz.publish.attestation"; do
+          for distribution in dist/*; do
+            name="$(basename "${distribution}").publish.attestation"
             if grep -Fqx -- "${name}" <<< "${existing}" && [ ! -f "attestation-assets/${name}" ]; then
               gh release download "${RELEASE_TAG}" --pattern "${name}" --dir attestation-assets
             fi

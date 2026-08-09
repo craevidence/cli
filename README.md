@@ -211,8 +211,7 @@ a legal conclusion.
 | FIRST EPSS | Exploit-probability enrichment. |
 | CISA KEV | Known-exploited vulnerability enrichment. |
 | OSV.dev | Open source vulnerability data when the OSV path is used. |
-| Anchore Grype | Local vulnerability matching when installed. The Docker image bundles CRA Evidence's grype fork with improvements. |
-| Anchore Syft | SBOM generation from directories and images when installed or included in the Docker image. |
+| CRA Evidence Grype engine | Local vulnerability matching and SBOM generation. The engine embeds Anchore Syft for package cataloguing. Stock Grype and a standalone Syft executable are not product engines. |
 | endoflife.date | End-of-life and support-cycle data for `eol-check`. |
 
 ## Support

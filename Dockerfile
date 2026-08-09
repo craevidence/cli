@@ -14,7 +14,7 @@
 # SBOM Generation:
 #   docker scout sbom --image craevidence:latest
 #   docker sbom craevidence:latest --output sbom.spdx.json
-#   syft craevidence:latest -o cyclonedx-json > sbom.cdx.json
+#   docker run --rm craevidence check --image craevidence:latest
 #
 # Usage:
 #   # Upload existing SBOM
@@ -50,15 +50,14 @@
 #     --build-arg SECURITY_NO_SHELL=false \
 #     --build-arg SECURITY_NO_PACKAGE_MANAGER=false .
 # Scan engine: grype fork with improvements. The default is the digest-pinned
-# engine artifact; anyone without registry access can build with the upstream
-# engine instead:
-#   --build-arg GRYPE_ENGINE_IMAGE=docker.io/anchore/grype:v0.116.1
-ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:59204fe467cf425107f2e469735c59c65de2652afb9d1c769ef62996c413d067
+# engine artifact. An override must provide the same supported CRA Evidence
+# engine contract, including /grype, /LICENSE and /NOTICE.
+ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340
 
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:8cf3654af5a621a6ea05335d92b58050c3cf7b848203d9100461419d7fb7e79e
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:4e6d70f6819594aa6210ba629695eaec7e56f72cd1ec0dca22e9cf0699ff01d7
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:78972b079543c036f44658c806041c27b9fb8d122f79bb00b1dfd3c1e35bc18a
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656018123b3eaf4f33f71ae902b7
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
 FROM ${BASE_IMAGE_BUILDER} AS builder
@@ -71,46 +70,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-# Install curl for downloading check engine binaries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    gzip \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install local check engines via direct downloads with SHA256 verification.
-ARG SYFT_VERSION=1.50.0
-ARG GRYPE_LICENSE_REF=v0.116.1
-ARG TARGETARCH
+# Install the exact promoted local check engine. SBOM generation uses the Syft
+# library embedded in this binary; there is no second standalone Syft binary.
 COPY --from=grype-engine /grype /usr/local/bin/grype
+COPY --from=grype-engine /LICENSE /licenses/grype/LICENSE
+COPY --from=grype-engine /NOTICE /licenses/grype/NOTICE
 RUN set -eux; \
-    ARCH="${TARGETARCH:-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')}"; \
-    SYFT_TARBALL="syft_${SYFT_VERSION}_linux_${ARCH}.tar.gz"; \
-    case "${ARCH}" in \
-        amd64) \
-            SYFT_EXPECTED="bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788" ;; \
-        arm64) \
-            SYFT_EXPECTED="887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86" ;; \
-        *) echo "Unsupported architecture: ${ARCH}" && exit 1 ;; \
-    esac; \
-    GRYPE_LICENSE_EXPECTED="c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"; \
-    curl -fsSL "https://github.com/anchore/syft/releases/download/v${SYFT_VERSION}/${SYFT_TARBALL}" \
-        -o "/tmp/${SYFT_TARBALL}"; \
-    curl -fsSL "https://raw.githubusercontent.com/anchore/grype/${GRYPE_LICENSE_REF}/LICENSE" \
-        -o /tmp/grype-LICENSE; \
-    echo "${SYFT_EXPECTED}  /tmp/${SYFT_TARBALL}" | sha256sum -c -; \
-    echo "${GRYPE_LICENSE_EXPECTED}  /tmp/grype-LICENSE" | sha256sum -c -; \
-    mkdir -p /usr/local/bin /licenses/syft /licenses/grype; \
-    tar -xzf "/tmp/${SYFT_TARBALL}" -C /usr/local/bin syft; \
-    tar -xzf "/tmp/${SYFT_TARBALL}" -C /licenses/syft LICENSE; \
-    install -m 0644 /tmp/grype-LICENSE /licenses/grype/LICENSE; \
-    test -s /licenses/syft/LICENSE; \
+    chmod 755 /usr/local/bin/grype; \
     test -s /licenses/grype/LICENSE; \
-    tar -xzf "/tmp/${SYFT_TARBALL}" -C /licenses/syft NOTICE 2>/dev/null || true; \
-    rm -f "/tmp/${SYFT_TARBALL}" /tmp/grype-LICENSE; \
-    chmod 755 /usr/local/bin/syft /usr/local/bin/grype; \
-    syft version; \
-    grype version
+    test -s /licenses/grype/NOTICE; \
+    grype version --output json; \
+    grype sbom --help | grep -F 'grype sbom SOURCE' >/dev/null; \
+    grype sbom --help | grep -F -- '--offline' >/dev/null
 
 # Create virtual environment for clean dependency isolation
 RUN python -m venv /opt/venv
@@ -157,8 +128,8 @@ ARG SECURITY_NO_PACKAGE_MANAGER="true"
 
 # OCI Image Labels for CRA compliance and traceability.
 # org.opencontainers.image.licenses is "MIT AND Apache-2.0": MIT is the CLI's own
-# licence; Apache-2.0 covers the redistributed Syft and Grype binaries. Their
-# LICENSE (and NOTICE where present) files are available at /licenses/{syft,grype}/.
+# licence; Apache-2.0 covers the redistributed Grype binary and its embedded
+# Syft library. LICENSE and NOTICE are available at /licenses/grype/.
 LABEL org.opencontainers.image.title="CRA Evidence CLI" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
       org.opencontainers.image.vendor="CRA Evidence" \
@@ -187,8 +158,7 @@ WORKDIR /app
 # Copy virtual environment with installed CLI
 COPY --from=builder --chown=1001:1001 /opt/venv /opt/venv
 
-# Copy local check engine binaries
-COPY --from=builder /usr/local/bin/syft /usr/local/bin/syft
+# Copy the local check engine binary
 COPY --from=builder /usr/local/bin/grype /usr/local/bin/grype
 
 # Third-party LICENSE and NOTICE files for redistributed Apache-2.0 binaries

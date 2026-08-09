@@ -95,9 +95,17 @@ def _bundle(attestations: list[dict], repository: str = REPOSITORY) -> dict:
     }
 
 
-def _sidecar_names(version: str) -> tuple[str, str]:
-    wheel, sdist = rpa.expected_filenames(version)
-    return f"{wheel}.publish.attestation", f"{sdist}.publish.attestation"
+def _sidecar_names(version: str) -> tuple[str, ...]:
+    return tuple(
+        f"{name}.publish.attestation"
+        for name in rpa.expected_filenames(version)
+    )
+
+
+def _write_present_sidecars(tmp_path: Path, *, except_name: str | None = None) -> None:
+    for sidecar in _sidecar_names(VERSION):
+        if sidecar != except_name:
+            (tmp_path / sidecar).write_bytes(f"sentinel:{sidecar}".encode())
 
 
 def _run_main(tmp_path, monkeypatch, opener):
@@ -107,28 +115,28 @@ def _run_main(tmp_path, monkeypatch, opener):
 
 
 def test_expected_filenames_exact_names():
-    wheel, sdist = rpa.expected_filenames("1.2.3")
-    assert wheel == "craevidence-1.2.3-py3-none-any.whl"
-    assert sdist == "craevidence-1.2.3.tar.gz"
+    names = rpa.expected_filenames("1.2.3")
+    assert len(names) == 7
+    assert names[0] == "craevidence-1.2.3-py3-none-manylinux_2_17_x86_64.whl"
+    assert names[-1] == "craevidence-1.2.3.tar.gz"
 
 
 def test_main_leaves_present_sidecars_untouched_without_network(tmp_path, monkeypatch, capsys):
-    wheel_sidecar, sdist_sidecar = _sidecar_names(VERSION)
-    (tmp_path / wheel_sidecar).write_bytes(b"wheel sentinel bytes")
-    (tmp_path / sdist_sidecar).write_bytes(b"sdist sentinel bytes")
+    sidecars = _sidecar_names(VERSION)
+    _write_present_sidecars(tmp_path)
 
     exit_code = _run_main(tmp_path, monkeypatch, _no_network_opener)
     assert exit_code == 0
-    assert (tmp_path / wheel_sidecar).read_bytes() == b"wheel sentinel bytes"
-    assert (tmp_path / sdist_sidecar).read_bytes() == b"sdist sentinel bytes"
+    for sidecar in sidecars:
+        assert (tmp_path / sidecar).read_bytes() == f"sentinel:{sidecar}".encode()
     out = capsys.readouterr().out
-    assert out.count("present") == 2
+    assert out.count("present") == 7
 
 
 def test_main_recovers_missing_sidecar_from_second_bundle(tmp_path, monkeypatch, capsys):
-    wheel, _sdist = rpa.expected_filenames(VERSION)
-    wheel_sidecar, sdist_sidecar = _sidecar_names(VERSION)
-    (tmp_path / sdist_sidecar).write_bytes(b"sdist sentinel bytes")
+    wheel = rpa.expected_filenames(VERSION)[0]
+    wheel_sidecar = _sidecar_names(VERSION)[0]
+    _write_present_sidecars(tmp_path, except_name=wheel_sidecar)
 
     non_matching = _attestation(wheel, {"predicateType": "https://example.com/other/v1"})
     good = _attestation(wheel)
@@ -147,18 +155,18 @@ def test_main_recovers_missing_sidecar_from_second_bundle(tmp_path, monkeypatch,
     written = json.loads((tmp_path / wheel_sidecar).read_text())
     assert written == good
     assert written != non_matching
-    assert (tmp_path / sdist_sidecar).read_bytes() == b"sdist sentinel bytes"
+    assert (tmp_path / _sidecar_names(VERSION)[-1]).exists()
     assert opener.urls == [_provenance_url(VERSION, wheel)]
     assert all(timeout == rpa.REQUEST_TIMEOUT for timeout in opener.timeouts)
     out = capsys.readouterr().out
     assert f"{wheel_sidecar}: recovered" in out
-    assert f"{sdist_sidecar}: present" in out
+    assert f"{_sidecar_names(VERSION)[-1]}: present" in out
 
 
 def test_main_skips_missing_sidecar_when_provenance_404(tmp_path, monkeypatch, capsys):
-    wheel, sdist = rpa.expected_filenames(VERSION)
-    wheel_sidecar, sdist_sidecar = _sidecar_names(VERSION)
-    (tmp_path / wheel_sidecar).write_bytes(b"wheel sentinel bytes")
+    sdist = rpa.expected_filenames(VERSION)[-1]
+    sdist_sidecar = _sidecar_names(VERSION)[-1]
+    _write_present_sidecars(tmp_path, except_name=sdist_sidecar)
     sdist_url = _provenance_url(VERSION, sdist)
     opener = _FakeOpener()
     opener.add(sdist_url, _http_error(sdist_url, 404))
@@ -171,9 +179,9 @@ def test_main_skips_missing_sidecar_when_provenance_404(tmp_path, monkeypatch, c
 
 
 def test_main_fails_when_no_bundle_has_expected_publisher(tmp_path, monkeypatch, capsys):
-    wheel, _sdist = rpa.expected_filenames(VERSION)
-    wheel_sidecar, sdist_sidecar = _sidecar_names(VERSION)
-    (tmp_path / sdist_sidecar).write_bytes(b"sdist sentinel bytes")
+    wheel = rpa.expected_filenames(VERSION)[0]
+    wheel_sidecar = _sidecar_names(VERSION)[0]
+    _write_present_sidecars(tmp_path, except_name=wheel_sidecar)
     provenance = {
         "version": 1,
         "attestation_bundles": [
@@ -191,9 +199,9 @@ def test_main_fails_when_no_bundle_has_expected_publisher(tmp_path, monkeypatch,
 
 
 def test_main_fails_when_no_attestation_names_the_file(tmp_path, monkeypatch, capsys):
-    wheel, _sdist = rpa.expected_filenames(VERSION)
-    wheel_sidecar, sdist_sidecar = _sidecar_names(VERSION)
-    (tmp_path / sdist_sidecar).write_bytes(b"sdist sentinel bytes")
+    wheel = rpa.expected_filenames(VERSION)[0]
+    wheel_sidecar = _sidecar_names(VERSION)[0]
+    _write_present_sidecars(tmp_path, except_name=wheel_sidecar)
     other_name = _attestation("craevidence-9.9.9-py3-none-any.whl")
     provenance = {"version": 1, "attestation_bundles": [_bundle([other_name])]}
     opener = _FakeOpener()
@@ -207,9 +215,8 @@ def test_main_fails_when_no_attestation_names_the_file(tmp_path, monkeypatch, ca
 
 
 def test_main_fails_on_http_500(tmp_path, monkeypatch, capsys):
-    wheel, _sdist = rpa.expected_filenames(VERSION)
-    _wheel_sidecar, sdist_sidecar = _sidecar_names(VERSION)
-    (tmp_path / sdist_sidecar).write_bytes(b"sdist sentinel bytes")
+    wheel = rpa.expected_filenames(VERSION)[0]
+    _write_present_sidecars(tmp_path, except_name=_sidecar_names(VERSION)[0])
     wheel_url = _provenance_url(VERSION, wheel)
     opener = _FakeOpener()
     opener.add(wheel_url, _http_error(wheel_url, 500))
@@ -220,7 +227,7 @@ def test_main_fails_on_http_500(tmp_path, monkeypatch, capsys):
 
 
 def test_select_attestation_requires_single_subject_naming_the_file():
-    wheel, _sdist = rpa.expected_filenames(VERSION)
+    wheel = rpa.expected_filenames(VERSION)[0]
     two_subjects = _attestation(
         wheel,
         {

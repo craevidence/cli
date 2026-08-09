@@ -112,7 +112,7 @@ craevidence upload-sbom \
   --version 1.2.3 \
   --file sbom.json
 
-# Generate an SBOM from a Docker image and upload (requires Syft)
+# Generate an SBOM from a container image and upload (requires the CRA Evidence engine)
 craevidence upload-sbom \
   --product my-product \
   --version 1.2.3 \
@@ -214,16 +214,16 @@ is not uploaded.
 
 ## `upload-sbom`
 
-Upload a Software Bill of Materials. Accepts an existing SBOM file or generates one from a Docker image via Syft.
+Upload a Software Bill of Materials. Accepts an existing SBOM file or generates one from a container image or source directory with the CRA Evidence engine.
 
 ```
 craevidence upload-sbom
   --product <slug-or-id>
   --version <version-number>
   --file <path>              # Upload existing file (mutually exclusive with --image, --source)
-  --image <docker-image>     # Generate SBOM from image (requires Syft)
-  --source <directory>       # Generate SBOM from source directory (requires Syft)
-  [--format cyclonedx|spdx]  # SBOM format for Syft generation (default: cyclonedx). Ignored when uploading with --file.
+  --image <container-image>  # Generate SBOM from an image (requires the CRA Evidence engine)
+  --source <directory>       # Generate SBOM from source (requires the CRA Evidence engine)
+  [--format cyclonedx|spdx]  # Generated SBOM format (default: cyclonedx). Ignored with --file.
   [--component <slug>]       # Component slug for multi-repo products
   [--create-product]         # Create the product if missing (default: disabled; requires --target-markets)
   [--no-create-version]      # Disable auto-creation of version (creation is on by default)
@@ -1188,7 +1188,7 @@ Exits with code 1 if the SBOM is invalid.
 
 ## `verify run`
 
-Scan a directory with Syft and compare the generated SBOM against the declared SBOM already uploaded for the product version.
+Scan a directory with the CRA Evidence engine and compare the generated SBOM against the declared SBOM already uploaded for the product version.
 
 ```
 craevidence verify run <directory>
@@ -1198,7 +1198,7 @@ craevidence verify run <directory>
   [--fail-on-discrepancies]        # Exit 1 if any discrepancies found
 ```
 
-The product and version must already exist with a declared SBOM uploaded. Requires Syft installed or Docker socket mounted.
+The product and version must already exist with a declared SBOM uploaded. A supported platform wheel or container bundles the compatible CRA Evidence engine; source installs can select one with `CRA_EVIDENCE_ENGINE` or `PATH`.
 
 ## Common upload flags
 

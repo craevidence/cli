@@ -209,6 +209,9 @@ def test_fail_on_high_gate_trips_via_osv_path(monkeypatch, tmp_path) -> None:
         def is_available(self):
             return False
 
+        def unavailable_reason(self):
+            return "the CRA Evidence engine is not installed"
+
     monkeypatch.setattr(check_module, "GrypeLocalScanner", NoGrype)
     monkeypatch.setattr(
         OSVClient,

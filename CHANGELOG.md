@@ -11,17 +11,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- SBOM generation and local vulnerability matching now require the compatible
+  CRA Evidence Grype engine. The engine uses its embedded Syft library for
+  package cataloguing, so the CLI no longer invokes a standalone Syft
+  executable or accepts stock Grype as a product engine.
+- Native engine support is limited to Linux AMD64/ARM64 and macOS AMD64/ARM64.
+  Native Windows generation and local engine scanning are no longer supported;
+  commands that consume an existing SBOM remain available without an engine.
+- PyPI installs now select a platform wheel containing the engine. Linux ships
+  separate manylinux and musllinux tags over the same static bytes; macOS ships
+  x86_64 and arm64 wheels. The source distribution remains engine-free.
+- `check` now names the reason on stderr whenever it skips the local matcher.
+  It warns before attempting the OSV.dev fallback that network access may occur
+  and that findings can differ.
+- Generation accepts directory, file, archive, Docker-daemon, Podman, OCI and
+  registry sources and honours the default container credential keychain.
+  Standalone-Syft application configuration is not forwarded: `SYFT_*`
+  variables, a Syft config file, an explicit platform, custom TLS or
+  insecure-registry settings, path exclusions and source aliases have no effect.
+  Generate with your own tooling and upload with `--file` if you need them.
+- Internal: the `SBOMGenerationResult.generation_method` value changed from
+  `syft`/`docker` to `craevidence-grype`. This is a library-level dataclass
+  field; no CLI output serializes it.
 - `upload-sbom --sbomqs-check` and `check --sbom-quality` now run
   `sbomqs compliance --bsi-v2 --json`. The report interface was validated with
   sbomqs v1.3.0 and v2.0.11; installation and release checks pin v2.0.11.
   Scores keep the 0-100 scale but can change between sbomqs versions, so CI
   users relying on `--fail-on-score` must pin the same version and may need to
   review existing thresholds.
-- The dev container now installs sbomqs 2.0.11 with checksum verification,
-  alongside the pinned Syft and Grype versions.
+- The dev container now installs sbomqs 2.0.11 with checksum verification.
+  Editable installs use `CRA_EVIDENCE_ENGINE` when engine testing is required.
 - `setup-profile` no longer offers the nonfunctional CE marking default. CE
   marking is declared per version, and the API no longer accepts the retired
   `ce_marking_standard` product-profile field.
+
+### Fixed
+
+- Source-distribution builds now fail if a bundled engine executable is present,
+  and the distribution content gate independently rejects such an archive.
 
 ## [4.1.0] - 2026-08-07
 

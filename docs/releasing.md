@@ -22,24 +22,25 @@ One commit contains everything the release needs:
 1. Roll the `[Unreleased]` section of `CHANGELOG.md` into `## [X.Y.Z] - date`.
 2. Bump `version` in `pyproject.toml` AND `__version__` in
    `cra_evidence_cli/__init__.py`; a test fails when they disagree. Bump the
-   version before predicting the wheel checksum, because the version is part
-   of the wheel bytes.
-3. Update the pinned CLI wheel version and checksum in
-   `gitlab-ci-component.yml` (both templates install it). The checksum is
-   predictable before PyPI has the file because wheel builds are
-   byte-reproducible: build with the same pinned tools and fixed epoch the
-   pipeline uses and take the wheel's SHA-256:
+   version before building the wheels, because the version is part of their
+   bytes.
+3. Extract `/engine` from the exact promoted, digest-pinned engine image. Build
+   all six wheels and the engine-free source distribution from those promoted
+   bytes with the release script:
 
    ```sh
-   docker run --rm -v "$PWD":/src:ro python:3.14-slim sh -ec '
-     cp -r /src /build && cd /build && rm -rf dist
-     python -m pip install -q pip==26.1.2 build==1.5.0
-     export SOURCE_DATE_EPOCH=946684800
-     python -m build -q
-     sha256sum dist/*.whl'
+   python scripts/build_engine_distributions.py \
+     --version X.Y.Z \
+     --release-src . \
+     --engine-dir /path/to/promoted-engine-payload \
+     --out-dir dist
+   sha256sum dist/*
    ```
 
-4. Move the documented component include refs (the `v...` raw URL in
+4. Update all four Linux wheel checksums in `gitlab-ci-component.yml`:
+   manylinux and musllinux for x86_64 and aarch64. Both templates must carry
+   the same four pins.
+5. Move the documented component include refs (the `v...` raw URL in
    `gitlab-ci-component.yml` and `docs/ci-cd.md`) to the new tag.
 
 ## Before pushing anything
@@ -56,6 +57,7 @@ bash scripts/check-dhi-base.sh --strict
 docker build -t craevidence:release-check .
 bash scripts/check-image-gate.sh craevidence:release-check
 ./.venv/bin/python scripts/check_dist.py
+./.venv/bin/python scripts/check_dist.py --dist-dir dist --engine-dir /path/to/promoted-engine-payload
 ```
 
 ## Tag and publish
@@ -84,11 +86,12 @@ signature against the release identity
 `.../.github/workflows/ci.yml@refs/tags/vX.Y.Z`; generates per-platform
 SBOMs from the released digests, attaches them to the GitHub release, and
 uploads the linux/amd64 SBOM to CRA Evidence as a required step; acquires
-the canonical wheel and sdist (from PyPI when already published, from the
-checkpointed release assets, or by building the release source), checks the
-wheel against the component pin, signs both files, attaches them to the
-GitHub release before any upload, publishes each still-missing file to PyPI
-on its own, and verifies PyPI serves exactly the two expected distributions
+the six canonical platform wheels and source distribution (from PyPI when
+already published, from checkpointed release assets, or by packaging the
+release source with the promoted engine payload), checks the Linux wheels
+against the component pins, signs every file, attaches them to the GitHub
+release before any upload, publishes each still-missing file to PyPI, and
+verifies PyPI serves exactly the seven expected distributions
 with matching hashes and accepted Trusted Publishing provenance; and only
 after both the container channels and PyPI have succeeded, moves the
 `latest` tags in a final approval-gated job.
@@ -109,9 +112,9 @@ a glance:
    those requires cosign 2.6 or newer: 2.6.0 to 2.6.2 need
    `--new-bundle-format`, and 2.6.3 and newer detect the format
    automatically. Earlier releases retain their existing legacy signatures.
-2. PyPI serves exactly the built wheel and sdist, with hashes equal to the
-   GitHub release assets, and the wheel hash equals the checksum pinned in
-   `gitlab-ci-component.yml`.
+2. PyPI serves exactly the six platform wheels and source distribution, with
+   hashes equal to the GitHub release assets. The Linux manylinux wheel hashes
+   equal the architecture pins in `gitlab-ci-component.yml`.
 3. The GitHub release carries `sbom-X.Y.Z-linux-amd64.cdx.json` and
    `sbom-X.Y.Z-linux-arm64.cdx.json`. Release and resume runs invoke
    `scripts/reconcile_release_sboms.sh` during the run, attaching a
@@ -138,8 +141,12 @@ The resume run uses the current pipeline code and resolves the release tag to
 a commit exactly once, at validation; every later step uses that commit, so a
 tag moved after validation cannot change what is published. The resolved
 source is bound to the published artifacts: the package version must match
-the tag, and the byte-reproducible wheel built from the source must equal the
-wheel PyPI or the release assets already serve.
+the tag, and the byte-reproducible source distribution built from the source
+must equal the source distribution PyPI or the release assets already serve.
+The engine payload and any newly built container must also match the immutable
+engine digest pinned in the released Dockerfile. After `main` moves to a new
+engine digest, a resume of the previous release fails closed; publish a new
+patch release instead of mixing engine revisions.
 
 Every publishing run, release or resume, trusts immutable state and
 authenticated state, never bare existence. PyPI files are immutable and are
@@ -176,7 +183,7 @@ exist only as a release asset without a verifiable checkpointed bundle; a
 registry already serves the version tag at a different digest; a signature
 object exists that matches neither accepted identity; an SBOM and bundle pair
 fails verification; a retained release asset differs from the canonical
-bytes; the release source does not rebuild the published wheel; or the target
+bytes; the release source does not rebuild the published source distribution; or the target
 stops being the newest stable release before the latest tags move.
 
 Artifacts created by a resume run are signed with the identity

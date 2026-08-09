@@ -28,7 +28,7 @@ groups:
 
   - id: "supply-chain"
     title: "Supply Chain"
-    description: "Risks from the CLI's own dependencies and the Syft/Grype binaries it invokes."
+    description: "Risks from the CLI's own dependencies and the CRA Evidence Grype engine it invokes."
     appetite: "Low"
     max-severity: "Critical"
 
@@ -45,7 +45,7 @@ risks:
 
   - id: "R02"
     title: "SBOM generation subprocess compromise"
-    description: "Syft or Grype binary tampered with between download and invocation (e.g. mutable Docker tag, malicious mirror)."
+    description: "CRA Evidence Grype engine tampered with between release, download, and invocation (e.g. mutable tag or malicious mirror)."
     group: "supply-chain"
     severity: "Critical"
     impact: "Fabricated SBOMs uploaded as compliance evidence; inaccurate evidence in the customer's audit trail."

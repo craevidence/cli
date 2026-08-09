@@ -177,11 +177,22 @@ spec:
       fi
 
       CLI_VERSION="4.2.0"
-      CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
-      CLI_WHEEL_SHA256="9341512b67118aee0afd870a28fa2b3f0bcaa42af9e4ee7f0f397ce851753071"
+      CLI_WHEEL_SHA256_MANYLINUX_X86_64="b89baad4408b6718c20a9f66f1c2d65b2f703696f56d1783aa882c5601dd4d2b"
+      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="4f33939a53d7da6f2be88872c0d18e36573b0864d0d08ecb6dbdf2e6870efb9e"
+      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="b57146d7369290c11371aae7a9ee339d04c0ccbe6a54463933280c5980a50b54"
+      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="d440c4a9c2f67f2a585326375850a4e5dbcc18ad4faa920f92989dd9cc99244b"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
-      echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
-      python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"
+      CLI_WHEEL=$(find /tmp/craevidence-dist -maxdepth 1 -type f -name "craevidence-${CLI_VERSION}-*.whl")
+      [ -n "${CLI_WHEEL}" ] && [ "$(printf '%s\n' "${CLI_WHEEL}" | wc -l)" -eq 1 ]
+      case "${CLI_WHEEL##*/}" in
+        *-manylinux_2_17_x86_64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MANYLINUX_X86_64}" ;;
+        *-musllinux_1_2_x86_64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MUSLLINUX_X86_64}" ;;
+        *-manylinux_2_17_aarch64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MANYLINUX_AARCH64}" ;;
+        *-musllinux_1_2_aarch64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MUSLLINUX_AARCH64}" ;;
+        *) echo "ERROR: unsupported Linux wheel: ${CLI_WHEEL##*/}"; exit 1 ;;
+      esac
+      echo "${CLI_WHEEL_SHA256}  ${CLI_WHEEL}" | sha256sum -c -
+      python -m pip install "${CLI_WHEEL}"
 
       export CRA_EVIDENCE_API_KEY="${API_KEY}"
       export CRA_EVIDENCE_URL="${CRA_BASE_URL}"
@@ -333,103 +344,25 @@ cra-evidence-upload:
     - |
       set -eu
       CLI_VERSION="4.2.0"
-      CLI_WHEEL="craevidence-${CLI_VERSION}-py3-none-any.whl"
-      CLI_WHEEL_SHA256="9341512b67118aee0afd870a28fa2b3f0bcaa42af9e4ee7f0f397ce851753071"
+      CLI_WHEEL_SHA256_MANYLINUX_X86_64="b89baad4408b6718c20a9f66f1c2d65b2f703696f56d1783aa882c5601dd4d2b"
+      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="4f33939a53d7da6f2be88872c0d18e36573b0864d0d08ecb6dbdf2e6870efb9e"
+      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="b57146d7369290c11371aae7a9ee339d04c0ccbe6a54463933280c5980a50b54"
+      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="d440c4a9c2f67f2a585326375850a4e5dbcc18ad4faa920f92989dd9cc99244b"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
-      echo "${CLI_WHEEL_SHA256}  /tmp/craevidence-dist/${CLI_WHEEL}" | sha256sum -c -
-      python -m pip install "/tmp/craevidence-dist/${CLI_WHEEL}"
-      ENGINE_DIR="/tmp/craevidence/bin"
+      CLI_WHEEL=$(find /tmp/craevidence-dist -maxdepth 1 -type f -name "craevidence-${CLI_VERSION}-*.whl")
+      [ -n "${CLI_WHEEL}" ] && [ "$(printf '%s\n' "${CLI_WHEEL}" | wc -l)" -eq 1 ]
+      case "${CLI_WHEEL##*/}" in
+        *-manylinux_2_17_x86_64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MANYLINUX_X86_64}" ;;
+        *-musllinux_1_2_x86_64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MUSLLINUX_X86_64}" ;;
+        *-manylinux_2_17_aarch64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MANYLINUX_AARCH64}" ;;
+        *-musllinux_1_2_aarch64.whl) CLI_WHEEL_SHA256="${CLI_WHEEL_SHA256_MUSLLINUX_AARCH64}" ;;
+        *) echo "ERROR: unsupported Linux wheel: ${CLI_WHEEL##*/}"; exit 1 ;;
+      esac
+      echo "${CLI_WHEEL_SHA256}  ${CLI_WHEEL}" | sha256sum -c -
+      python -m pip install "${CLI_WHEEL}"
       GRYPE_DB_CACHE_DIR="/tmp/craevidence/grype-db"
-      mkdir -p "${ENGINE_DIR}" "${GRYPE_DB_CACHE_DIR}"
-      export ENGINE_DIR
+      mkdir -p "${GRYPE_DB_CACHE_DIR}"
       export GRYPE_DB_CACHE_DIR
-      export PATH="${ENGINE_DIR}:${PATH}"
-      python - <<'PY'
-      import hashlib
-      import io
-      import os
-      import platform
-      import stat
-      import tarfile
-      import urllib.request
-
-      system = platform.system().lower()
-      arch = None
-      skip_engines = False
-      if system not in {"linux", "darwin"}:
-          print(f"WARNING: runner OS '{system}' is not supported for engine provisioning; vulnerability scanning will use the OSV.dev fallback.", flush=True)
-          skip_engines = True
-      else:
-          arch_raw = platform.machine().lower()
-          if arch_raw in {"x86_64", "amd64"}:
-              arch = "amd64"
-          elif arch_raw in {"aarch64", "arm64"}:
-              arch = "arm64"
-          else:
-              print(f"WARNING: runner architecture '{arch_raw}' is not supported for engine provisioning; vulnerability scanning will use the OSV.dev fallback.", flush=True)
-              skip_engines = True
-
-      tools = {
-          "syft": {
-              "repo": "anchore/syft",
-              "version": "1.50.0",
-              "sha256": {
-                  "linux": {
-                      "amd64": "bf7b29ff57f06da30918266a0e1c2885a8f99784798d1bdb1628886aa015d788",
-                      "arm64": "887c57cbcc2d0e8c5c110a4571a3fc7150058b24d74f993ee4663516e5c8ce86",
-                  },
-                  "darwin": {
-                      "amd64": "d11a8c7bc27114853bd7c1e1b2f3be3ddda3a1de17aee585329f04c369341c75",
-                      "arm64": "e32fdb9d47823fa633748a1efca2528fd77c37469ea93c9e40ab835da44e4cce",
-                  },
-              },
-          },
-          "grype": {
-              "repo": "anchore/grype",
-              "version": "0.116.1",
-              "sha256": {
-                  "linux": {
-                      "amd64": "0122df7b655981abe547ad3d2190d65551dac6a2bfc80b4dc2a989b5d0587458",
-                      "arm64": "a8d7504a149629324eb5f4ce3dc25dfd211bbfe047e64ee2bf7844b466c3d84d",
-                  },
-                  "darwin": {
-                      "amd64": "e5ff3adac317511876de7863598587a7dbab0c47c8e150368b7df06909c11f4e",
-                      "arm64": "f493f169cbaae48bade169532b20235fc16653d2a044a5bc6fe6f69a3923f975",
-                  },
-              },
-          },
-      }
-
-      if not skip_engines:
-          bin_dir = os.environ["ENGINE_DIR"]
-          for name, meta in tools.items():
-              version = meta["version"]
-              archive = f"{name}_{version}_{system}_{arch}.tar.gz"
-              url = f"https://github.com/{meta['repo']}/releases/download/v{version}/{archive}"
-              try:
-                  with urllib.request.urlopen(url, timeout=60) as response:
-                      data = response.read()
-              except Exception as exc:
-                  print(f"WARNING: could not download {name}: {exc}; vulnerability scanning may use the OSV.dev fallback.", flush=True)
-                  continue
-              digest = hashlib.sha256(data).hexdigest()
-              expected = meta["sha256"][system][arch]
-              if digest != expected:
-                  raise SystemExit(f"{name} checksum mismatch")
-              try:
-                  with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-                      member = tar.getmember(name)
-                      src = tar.extractfile(member)
-                      if src is None:
-                          print(f"WARNING: {name} binary missing from archive; vulnerability scanning may use the OSV.dev fallback.", flush=True)
-                          continue
-                      dest = os.path.join(bin_dir, name)
-                      with open(dest, "wb") as handle:
-                          handle.write(src.read())
-                  os.chmod(dest, os.stat(dest).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-              except Exception as exc:
-                  print(f"WARNING: could not install {name}: {exc}; vulnerability scanning may use the OSV.dev fallback.", flush=True)
-      PY
       set -- check
       if [ -n "${CRA_CHECK_SBOM}" ]; then
         set -- "$@" --sbom "${CRA_CHECK_SBOM}"

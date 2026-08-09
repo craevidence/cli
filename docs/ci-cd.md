@@ -233,7 +233,10 @@ on its first run. Subsequent runs skip the download if the database is current.
 Caching the database directory between CI jobs reduces network traffic and
 speeds up cold starts.
 
-**GitHub Action** (engine and DB stored under `$RUNNER_TEMP/craevidence-*`):
+**GitHub Action** (the wheel bundles the engine; the DB uses `$RUNNER_TEMP`):
+
+The composite Action supports Linux and macOS runners. It does not install on
+Windows runners because no Windows platform wheel is published.
 
 ```yaml
 - uses: actions/cache@v4
@@ -245,7 +248,7 @@ speeds up cold starts.
 
 Place this step before the `craevidence/cli@v4` action step.
 
-**GitLab CI component** (engine and DB stored under `/tmp/craevidence/*`):
+**GitLab CI component** (the wheel bundles the engine; the DB uses `/tmp/craevidence`):
 
 ```yaml
 cache:

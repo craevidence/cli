@@ -11,6 +11,11 @@ pip install craevidence          # standard install
 pipx install craevidence         # isolated environment (recommended for a CLI)
 ```
 
+PyPI selects a platform wheel containing the supported CRA Evidence engine on
+Linux AMD64/ARM64 and macOS AMD64/ARM64. The source distribution remains
+engine-free for upload-only and unsupported-platform installations.
+The wheel compatibility floors are glibc 2.17, musl 1.2, and macOS 12.
+
 ## Docker
 
 ```bash
@@ -29,8 +34,13 @@ The CLI Docker image is published to multiple registries:
 
 ### Building the Docker image from source
 
-The published Dockerfile defaults to Docker Hardened Images (DHI) from `dhi.io`. If you do not have
-DHI registry access, pass public Python base images via build-args:
+The published Dockerfile defaults to Docker Hardened Images (DHI) from `dhi.io`
+and a digest-pinned CRA Evidence engine artifact. A source build requires read
+access to a supported engine image with `/grype`, `/LICENSE`, and `/NOTICE`.
+Stock Grype is not a compatible substitute.
+
+If you have a supported engine image but do not have DHI registry access, pass
+public Python base images and the engine image via build-args:
 
 ```bash
 git clone https://github.com/craevidence/cli.git
@@ -43,16 +53,18 @@ docker build \
   --build-arg SECURITY_HARDENED=false \
   --build-arg SECURITY_NO_SHELL=false \
   --build-arg SECURITY_NO_PACKAGE_MANAGER=false \
+  --build-arg GRYPE_ENGINE_IMAGE=registry.example/supported-engine@sha256:... \
   -t craevidence-cli:local .
 ```
 
 The label build-args keep the image identity honest: without them the labels would describe the
 hardened base while the image actually contains the public one.
 
-Without the build-args the build uses the pinned DHI digests, which require DHI credentials. The
-fallback image provides the same CLI functionality, but it is not the hardened production image:
-the public base includes a shell and a package manager, and the image labels record the base
-image actually used.
+Without the base-image build-args the build uses the pinned DHI digests, which
+require DHI credentials. A public-base image built with the same supported
+engine provides the same CLI behavior, but it is not the hardened production
+image: the public base includes a shell and a package manager, and the labels
+record that fact.
 
 ## From Source
 
@@ -79,13 +91,30 @@ docker run --rm \
 
 > **Security note:** Mounting the Docker socket grants the container full control over the Docker daemon.
 
-Native installs can upload an existing SBOM with `--file`. Directory and image
-generation require the local SBOM generator on `PATH`:
+Native installs can upload an existing SBOM with `--file`, which needs no engine.
 
-```bash
-# macOS
-brew install syft
+Directory and image generation and local vulnerability matching require the
+compatible CRA Evidence Grype engine. Supported PyPI platform wheels and the
+published Docker image bundle it. Editable and source-distribution installs do
+not; set `CRA_EVIDENCE_ENGINE` to an explicit supported binary when developing
+from source. The CLI never downloads an engine at runtime.
 
-# Linux
-curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-```
+Native Windows generation and local engine scanning are not supported, and no
+Homebrew formula or separate engine archive is maintained. The macOS wheel
+binaries are not Apple Developer ID-signed or notarized. Their execution,
+quarantine, and Gatekeeper behavior have not been verified on real macOS
+hardware and no Gatekeeper trust is claimed.
+
+### What the engine accepts as a source
+
+Generation supports directory, file, archive, Docker-daemon, Podman, OCI and
+registry sources, and uses the same default credential keychain as any other
+container tool: a prior `docker login` (or the equivalent config file) is
+honoured for private registries.
+
+Standalone-Syft application configuration is **not** forwarded to the engine.
+The delivery profile is fixed and versioned, so `SYFT_REGISTRY_AUTH_*` and other
+`SYFT_*` variables, a Syft config file, an explicit target platform, custom
+TLS/CA or insecure-registry settings, path exclusions and source name/version
+aliases have no effect. If you need any of those, generate the SBOM with your
+own tooling and upload it with `--file`.

@@ -8,7 +8,7 @@ Tests:
 - Rejected product creation points at --target-markets
 - --source + --image mutual exclusivity
 - No source provided raises UsageError
-- generate_sbom_from_directory happy path + Syft not installed
+- generate_sbom_from_directory happy path + incompatible engine
 """
 
 import json
@@ -25,6 +25,7 @@ from cra_evidence_cli.commands.upload import (
     clarify_target_markets_error,
     clarify_upload_error,
 )
+from cra_evidence_cli.engine import EngineIdentity, EngineInspection
 from cra_evidence_cli.exceptions import APIError
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
@@ -314,63 +315,94 @@ class TestGenerateSbomFromDirectory:
         with pytest.raises(SBOMGenerationError, match="Unsupported format"):
             generate_sbom_from_directory(str(tmp_path), output_format="xml")
 
-    def test_syft_not_installed(self, tmp_path):
-        """Missing Syft should raise SBOMGenerationError with install instructions."""
-        with patch("cra_evidence_cli.sbom_generator.check_syft_installed", return_value=False):
-            with pytest.raises(SBOMGenerationError, match="Syft is not installed"):
+    def test_compatible_engine_not_installed(self, tmp_path):
+        with patch(
+            "cra_evidence_cli.sbom_generator.inspect_engine",
+            return_value=EngineInspection(None, "the CRA Evidence engine is not installed"),
+        ):
+            with pytest.raises(SBOMGenerationError, match="compatible CRA Evidence engine"):
                 generate_sbom_from_directory(str(tmp_path))
 
     def test_happy_path(self, tmp_path):
         """Successful directory scan should return SBOMGenerationResult."""
         sbom_data = {"components": [{"name": "pkg-a"}, {"name": "pkg-b"}]}
 
-        with patch("cra_evidence_cli.sbom_generator.check_syft_installed", return_value=True):
-            with patch(
-                "cra_evidence_cli.sbom_generator._generate_sbom_with_local_syft"
-            ) as mock_syft:
-                def write_sbom(image, fmt, output_path, verbose=False, offline=False):
-                    output_path.write_text(json.dumps(sbom_data))
+        with patch(
+            "cra_evidence_cli.sbom_generator._generate_sbom_with_engine"
+        ) as mock_engine:
+            def write_sbom(source, fmt, output_path, verbose=False, offline=False):
+                output_path.write_text(json.dumps(sbom_data))
 
-                mock_syft.side_effect = write_sbom
-
-                result = generate_sbom_from_directory(str(tmp_path))
+            mock_engine.side_effect = write_sbom
+            result = generate_sbom_from_directory(str(tmp_path))
 
         assert result.component_count == 2
         assert result.format_type == "cyclonedx"
-        assert result.generation_method == "syft"
+        assert result.generation_method == "craevidence-grype"
         assert result.file_path.exists()
 
-        # Verify dir: prefix was passed to syft
-        mock_syft.assert_called_once()
-        call_args = mock_syft.call_args
+        mock_engine.assert_called_once()
+        call_args = mock_engine.call_args
         assert call_args[0][0] == f"dir:{tmp_path}"
 
         # Cleanup
         result.file_path.unlink(missing_ok=True)
 
 
-def test_docker_syft_fallback_uses_an_immutable_image_digest(tmp_path):
+def test_engine_generation_uses_fork_sbom_command(tmp_path):
     output_path = tmp_path / "sbom.json"
-    completed = MagicMock(
-        returncode=0,
-        stdout='{"bomFormat":"CycloneDX","components":[]}',
-        stderr="",
+    completed = type("Completed", (), {
+        "returncode": 0,
+        "stdout": "",
+        "stderr": "",
+    })()
+    identity = EngineIdentity(
+        path="/opt/bin/grype",
+        version="craevidence-v0.116.1-p3",
+        syft_version="1.50.0",
     )
 
     with patch(
+        "cra_evidence_cli.sbom_generator.inspect_engine",
+        return_value=EngineInspection(identity, ""),
+    ), patch(
         "cra_evidence_cli.sbom_generator.subprocess.run",
         return_value=completed,
     ) as run:
-        sbom_generator._generate_sbom_with_docker(
-            "example/image:1.0",
+        sbom_generator._generate_sbom_with_engine(
+            "dir:/workspace",
             "cyclonedx",
             output_path,
+            offline=True,
         )
 
-    command = run.call_args.args[0]
-    syft_image = command[command.index("/var/run/docker.sock:/var/run/docker.sock") + 1]
-    assert syft_image.startswith("anchore/syft:v1.50.0@sha256:")
-    assert syft_image.endswith(
-        "1288ea4c8b38767b4e620c1e312c8cb26b6e887a99b4f07ab6cd19fc6f225026"
-    )
-    assert output_path.read_text() == completed.stdout
+    assert run.call_args.args[0] == [
+        "/opt/bin/grype",
+        "sbom",
+        "dir:/workspace",
+        "--output",
+        "cyclonedx-json",
+        "--file",
+        str(output_path),
+        "--offline",
+    ]
+    assert run.call_args.kwargs["env"]["GRYPE_CHECK_FOR_APP_UPDATE"] == "false"
+
+
+def test_stock_grype_is_not_used_for_generation(tmp_path):
+    output_path = tmp_path / "sbom.json"
+    with patch(
+        "cra_evidence_cli.sbom_generator.inspect_engine",
+        return_value=EngineInspection(
+            None,
+            "stock or unstamped Grype is not a supported engine",
+        ),
+    ), patch("cra_evidence_cli.sbom_generator.subprocess.run") as run:
+        with pytest.raises(SBOMGenerationError, match="stock or unstamped Grype"):
+            sbom_generator._generate_sbom_with_engine(
+                "example/image:1.0",
+                "cyclonedx",
+                output_path,
+            )
+
+    run.assert_not_called()

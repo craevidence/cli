@@ -1,7 +1,7 @@
 """Unit tests for `craevidence db update` and its cache/lock helpers.
 
-No real grype binary or network is touched: ``shutil.which`` and
-``subprocess.run`` are monkeypatched in every test that needs them.
+No real engine binary or network is touched: identity inspection and subprocess
+execution are replaced in every test that needs them.
 """
 
 from __future__ import annotations
@@ -13,9 +13,25 @@ from click.testing import CliRunner
 
 from cra_evidence_cli.commands import db as db_module
 from cra_evidence_cli.commands.db import db
+from cra_evidence_cli.engine import EngineIdentity, EngineInspection
 from cra_evidence_cli.local import dbcache
 from cra_evidence_cli.local import scanner as scanner_module
 from cra_evidence_cli.local.dbcache import db_update_lock, resolve_cache_dir
+
+
+def _engine_available() -> EngineInspection:
+    return EngineInspection(
+        EngineIdentity(
+            path="/opt/bin/grype",
+            version="craevidence-v0.116.1-p3",
+            syft_version="1.50.0",
+        ),
+        "",
+    )
+
+
+def _engine_absent() -> EngineInspection:
+    return EngineInspection(None, "the CRA Evidence engine is not installed")
 
 
 # resolve_cache_dir
@@ -58,20 +74,20 @@ def test_db_update_lock_acquires_releases_and_creates_file(tmp_path):
 
 # db update - grype absent
 def test_db_update_grype_absent_exits_15(tmp_path, monkeypatch):
-    monkeypatch.setattr(scanner_module.shutil, "which", lambda _: None)
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_absent)
 
     runner = CliRunner()
     result = runner.invoke(db, ["update", "--cache-dir", str(tmp_path)])
 
     assert result.exit_code == 15
-    assert "Grype is not installed" in result.stderr
+    assert "CRA Evidence engine" in result.stderr
 
 
 # db update - happy path
 def test_db_update_happy_path(tmp_path, monkeypatch):
     built_date = "2026-06-14T00:00:00Z"
 
-    monkeypatch.setattr(scanner_module.shutil, "which", lambda _: "/usr/bin/grype")
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
 
     def fake_db_run(cmd, *args, **kwargs):
         class R:
@@ -108,7 +124,7 @@ def test_db_update_happy_path(tmp_path, monkeypatch):
 
 
 def test_db_update_subprocess_failure_exits_15(tmp_path, monkeypatch):
-    monkeypatch.setattr(scanner_module.shutil, "which", lambda _: "/usr/bin/grype")
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
 
     def fake_run(cmd, *args, **kwargs):
         class R:
@@ -146,7 +162,7 @@ def test_db_status_reads_local_cache_without_grype_status(tmp_path, monkeypatch)
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(scanner_module.shutil, "which", lambda _: "/usr/bin/grype")
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
 
     def _no_subprocess(*args, **kwargs):  # noqa: ANN002, ANN003
         msg = "db status must not call grype"
@@ -158,7 +174,7 @@ def test_db_status_reads_local_cache_without_grype_status(tmp_path, monkeypatch)
     result = CliRunner().invoke(db, ["status", "--cache-dir", str(tmp_path)])
 
     assert result.exit_code == 0, result.output
-    assert "Grype installed: yes" in result.output
+    assert "CRA Evidence engine available: yes" in result.output
     assert "Vulnerability DB present: yes" in result.output
     assert "DB build date: 2026-06-14T01:05:09Z" in result.output
     assert "DB version: 6.1.7" in result.output
@@ -166,12 +182,12 @@ def test_db_status_reads_local_cache_without_grype_status(tmp_path, monkeypatch)
 
 
 def test_db_status_missing_cache_reports_absent_db(tmp_path, monkeypatch):
-    monkeypatch.setattr(scanner_module.shutil, "which", lambda _: None)
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_absent)
 
     result = CliRunner().invoke(db, ["status", "--cache-dir", str(tmp_path / "cache")])
 
     assert result.exit_code == 0, result.output
-    assert "Grype installed: no" in result.output
+    assert "CRA Evidence engine available: no" in result.output
     assert "Vulnerability DB present: no" in result.output
     assert "Status: missing" in result.output
 
@@ -180,7 +196,7 @@ def test_db_status_present_db_with_unknown_age_reports_unknown(tmp_path, monkeyp
     db_dir = tmp_path / "6"
     db_dir.mkdir()
     (db_dir / "vulnerability.db").write_bytes(b"db")
-    monkeypatch.setattr(scanner_module.shutil, "which", lambda _: "/usr/bin/grype")
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
     monkeypatch.setattr(
         scanner_module.GrypeLocalScanner,
         "_db_mtime_offline",

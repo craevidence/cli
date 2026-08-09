@@ -1,6 +1,6 @@
 # Hero demo for the CRA Evidence CLI README.
 # Regenerate from the repo root with:  vhs docs/demo.tape
-# Requires vhs, ttyd, ffmpeg, plus craevidence + grype + syft on PATH.
+# Requires vhs, ttyd, ffmpeg, plus a supported craevidence installation.
 
 Output docs/demo.gif
 

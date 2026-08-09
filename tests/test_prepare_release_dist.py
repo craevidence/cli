@@ -82,7 +82,7 @@ def _make_opener(pypi_contents: dict[str, bytes], served_overrides: dict[str, by
 
 
 class _Runner:
-    """Fake subprocess runner for gh release view/download and python -m build."""
+    """Fake subprocess runner for gh acquisition and engine distribution builds."""
 
     def __init__(
         self,
@@ -108,12 +108,12 @@ class _Runner:
             dest_dir = Path(cmd[cmd.index("--dir") + 1])
             (dest_dir / name).write_bytes(self.assets[name])
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-        if cmd[0] == sys.executable and cmd[1:3] == ["-m", "build"]:
+        if cmd[0] == sys.executable and Path(cmd[1]).name == "build_engine_distributions.py":
             if not self.allow_build:
                 pytest.fail(f"build must not be invoked, got: {cmd}")
             self.build_calls += 1
             assert kwargs["env"]["SOURCE_DATE_EPOCH"] == "946684800"
-            out_dir = Path(cmd[cmd.index("--outdir") + 1])
+            out_dir = Path(cmd[cmd.index("--out-dir") + 1])
             for name, data in self.build_files.items():
                 (out_dir / name).write_bytes(data)
             return subprocess.CompletedProcess(cmd, 0)
@@ -126,9 +126,16 @@ def _no_subprocess(cmd: list[str], **_kwargs) -> subprocess.CompletedProcess:
     raise AssertionError
 
 
-def test_both_files_on_pypi_downloaded_and_not_published(tmp_path):
-    wheel, sdist = prd.expected_filenames(VERSION)
-    contents = {wheel: b"pypi-wheel-bytes", sdist: b"pypi-sdist-bytes"}
+def _distribution_bytes(prefix: bytes = b"bytes") -> dict[str, bytes]:
+    return {
+        name: prefix + b":" + name.encode()
+        for name in prd.expected_filenames(VERSION)
+    }
+
+
+def test_all_files_on_pypi_downloaded_and_not_published(tmp_path):
+    names = prd.expected_filenames(VERSION)
+    contents = _distribution_bytes(b"pypi")
     dist = tmp_path / "dist"
 
     result = prd.acquire(
@@ -140,15 +147,13 @@ def test_both_files_on_pypi_downloaded_and_not_published(tmp_path):
         runner=_no_subprocess,
     )
 
-    assert (dist / wheel).read_bytes() == contents[wheel]
-    assert (dist / sdist).read_bytes() == contents[sdist]
-    assert result[wheel] == {"source": "pypi", "publish": False}
-    assert result[sdist] == {"source": "pypi", "publish": False}
+    for name in names:
+        assert (dist / name).read_bytes() == contents[name]
+        assert result[name] == {"source": "pypi", "publish": False}
 
 
-def test_nothing_anywhere_builds_once_and_publishes_both(tmp_path):
-    wheel, sdist = prd.expected_filenames(VERSION)
-    build_files = {wheel: b"built-wheel-bytes", sdist: b"built-sdist-bytes"}
+def test_nothing_anywhere_builds_once_and_publishes_all(tmp_path):
+    build_files = _distribution_bytes(b"built")
     dist = tmp_path / "dist"
     runner = _Runner(assets={}, build_files=build_files)
 
@@ -157,19 +162,40 @@ def test_nothing_anywhere_builds_once_and_publishes_both(tmp_path):
         TAG,
         tmp_path / "src",
         dist,
+        engine_dir=tmp_path / "engine",
         opener=_make_opener({}),
         runner=runner,
     )
 
     assert runner.build_calls == 1
-    assert (dist / wheel).read_bytes() == build_files[wheel]
-    assert (dist / sdist).read_bytes() == build_files[sdist]
-    assert result[wheel] == {"source": "built", "publish": True}
-    assert result[sdist] == {"source": "built", "publish": True}
+    for name, data in build_files.items():
+        assert (dist / name).read_bytes() == data
+        assert result[name] == {"source": "built", "publish": True}
 
 
-def test_wheel_on_pypi_sdist_from_release_asset_no_build(tmp_path):
-    wheel, sdist = prd.expected_filenames(VERSION)
+def test_build_requires_promoted_engine_payload(tmp_path):
+    runner = _Runner(assets={}, build_files=_distribution_bytes(b"built"))
+
+    with pytest.raises(
+        prd.AcquisitionError,
+        match="promoted engine payload is required",
+    ):
+        prd.acquire(
+            VERSION,
+            TAG,
+            tmp_path / "src",
+            tmp_path / "dist",
+            opener=_make_opener({}),
+            runner=runner,
+        )
+
+    assert runner.build_calls == 0
+
+
+def test_wheels_on_pypi_sdist_from_release_asset_no_build(tmp_path):
+    wheels = prd.expected_wheel_filenames(VERSION)
+    sdist = prd.expected_filenames(VERSION)[-1]
+    pypi_wheels = {name: f"pypi:{name}".encode() for name in wheels}
     asset_sdist = b"checkpointed-sdist-bytes"
     dist = tmp_path / "dist"
     runner = _Runner(assets={sdist: asset_sdist}, allow_build=False)
@@ -179,26 +205,31 @@ def test_wheel_on_pypi_sdist_from_release_asset_no_build(tmp_path):
         TAG,
         tmp_path / "src",
         dist,
-        opener=_make_opener({wheel: b"pypi-wheel-bytes"}),
+        opener=_make_opener(pypi_wheels),
         runner=runner,
     )
 
     assert runner.build_calls == 0
-    assert (dist / wheel).read_bytes() == b"pypi-wheel-bytes"
+    for wheel in wheels:
+        assert (dist / wheel).read_bytes() == pypi_wheels[wheel]
+        assert result[wheel] == {"source": "pypi", "publish": False}
     assert (dist / sdist).read_bytes() == asset_sdist
-    assert result[wheel] == {"source": "pypi", "publish": False}
     assert result[sdist] == {"source": "release-asset", "publish": True}
 
 
 def test_build_fills_wheel_without_overwriting_pypi_sdist(tmp_path):
-    wheel, sdist = prd.expected_filenames(VERSION)
+    wheels = prd.expected_wheel_filenames(VERSION)
+    sdist = prd.expected_filenames(VERSION)[-1]
     pypi_sdist = b"canonical-pypi-sdist-bytes"
     rebuilt_sdist = b"rebuilt-sdist-with-different-bytes"
     assert pypi_sdist != rebuilt_sdist
     dist = tmp_path / "dist"
     runner = _Runner(
         assets={},
-        build_files={wheel: b"built-wheel-bytes", sdist: rebuilt_sdist},
+        build_files={
+            **{name: f"built:{name}".encode() for name in wheels},
+            sdist: rebuilt_sdist,
+        },
     )
 
     result = prd.acquire(
@@ -206,20 +237,21 @@ def test_build_fills_wheel_without_overwriting_pypi_sdist(tmp_path):
         TAG,
         tmp_path / "src",
         dist,
+        engine_dir=tmp_path / "engine",
         opener=_make_opener({sdist: pypi_sdist}),
         runner=runner,
     )
 
     assert runner.build_calls == 1
     assert (dist / sdist).read_bytes() == pypi_sdist
-    assert (dist / wheel).read_bytes() == b"built-wheel-bytes"
     assert result[sdist] == {"source": "pypi", "publish": False}
-    assert result[wheel] == {"source": "built", "publish": True}
+    for wheel in wheels:
+        assert result[wheel] == {"source": "built", "publish": True}
 
 
 def test_pypi_download_hash_mismatch_is_fatal(tmp_path):
-    wheel, sdist = prd.expected_filenames(VERSION)
-    contents = {wheel: b"declared-wheel-bytes", sdist: b"pypi-sdist-bytes"}
+    wheel = prd.expected_wheel_filenames(VERSION)[0]
+    contents = _distribution_bytes(b"declared")
     dist = tmp_path / "dist"
 
     with pytest.raises(prd.AcquisitionError, match="sha256 mismatch") as excinfo:
@@ -253,18 +285,25 @@ def test_gh_release_view_failure_is_fatal(tmp_path):
 
 
 def test_main_writes_github_output_lines(tmp_path, monkeypatch, capsys):
-    wheel, sdist = prd.expected_filenames(VERSION)
-    wheel_bytes = b"pypi-wheel-bytes"
+    wheels = prd.expected_wheel_filenames(VERSION)
+    sdist = prd.expected_filenames(VERSION)[-1]
+    wheel_bytes = {name: f"pypi:{name}".encode() for name in wheels}
 
     def fake_fetch(version, **_kwargs):
         assert version == VERSION
-        return {wheel: {"sha256": _sha256(wheel_bytes), "url": "https://example.invalid/w"}}
+        return {
+            name: {
+                "sha256": _sha256(data),
+                "url": f"https://example.invalid/{name}",
+            }
+            for name, data in wheel_bytes.items()
+        }
 
     def fake_download_url(url, dest, **_kwargs):
-        assert url == "https://example.invalid/w"
-        dest.write_bytes(wheel_bytes)
+        dest.write_bytes(wheel_bytes[dest.name])
 
-    def fake_build(release_src, out_dir, runner=None):
+    def fake_build(version, release_src, engine_dir, out_dir, runner=None):
+        assert version == VERSION
         (out_dir / sdist).write_bytes(b"built-sdist-bytes")
 
     monkeypatch.setattr(prd, "fetch_pypi_files", fake_fetch)
@@ -282,6 +321,8 @@ def test_main_writes_github_output_lines(tmp_path, monkeypatch, capsys):
             TAG,
             "--release-src",
             str(tmp_path / "src"),
+            "--engine-dir",
+            str(tmp_path / "engine"),
             "--dist-dir",
             str(tmp_path / "dist"),
         ],
@@ -294,30 +335,39 @@ def test_main_writes_github_output_lines(tmp_path, monkeypatch, capsys):
     assert "wheel_source=pypi" in lines
     assert "sdist_source=built" in lines
     stdout = capsys.readouterr().out
-    assert f"{wheel}: source=pypi" in stdout
+    assert f"{wheels[0]}: source=pypi" in stdout
     assert f"{sdist}: source=built" in stdout
 
 
 def test_build_output_missing_wheel_is_fatal(tmp_path, monkeypatch, capsys):
-    _wheel, sdist = prd.expected_filenames(VERSION)
-    runner = _Runner(assets={}, build_files={sdist: b"built-sdist-bytes"})
+    names = prd.expected_filenames(VERSION)
+    missing_wheel = names[0]
+    sdist = names[-1]
+    runner = _Runner(
+        assets={},
+        build_files={name: f"built:{name}".encode() for name in names[1:]},
+    )
 
-    with pytest.raises(prd.AcquisitionError, match="build output is missing"):
+    with pytest.raises(prd.AcquisitionError, match="build output is missing") as excinfo:
         prd.acquire(
             VERSION,
             TAG,
             tmp_path / "src",
             tmp_path / "dist",
+            engine_dir=tmp_path / "engine",
             opener=_make_opener({}),
             runner=runner,
         )
+    assert missing_wheel in str(excinfo.value)
 
     monkeypatch.setattr(prd, "fetch_pypi_files", lambda version, **_kwargs: {})
     monkeypatch.setattr(prd, "list_release_assets", lambda tag, runner=None: set())
     monkeypatch.setattr(
         prd,
         "build_distributions",
-        lambda release_src, out_dir, runner=None: (out_dir / sdist).write_bytes(b"s"),
+        lambda version, release_src, engine_dir, out_dir, runner=None: (
+            out_dir / sdist
+        ).write_bytes(b"s"),
     )
     rc = prd.main(
         [
@@ -327,6 +377,8 @@ def test_build_output_missing_wheel_is_fatal(tmp_path, monkeypatch, capsys):
             TAG,
             "--release-src",
             str(tmp_path / "src"),
+            "--engine-dir",
+            str(tmp_path / "engine"),
             "--dist-dir",
             str(tmp_path / "dist2"),
         ],
@@ -353,8 +405,7 @@ def test_no_build_fails_when_a_build_would_be_needed(tmp_path):
 
 
 def test_no_build_passes_when_everything_is_on_pypi(tmp_path):
-    wheel, sdist = prd.expected_filenames(VERSION)
-    contents = {wheel: b"wheel-bytes", sdist: b"sdist-bytes"}
+    contents = _distribution_bytes()
     result = prd.acquire(
         VERSION,
         TAG,
@@ -364,5 +415,4 @@ def test_no_build_passes_when_everything_is_on_pypi(tmp_path):
         runner=_Runner(allow_build=False),
         allow_build=False,
     )
-    assert result[wheel]["publish"] is False
-    assert result[sdist]["publish"] is False
+    assert all(not info["publish"] for info in result.values())

@@ -98,11 +98,11 @@ Notes:
   exits 12; `--fail-on known-exploited` exits 17. `--fail-on-score` exits 14 when the sbomqs
   score is below the threshold. `--strict` exits 15 when a required data source is stale or
   unavailable. `--deny-license` exits 16 when a denied license is detected.
-- When a local vulnerability engine is absent or its scan fails, the command falls back to
-  querying OSV.dev over the network. When an installed engine fails, a notice goes to stderr:
-  `Local matcher failed (<reason>); querying OSV.dev over the network instead.` The OSV.dev
-  path reports real severities, CVE aliases, fixed versions, and supports all `--fail-on` gates
-  identically to the local engine path.
+- When the local vulnerability engine is unavailable or its scan fails, the command attempts an
+  OSV.dev fallback and names the reason on stderr. The warning says that the fallback may use the
+  network and that results may differ. OSV.dev receives only components with PURLs, while the
+  local engine has additional matching strategies. The OSV.dev path still reports severities,
+  CVE aliases, fixed versions, and supports the same `--fail-on` gate mechanics.
 - Pointing `check` at a directory that contains no recognised dependency manifests exits 1 with
   an explanatory message listing the manifest types it looks for (for example `requirements.txt`,
   `poetry.lock`, `package-lock.json`, `go.mod`, `pom.xml`, `Cargo.lock`, `Gemfile.lock`).

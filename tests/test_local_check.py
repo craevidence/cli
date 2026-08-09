@@ -7,6 +7,7 @@ from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
 from cra_evidence_cli.commands import check as check_module
+from cra_evidence_cli.engine import EngineIdentity, EngineInspection
 from cra_evidence_cli.exceptions import (
     LicensePolicyExceeded,
     SbomqsThresholdExceeded,
@@ -610,7 +611,7 @@ def test_explicit_flag_overrides_policy(monkeypatch, tmp_path):
 def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
     _install_fake_scanner(monkeypatch, [])
-    # Fake Syft directory generation -> a real SBOM file in its own directory,
+    # Fake engine generation creates a real SBOM file in its own directory,
     # mirroring the private temp dir the real generator creates.
     gen_dir = tmp_path / "sbom_gen"
     gen_dir.mkdir()
@@ -621,7 +622,9 @@ def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
     monkeypatch.setattr(
         check_module,
         "generate_sbom_from_directory",
-        lambda *a, **k: SBOMGenerationResult(generated, 1, "cyclonedx", "syft"),
+        lambda *a, **k: SBOMGenerationResult(
+            generated, 1, "cyclonedx", "craevidence-grype"
+        ),
     )
     src = tmp_path / "src"
     src.mkdir()
@@ -637,7 +640,7 @@ def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
 def test_directory_without_manifests_gives_clear_error(monkeypatch, tmp_path):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
     _install_fake_scanner(monkeypatch, [])
-    # Syft finds nothing in the directory -> an SBOM without a components list.
+    # The engine finds nothing in the directory, yielding no components list.
     gen_dir = tmp_path / "sbom_gen"
     gen_dir.mkdir()
     empty = gen_dir / "sbom.json"
@@ -647,7 +650,9 @@ def test_directory_without_manifests_gives_clear_error(monkeypatch, tmp_path):
     monkeypatch.setattr(
         check_module,
         "generate_sbom_from_directory",
-        lambda *a, **k: SBOMGenerationResult(empty, 0, "cyclonedx", "syft"),
+        lambda *a, **k: SBOMGenerationResult(
+            empty, 0, "cyclonedx", "craevidence-grype"
+        ),
     )
     src = tmp_path / "src"
     src.mkdir()
@@ -711,7 +716,14 @@ def test_scan_env_respects_explicit_grype_db_auto_update(monkeypatch, tmp_path):
 
     monkeypatch.setattr(scanner_module.subprocess, "run", fake_run)
     scanner = scanner_module.GrypeLocalScanner()
-    scanner._path = "/usr/bin/grype"
+    scanner._inspection = EngineInspection(
+        EngineIdentity(
+            path="/opt/bin/grype",
+            version="craevidence-v0.116.1-p3",
+            syft_version="1.50.0",
+        ),
+        "",
+    )
     sbom = tmp_path / "sbom.json"
     _write_sbom(sbom)
 
@@ -785,16 +797,20 @@ def test_grype_failure_falls_back_to_osv(monkeypatch, tmp_path):
         for source in payload["coverage"]
     )
     # The switch to the network fallback is announced on stderr with the reason.
-    assert "Local matcher failed (local database unavailable)" in res.stderr
-    assert "querying OSV.dev over the network instead" in res.stderr
+    assert "Warning: local matcher failed (local database unavailable)" in res.stderr
+    assert "attempting an OSV.dev fallback" in res.stderr
+    assert "may use the network and results may differ" in res.stderr
 
 
-def test_no_fallback_notice_when_grype_absent(monkeypatch, tmp_path):
+def test_absent_engine_is_announced_but_not_reported_as_a_failure(monkeypatch, tmp_path):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
 
     class NoGrype:
         def is_available(self):
             return False
+
+        def unavailable_reason(self):
+            return "the CRA Evidence engine is not installed"
 
     class FakeOSVClient:
         def query_components(self, components):
@@ -819,7 +835,25 @@ def test_no_fallback_notice_when_grype_absent(monkeypatch, tmp_path):
 
     assert res.exit_code == 0, res.output
     assert json.loads(res.stdout)["provenance"]["engine"] == "osv-online"
+    # The downgrade is announced with its reason...
+    assert "Warning: local matcher unavailable" in res.stderr
+    assert "the CRA Evidence engine is not installed" in res.stderr
+    # ...but a never-installed engine is not reported as a failure.
     assert "Local matcher failed" not in res.stderr
+
+
+def test_syft_provenance_comes_from_verified_engine(monkeypatch, tmp_path):
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [])
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: "1.50.0")
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    result = _run_check(["--sbom", str(sbom)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["provenance"]["syft_version"] == "1.50.0"
 
 
 def test_annotations_github_emits_workflow_commands(monkeypatch, tmp_path):
@@ -907,3 +941,120 @@ def test_annotation_failure_does_not_mask_gate(monkeypatch, tmp_path):
     )
     assert res.exit_code == 10  # the gate wins, not the IO error (exit 1)
     assert "failed to emit gitlab annotations" in res.stderr
+
+
+# --- engine rejection must never downgrade to OSV.dev silently -------------
+#
+# Each scenario drives the REAL engine.inspect_engine so the warning text cannot
+# drift from the real rejection reason, then drives the REAL GrypeLocalScanner
+# so check.py's fallback branch is exercised, not a stub of it.
+
+
+def _rejection_reason(monkeypatch, which_result, run_result):
+    """Return the reason engine.inspect_engine actually produces."""
+    from cra_evidence_cli import engine as engine_module
+
+    monkeypatch.setattr(engine_module.shutil, "which", lambda _: which_result)
+    if run_result is not None:
+        monkeypatch.setattr(engine_module.subprocess, "run", run_result)
+    inspection = engine_module.inspect_engine()
+    assert inspection.identity is None, "scenario must be rejected"
+    return inspection.reason
+
+
+def _stock_grype_run(*args, **kwargs):
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        returncode=0,
+        stdout=json.dumps({"application": "grype", "version": "0.116.1"}),
+        stderr="",
+    )
+
+
+def _old_fork_run(*args, **kwargs):
+    from types import SimpleNamespace
+
+    command = args[0]
+    if command[1:] == ["version", "--output", "json"]:
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "application": "grype",
+                    "version": "craevidence-v0.116.1-p1",
+                    "syftVersion": "v1.50.0",
+                }
+            ),
+            stderr="",
+        )
+    return SimpleNamespace(
+        returncode=0, stdout="Usage:\n  grype [IMAGE] [flags]\n", stderr=""
+    )
+
+
+@pytest.mark.parametrize(
+    ("scenario", "which_result", "run_result", "expected_reason"),
+    [
+        ("missing engine", None, None, "the CRA Evidence engine is not installed"),
+        (
+            "stock grype",
+            "/usr/local/bin/grype",
+            _stock_grype_run,
+            "stock or unstamped Grype is not a supported engine",
+        ),
+        (
+            "old fork without sbom",
+            "/usr/local/bin/grype",
+            _old_fork_run,
+            "the installed CRA Evidence engine does not support the required "
+            "SBOM generation options",
+        ),
+    ],
+)
+def test_rejected_engine_warns_before_osv_fallback(
+    monkeypatch, tmp_path, scenario, which_result, run_result, expected_reason
+):
+    from cra_evidence_cli import engine as engine_module
+    from cra_evidence_cli.local import scanner as scanner_module
+
+    reason = _rejection_reason(monkeypatch, which_result, run_result)
+    assert reason == expected_reason, scenario
+
+    # check.py builds a real GrypeLocalScanner; give it the real inspection.
+    monkeypatch.setattr(
+        scanner_module,
+        "inspect_engine",
+        lambda path=None: engine_module.EngineInspection(None, reason),
+    )
+
+    class FakeOSVClient:
+        def query_components(self, components):
+            return [], _Cov("osv.dev", "present")
+
+    monkeypatch.setattr(check_module, "OSVClient", FakeOSVClient)
+    monkeypatch.setattr(
+        check_module,
+        "fetch_kev_catalog",
+        lambda: (set(), _Cov("cisa-kev", "present", as_of="2026-06-10")),
+    )
+    monkeypatch.setattr(
+        check_module,
+        "fetch_epss_scores",
+        lambda cves: ({}, _Cov("first-epss", "present", as_of="2026-06-10")),
+    )
+
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+    res = _run_check(["--sbom", str(sbom)])
+
+    assert res.exit_code == 0, res.output
+    # The downgrade is announced, and it names the real reason.
+    assert "Warning: local matcher unavailable" in res.stderr, scenario
+    assert reason in res.stderr, scenario
+    assert "attempting an OSV.dev fallback" in res.stderr, scenario
+    assert "may use the network and results may differ" in res.stderr, scenario
+    # And OSV.dev really is what produced the result.
+    payload = json.loads(res.stdout)
+    assert payload["provenance"]["engine"] == "osv-online", scenario
+    assert payload["provenance"]["osv.dev"]["status"] == "present", scenario

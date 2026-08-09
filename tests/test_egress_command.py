@@ -1,4 +1,4 @@
-"""Tests for cra_evidence_cli.commands.egress (CliRunner, no network, no Syft)."""
+"""Tests for cra_evidence_cli.commands.egress without network or engine access."""
 
 from __future__ import annotations
 

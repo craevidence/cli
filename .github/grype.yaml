@@ -11,53 +11,13 @@
 # gets reviewed here instead of staying suppressed.
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
-# Derived from an unfiltered Grype 0.116.1 scan on 2026-07-31, most recently
-# re-run 2026-08-08 against DB schema v6.1.9 built 2026-08-08T06:22:53Z, on
+# Derived from an unfiltered Grype 0.116.1 scan, most recently re-run
+# 2026-08-09 against DB schema v6.1.9 built 2026-08-09T06:23:06Z, on
 # the image built from this Dockerfile with bases
-# dhi.io/python:3.14-dev@sha256:8cf3654af5a621a6ea05335d92b58050c3cf7b848203d9100461419d7fb7e79e
-# and dhi.io/python:3.14@sha256:78972b079543c036f44658c806041c27b9fb8d122f79bb00b1dfd3c1e35bc18a,
-# bundled Syft 1.50.0 and Grype craevidence-v0.116.1-p1.
-# Re-evaluate at every release and remove entries as soon as upstream ships
-# rebuilt binaries.
+# dhi.io/python:3.14-dev@sha256:4e6d70f6819594aa6210ba629695eaec7e56f72cd1ec0dca22e9cf0699ff01d7
+# and dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656018123b3eaf4f33f71ae902b7,
+# with CRA Evidence Grype engine craevidence-v0.116.1-p3. The exact gate
+# reported no fixed High or Critical vulnerabilities, so there are no waivers.
+# Re-evaluate at every release.
 
-ignore:
-  - vulnerability: GO-2026-4970
-    package:
-      name: stdlib
-      version: go1.26.3
-    reason: "High severity, fix ships in Go 1.26.5 and 1.25.12. The bundled Syft 1.50.0 and Grype 0.116.1 binaries are built with Go 1.26.3, and the latest upstream releases (checked 2026-07-31) are still built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: the os.Root symlink issue requires the binary to open attacker-controlled paths ending in a slash inside an os.Root; no known code path in this image does that. Remove when upstream ships binaries built with Go 1.26.5, 1.25.12, or later."
-  - vulnerability: GO-2026-5037
-    package:
-      name: stdlib
-      version: go1.26.3
-    reason: "High severity, fix ships in Go 1.26.4 and 1.25.11. The bundled Syft 1.50.0 and Grype 0.116.1 binaries are built with Go 1.26.3, and the latest upstream releases (checked 2026-07-31) are still built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: the advisory is quadratic work in crypto/x509 hostname verification when a TLS peer presents a certificate with a large DNS SAN list, an algorithmic-complexity denial of service. The tools in this image open TLS connections to endpoints the user configures (container registries, the vulnerability database host, release downloads), so a malicious or compromised endpoint could burn CPU and stall a scan; the advisory class does not include code execution or result tampering. Accepted until a rebuilt binary exists because the worst known outcome is a slow or failed scan run. Remove when upstream ships binaries built with Go 1.26.4, 1.25.11, or later."
-  - vulnerability: GHSA-x744-4wpc-v9h2
-    package:
-      name: github.com/docker/docker
-      version: v28.5.2+incompatible
-    reason: "High severity, library fix exists (29.3.1). Found in the pinned Grype 0.116.1 binary, which embeds docker/docker v28.5.2; no Grype release embeds the fixed library yet (checked 2026-07-31). Exposure: the advisory concerns Docker daemon authorization plugin handling; this image does not run a Docker daemon or expose Docker daemon endpoints. Remove when the pinned Grype embeds docker/docker 29.3.1 or later."
-  - vulnerability: CVE-2026-27145
-    package:
-      name: stdlib
-      version: go1.26.3
-    reason: "Same advisory as GO-2026-5037 above (vuln.go.dev lists CVE-2026-27145 as its alias); the vulnerability database now also reports the CVE identifier, which the GO-prefixed entry does not match. Same scope, same exposure, same removal trigger: remove when upstream ships binaries built with Go 1.26.4, 1.25.11, or later."
-  - vulnerability: CVE-2026-39822
-    package:
-      name: stdlib
-      version: go1.26.3
-    reason: "Same advisory as GO-2026-4970 above (vuln.go.dev lists CVE-2026-39822 as its alias); the vulnerability database now also reports the CVE identifier, which the GO-prefixed entry does not match. Same scope, same exposure, same removal trigger: remove when upstream ships binaries built with Go 1.26.5, 1.25.12, or later."
-  - vulnerability: GO-2026-5038
-    package:
-      name: stdlib
-      version: go1.26.3
-    reason: "High severity, fix ships in Go 1.26.4 and 1.25.11. Quadratic complexity in mime.WordDecoder.DecodeHeader: decoding a crafted MIME header with many invalid encoded-words burns CPU. The bundled Syft 1.50.0 and Grype 0.116.1 are the latest upstream releases (both 2026-07-28, checked 2026-08-01) and are built with Go 1.26.3, so no fixed binary exists to adopt. Exposure: these tools decode RFC 2047 encoded-words nowhere in their scanning paths; they read container images, SBOM documents, and vulnerability database payloads. The worst outcome in the advisory class is an algorithmic denial of service, so a hostile endpoint could at most stall a scan run. Remove when upstream ships binaries built with Go 1.26.4, 1.25.11, or later."
-  - vulnerability: CVE-2026-42504
-    package:
-      name: stdlib
-      version: go1.26.3
-    reason: "Same advisory as GO-2026-5038 above (vuln.go.dev lists CVE-2026-42504 as its alias). Same scope, same exposure, same removal trigger."
-  - vulnerability: GHSA-hc8v-wwc9-vgxm
-    package:
-      name: github.com/go-git/go-git/v5
-      version: v5.19.1
-    reason: "High severity, fixed in go-git 5.19.2. The bundled Syft 1.50.0 and Grype 0.116.1 are the latest upstream releases (both 2026-07-28, checked 2026-08-08), and both still embed 5.19.1, so no rebuilt upstream binary exists. Exposure: the advisory requires a filesystem-backed worktree write through an attacker-controlled symlink. Syft's production Worktree.Checkout call uses memory.NewStorage with go-billy memfs, which the advisory explicitly excludes; its filesystem-backed vcpkg repositories are opened for object resolution without a worktree write. Grype has no direct go-git import and inherits this code through Syft. Remove when the pinned Syft and Grype binaries both embed go-git 5.19.2 or later."
+ignore: []

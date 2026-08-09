@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from cra_evidence_cli.engine import (
+    EngineIdentity,
+    EngineInspection,
+    engine_installation_message,
+    inspect_engine,
+)
 from cra_evidence_cli.exceptions import ScanEngineUnavailable
 from cra_evidence_cli.local.models import CoverageSource, Finding, normalize_severity
 
@@ -20,24 +25,39 @@ class GrypeLocalScanner:
     def __init__(self, cache_dir: str | None = None, timeout: int = 300) -> None:
         self.cache_dir = cache_dir or os.getenv("GRYPE_DB_CACHE_DIR")
         self.timeout = timeout
-        self._path: str | None = None
+        self._inspection: EngineInspection | None = None
+
+    def _engine_inspection(self) -> EngineInspection:
+        if self._inspection is None:
+            self._inspection = inspect_engine()
+        return self._inspection
+
+    @property
+    def identity(self) -> EngineIdentity:
+        inspection = self._engine_inspection()
+        if inspection.identity is None:
+            raise ScanEngineUnavailable(engine_installation_message(inspection.reason))
+        return inspection.identity
 
     @property
     def path(self) -> str:
-        if self._path is None:
-            found = shutil.which("grype")
-            if not found:
-                msg = (
-                    "Grype is not installed; OSV.dev is used as a fallback over the network."
-                )
-                raise ScanEngineUnavailable(
-                    msg
-                )
-            self._path = found
-        return self._path
+        return self.identity.path
 
     def is_available(self) -> bool:
-        return shutil.which("grype") is not None
+        return self._engine_inspection().identity is not None
+
+    def unavailable_reason(self) -> str:
+        """Why no supported engine was used, or "" when one was.
+
+        Callers that fall back to OSV.dev print this so the downgrade is never
+        silent. Stock Grype, an unstamped build and an older CRA Evidence engine
+        without SBOM generation are all rejected here, and each has a distinct
+        reason.
+        """
+        inspection = self._engine_inspection()
+        if inspection.identity is not None:
+            return ""
+        return inspection.reason
 
     def is_db_available(self) -> bool:
         if not self.cache_dir:
@@ -52,18 +72,9 @@ class GrypeLocalScanner:
 
     def get_version(self) -> str:
         try:
-            result = subprocess.run(  # noqa: S603
-                [self.path, "version"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except Exception:
+            return self.identity.version
+        except ScanEngineUnavailable:
             return "unknown"
-        for line in result.stdout.splitlines():
-            if line.startswith("Version:"):
-                return line.split(":", 1)[1].strip()
-        return result.stdout.strip().splitlines()[0] if result.stdout.strip() else "unknown"
 
     def get_db_metadata(self) -> dict[str, Any] | None:
         env = {**os.environ, "GRYPE_DB_AUTO_UPDATE": "false"}

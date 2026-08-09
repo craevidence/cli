@@ -1,9 +1,9 @@
 """Release distribution acquirer.
 
-Fills a dist directory with the canonical bytes of the two distributions for
+Fills a dist directory with the canonical bytes of the distributions for
 package ``craevidence`` at ``VERSION``:
 
-  - craevidence-VERSION-py3-none-any.whl
+  - six Linux and macOS platform wheels carrying the promoted engine
   - craevidence-VERSION.tar.gz
 
 PyPI is immutable, so a file already listed there is canonical and must not be
@@ -15,10 +15,11 @@ the first available source, in order:
      does not need publishing.
   2. GitHub release asset with the exact filename, downloaded via ``gh``. The
      file needs publishing.
-  3. Build from the release source checkout with ``python -m build`` and
-     SOURCE_DATE_EPOCH pinned. Built files need publishing. The build runs at
-     most once, into a temporary directory, and only the still-missing files
-     are copied so previously acquired files are never overwritten.
+  3. Build from the release source checkout and the promoted ``/engine``
+     payload with SOURCE_DATE_EPOCH pinned. Built files need publishing. The
+     build runs at most once, into a temporary directory, and only the
+     still-missing files are copied so previously acquired files are never
+     overwritten.
 
 When the GITHUB_OUTPUT environment variable is set, the publish decision is
 written there as ``wheel_publish=true|false`` and ``sdist_publish=true|false``
@@ -29,7 +30,7 @@ asset is an error instead of a build: callers use this when the release source
 has no trusted anchor and freshly built bytes would be unverifiable.
 
 Run: python scripts/prepare_release_dist.py --version X.Y.Z --tag vX.Y.Z \
-    --release-src release-src --dist-dir dist
+    --release-src release-src --engine-dir engine --dist-dir dist
 """
 
 from __future__ import annotations
@@ -50,6 +51,14 @@ PACKAGE = "craevidence"
 PYPI_JSON_URL = "https://pypi.org/pypi/{package}/{version}/json"
 REQUEST_TIMEOUT = 30
 SOURCE_DATE_EPOCH = "946684800"
+WHEEL_PLATFORM_TAGS = (
+    "manylinux_2_17_x86_64",
+    "musllinux_1_2_x86_64",
+    "manylinux_2_17_aarch64",
+    "musllinux_1_2_aarch64",
+    "macosx_12_0_x86_64",
+    "macosx_12_0_arm64",
+)
 
 # Injection points so acquisition can be exercised without network or
 # subprocesses. Tests replace these per call; production uses the defaults.
@@ -61,11 +70,18 @@ class AcquisitionError(Exception):
     """A distribution could not be acquired or failed integrity checks."""
 
 
-def expected_filenames(version: str) -> tuple[str, str]:
-    """Return the wheel and sdist filenames for the given version."""
-    wheel = f"{PACKAGE}-{version}-py3-none-any.whl"
+def expected_wheel_filenames(version: str) -> tuple[str, ...]:
+    """Return all platform wheel filenames for the given version."""
+    return tuple(
+        f"{PACKAGE}-{version}-py3-none-{platform}.whl"
+        for platform in WHEEL_PLATFORM_TAGS
+    )
+
+
+def expected_filenames(version: str) -> tuple[str, ...]:
+    """Return all wheel and sdist filenames for the given version."""
     sdist = f"{PACKAGE}-{version}.tar.gz"
-    return wheel, sdist
+    return (*expected_wheel_filenames(version), sdist)
 
 
 def sha256_file(path: Path) -> str:
@@ -160,22 +176,36 @@ def download_release_asset(
 
 
 def build_distributions(
+    version: str,
     release_src: str | os.PathLike[str],
+    engine_dir: str | os.PathLike[str],
     out_dir: Path,
     runner=DEFAULT_RUNNER,
 ) -> None:
-    """Build the wheel and sdist from release_src into out_dir.
+    """Build the platform wheels and sdist into out_dir.
 
-    SOURCE_DATE_EPOCH is pinned so the wheel build is byte-reproducible.
+    SOURCE_DATE_EPOCH is pinned so the builds are byte-reproducible.
     """
     env = {**os.environ, "SOURCE_DATE_EPOCH": SOURCE_DATE_EPOCH}
+    builder = Path(__file__).with_name("build_engine_distributions.py")
     result = runner(  # noqa: S603
-        [sys.executable, "-m", "build", "--outdir", str(out_dir), str(release_src)],
+        [
+            sys.executable,
+            str(builder),
+            "--version",
+            version,
+            "--release-src",
+            str(release_src),
+            "--engine-dir",
+            str(engine_dir),
+            "--out-dir",
+            str(out_dir),
+        ],
         env=env,
         check=False,
     )
     if result.returncode != 0:
-        msg = f"python -m build failed with exit code {result.returncode}"
+        msg = f"engine distribution build failed with exit code {result.returncode}"
         raise AcquisitionError(msg)
 
 
@@ -185,11 +215,12 @@ def acquire(
     release_src: str | os.PathLike[str],
     dist_dir: str | os.PathLike[str],
     *,
+    engine_dir: str | os.PathLike[str] | None = None,
     opener=DEFAULT_OPENER,
     runner=DEFAULT_RUNNER,
     allow_build: bool = True,
 ) -> dict[str, dict]:
-    """Acquire both distributions into dist_dir and decide publishing.
+    """Acquire all distributions into dist_dir and decide publishing.
 
     Returns filename -> {"source": "pypi" | "release-asset" | "built",
     "publish": bool}. Raises AcquisitionError on any failure, including a
@@ -233,9 +264,12 @@ def acquire(
                 "and building is not allowed without a trusted source anchor"
             )
             raise AcquisitionError(msg)
+        if engine_dir is None:
+            msg = "the promoted engine payload is required to build platform wheels"
+            raise AcquisitionError(msg)
         with tempfile.TemporaryDirectory() as build_out:
             out = Path(build_out)
-            build_distributions(release_src, out, runner=runner)
+            build_distributions(version, release_src, engine_dir, out, runner=runner)
             for name in missing:
                 built = out / name
                 if not built.is_file():
@@ -256,12 +290,23 @@ def write_github_output(version: str, result: dict[str, dict]) -> None:
     output_path = os.environ.get("GITHUB_OUTPUT")
     if not output_path:
         return
-    wheel, sdist = expected_filenames(version)
+    wheels = expected_wheel_filenames(version)
+    sdist = f"{PACKAGE}-{version}.tar.gz"
+    wheel_publish_files = " ".join(
+        name for name in wheels if result[name]["publish"]
+    )
+    release_asset_files = " ".join(
+        name for name, info in result.items() if info["source"] == "release-asset"
+    )
+    wheel_sources = {result[name]["source"] for name in wheels}
+    wheel_source = next(iter(wheel_sources)) if len(wheel_sources) == 1 else "mixed"
     lines = (
-        f"wheel_publish={str(result[wheel]['publish']).lower()}\n"
+        f"wheel_publish={str(bool(wheel_publish_files)).lower()}\n"
         f"sdist_publish={str(result[sdist]['publish']).lower()}\n"
-        f"wheel_source={result[wheel]['source']}\n"
+        f"wheel_source={wheel_source}\n"
         f"sdist_source={result[sdist]['source']}\n"
+        f"wheel_publish_files={wheel_publish_files}\n"
+        f"release_asset_files={release_asset_files}\n"
     )
     with Path(output_path).open("a", encoding="utf-8") as handle:
         handle.write(lines)
@@ -279,9 +324,14 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Path to the release source checkout used if a build is needed.",
     )
     parser.add_argument(
+        "--engine-dir",
+        required=True,
+        help="Path to the promoted /engine payload used if a build is needed.",
+    )
+    parser.add_argument(
         "--dist-dir",
         default="dist",
-        help="Directory that receives the two distributions.",
+        help="Directory that receives the release distributions.",
     )
     parser.add_argument(
         "--no-build",
@@ -303,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
             args.tag,
             args.release_src,
             args.dist_dir,
+            engine_dir=args.engine_dir,
             allow_build=not args.no_build,
         )
     except AcquisitionError as error:

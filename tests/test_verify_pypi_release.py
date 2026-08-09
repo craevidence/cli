@@ -24,10 +24,9 @@ def _sha256(data: bytes) -> str:
 
 
 def _write_dist(dist_dir: Path, version: str) -> dict[str, bytes]:
-    wheel, sdist = vpr.expected_filenames(version)
     contents = {
-        wheel: b"wheel-bytes-for-" + version.encode(),
-        sdist: b"sdist-bytes-for-" + version.encode(),
+        name: b"distribution-bytes-for-" + name.encode()
+        for name in vpr.expected_filenames(version)
     }
     for name, data in contents.items():
         (dist_dir / name).write_bytes(data)
@@ -170,9 +169,15 @@ def _opener_with_provenance(
 
 
 def test_expected_filenames_exact_names():
-    wheel, sdist = vpr.expected_filenames("1.2.3")
-    assert wheel == "craevidence-1.2.3-py3-none-any.whl"
-    assert sdist == "craevidence-1.2.3.tar.gz"
+    assert vpr.expected_filenames("1.2.3") == (
+        "craevidence-1.2.3-py3-none-manylinux_2_17_x86_64.whl",
+        "craevidence-1.2.3-py3-none-musllinux_1_2_x86_64.whl",
+        "craevidence-1.2.3-py3-none-manylinux_2_17_aarch64.whl",
+        "craevidence-1.2.3-py3-none-musllinux_1_2_aarch64.whl",
+        "craevidence-1.2.3-py3-none-macosx_12_0_x86_64.whl",
+        "craevidence-1.2.3-py3-none-macosx_12_0_arm64.whl",
+        "craevidence-1.2.3.tar.gz",
+    )
 
 
 def test_verify_passes_on_match(tmp_path):
@@ -182,7 +187,7 @@ def test_verify_passes_on_match(tmp_path):
 
 def test_verify_raises_hash_mismatch_with_both_hashes(tmp_path):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     local_hash = _sha256(contents[wheel])
     data = _pypi_data(contents)
     wrong_hash = _sha256(b"different-wheel-bytes")
@@ -199,25 +204,21 @@ def test_verify_raises_hash_mismatch_with_both_hashes(tmp_path):
 
 def test_verify_raises_missing_on_pypi_when_sdist_absent(tmp_path):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, sdist = vpr.expected_filenames(VERSION)
-    data = {
-        "urls": [
-            {
-                "filename": wheel,
-                "digests": {"sha256": _sha256(contents[wheel])},
-                "url": "https://files.pythonhosted.org/wheel",
-            },
-        ],
-    }
+    *wheels, sdist = vpr.expected_filenames(VERSION)
+    data = _pypi_data({name: contents[name] for name in wheels})
     with pytest.raises(vpr.MissingOnPyPIError) as excinfo:
         vpr.verify(VERSION, tmp_path, data)
     assert sdist in str(excinfo.value)
 
 
 def test_verify_raises_when_local_sdist_missing(tmp_path):
-    wheel, sdist = vpr.expected_filenames(VERSION)
-    (tmp_path / wheel).write_bytes(b"only-the-wheel")
-    contents = {wheel: b"only-the-wheel", sdist: b"unused"}
+    *wheels, sdist = vpr.expected_filenames(VERSION)
+    contents = {
+        **{wheel: f"wheel:{wheel}".encode() for wheel in wheels},
+        sdist: b"unused",
+    }
+    for wheel in wheels:
+        (tmp_path / wheel).write_bytes(contents[wheel])
     with pytest.raises(vpr.VerificationError) as excinfo:
         vpr.verify(VERSION, tmp_path, _pypi_data(contents))
     error = excinfo.value
@@ -228,7 +229,7 @@ def test_verify_raises_when_local_sdist_missing(tmp_path):
 
 def test_verify_ignores_unrelated_dist_file(tmp_path):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     sidecar = tmp_path / f"{wheel}.publish.attestation"
     sidecar.write_bytes(b"unrelated sidecar content")
     assert vpr.verify(VERSION, tmp_path, _pypi_data(contents)) is None
@@ -236,7 +237,6 @@ def test_verify_ignores_unrelated_dist_file(tmp_path):
 
 def test_pypi_sha256_ignores_unrelated_filenames(tmp_path):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, sdist = vpr.expected_filenames(VERSION)
     data = _pypi_data(contents)
     data["urls"].append(
         {
@@ -246,7 +246,7 @@ def test_pypi_sha256_ignores_unrelated_filenames(tmp_path):
         },
     )
     result = vpr.pypi_sha256(data, VERSION)
-    assert set(result) == {wheel, sdist}
+    assert set(result) == set(vpr.expected_filenames(VERSION))
 
 
 def test_verify_rejects_unexpected_remote_distribution(tmp_path):
@@ -273,7 +273,7 @@ def test_verify_fails_fast_when_absent_wheel_hides_a_mismatched_sdist(tmp_path):
     # retryable missing-wheel error and never checked the sdist; verify must now
     # report the hash mismatch instead.
     _write_dist(tmp_path, VERSION)
-    _wheel, sdist = vpr.expected_filenames(VERSION)
+    sdist = vpr.expected_filenames(VERSION)[-1]
     data = {
         "urls": [
             {
@@ -289,16 +289,8 @@ def test_verify_fails_fast_when_absent_wheel_hides_a_mismatched_sdist(tmp_path):
 
 def test_main_retries_until_sdist_appears(tmp_path, monkeypatch):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
-    incomplete = {
-        "urls": [
-            {
-                "filename": wheel,
-                "digests": {"sha256": _sha256(contents[wheel])},
-                "url": "https://files.pythonhosted.org/wheel",
-            },
-        ],
-    }
+    *wheels, _sdist = vpr.expected_filenames(VERSION)
+    incomplete = _pypi_data({name: contents[name] for name in wheels})
 
     opener = _FakeOpener()
     opener.add(_version_url(VERSION), incomplete)
@@ -323,7 +315,7 @@ def test_main_retries_until_sdist_appears(tmp_path, monkeypatch):
 
 def test_main_fails_fast_on_hash_mismatch(tmp_path, monkeypatch):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     data = _pypi_data(contents)
     for entry in data["urls"]:
         if entry["filename"] == wheel:
@@ -355,7 +347,8 @@ def _run_main(tmp_path, monkeypatch, opener, extra_args: list[str] | None = None
 
 def test_main_succeeds_with_valid_provenance(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
+    sdist = vpr.expected_filenames(VERSION)[-1]
     opener = _opener_with_provenance(contents)
 
     exit_code, sleep_calls = _run_main(tmp_path, monkeypatch, opener)
@@ -370,7 +363,7 @@ def test_main_succeeds_with_valid_provenance(tmp_path, monkeypatch, capsys):
 
 def test_main_fails_fast_on_wrong_publisher_repository(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     opener = _opener_with_provenance(contents)
     opener.replace(
         _provenance_url(VERSION, wheel),
@@ -387,7 +380,7 @@ def test_main_fails_fast_on_wrong_publisher_repository(tmp_path, monkeypatch, ca
 
 def test_main_fails_fast_on_wrong_predicate_type(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     opener = _opener_with_provenance(contents)
     opener.replace(
         _provenance_url(VERSION, wheel),
@@ -406,7 +399,7 @@ def test_main_fails_fast_on_wrong_predicate_type(tmp_path, monkeypatch, capsys):
 
 def test_main_fails_fast_when_subject_bound_to_other_sha256(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     opener = _opener_with_provenance(contents)
     opener.replace(
         _provenance_url(VERSION, wheel),
@@ -421,7 +414,7 @@ def test_main_fails_fast_when_subject_bound_to_other_sha256(tmp_path, monkeypatc
 
 def test_main_retries_when_provenance_not_yet_available(tmp_path, monkeypatch):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     opener = _FakeOpener()
     opener.add(_version_url(VERSION), _pypi_data(contents))
     wheel_url = _provenance_url(VERSION, wheel)
@@ -461,7 +454,7 @@ def test_fetch_provenance_other_http_error_is_fatal():
 
 def test_main_accepts_expected_publisher_in_second_bundle(tmp_path, monkeypatch):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     opener = _opener_with_provenance(contents)
     payload = _provenance_payload(wheel, _sha256(contents[wheel]))
     other = _bundle(
@@ -478,7 +471,7 @@ def test_main_accepts_expected_publisher_in_second_bundle(tmp_path, monkeypatch)
 
 def test_main_accepts_publish_attestation_after_other_attestation(tmp_path, monkeypatch):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     opener = _opener_with_provenance(contents)
     other = _attestation(
         wheel,
@@ -496,7 +489,7 @@ def test_main_accepts_publish_attestation_after_other_attestation(tmp_path, monk
 
 def test_main_fails_fast_when_no_bundle_has_expected_publisher(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     opener = _opener_with_provenance(contents)
     sha = _sha256(contents[wheel])
     payload = {
@@ -576,7 +569,7 @@ def test_main_attestations_dir_passes_when_assets_match(tmp_path, monkeypatch):
 
 def test_main_attestations_dir_fails_on_non_matching_asset(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     assets = tmp_path / "assets"
     assets.mkdir()
     opener = _opener_with_provenance(contents)
@@ -597,7 +590,7 @@ def test_main_attestations_dir_fails_on_non_matching_asset(tmp_path, monkeypatch
 
 def test_main_attestations_dir_fails_on_missing_asset(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     assets = tmp_path / "assets"
     assets.mkdir()
     opener = _opener_with_provenance(contents)
@@ -617,7 +610,7 @@ def test_main_attestations_dir_fails_on_missing_asset(tmp_path, monkeypatch, cap
 
 def test_main_attestations_dir_fails_on_unparsable_asset(tmp_path, monkeypatch, capsys):
     contents = _write_dist(tmp_path, VERSION)
-    wheel, _sdist = vpr.expected_filenames(VERSION)
+    wheel = vpr.expected_filenames(VERSION)[0]
     assets = tmp_path / "assets"
     assets.mkdir()
     opener = _opener_with_provenance(contents)

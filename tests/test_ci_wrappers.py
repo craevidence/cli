@@ -120,9 +120,17 @@ def test_gitlab_component_pins_the_packaged_version():
     assert len(pinned_versions) == 2, "both templates must pin the CLI version"
     assert set(pinned_versions) == {project_version}
 
-    pinned_hashes = re.findall(r'CLI_WHEEL_SHA256="([a-f0-9]{64})"', component_text)
-    assert len(pinned_hashes) == 2, "both templates must pin the wheel checksum"
-    assert len(set(pinned_hashes)) == 1, "both templates must pin the same checksum"
+    for platform in (
+        "MANYLINUX_X86_64",
+        "MUSLLINUX_X86_64",
+        "MANYLINUX_AARCH64",
+        "MUSLLINUX_AARCH64",
+    ):
+        hashes = re.findall(
+            rf'CLI_WHEEL_SHA256_{platform}="([a-f0-9]{{64}})"', component_text
+        )
+        assert len(hashes) == 2, f"both templates must pin {platform}"
+        assert len(set(hashes)) == 1
 
 
 def test_package_version_matches_pyproject():
@@ -137,6 +145,58 @@ def test_package_version_matches_pyproject():
         r'^__version__ = "([^"]+)"', init_text, re.MULTILINE
     ).group(1)
     assert dunder_version == project_version
+
+
+def test_dockerfile_requires_the_engine_sbom_command():
+    dockerfile_text = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "grype sbom --help | grep -F 'grype sbom SOURCE'" in dockerfile_text
+    assert "grype sbom --help | grep -F -- '--offline'" in dockerfile_text
+
+
+def test_release_packaging_reuses_the_promoted_engine_artifact():
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    workflow = yaml.safe_load(workflow_text)
+    build_steps = workflow["jobs"]["build-and-sbom"]["steps"]
+    publish_steps = workflow["jobs"]["publish-pypi"]["steps"]
+    build_names = [step.get("name", "") for step in build_steps]
+    publish_names = [step.get("name", "") for step in publish_steps]
+
+    assert "Extract the promoted engine payload" in build_names
+    assert "Build and verify all engine distributions" in build_names
+    assert "Preserve the promoted engine payload for release packaging" in build_names
+    assert "Restore the promoted engine payload" in publish_names
+    assert "Bind the engine payload to the release source" in publish_names
+    assert "Verify the complete release distribution set" in publish_names
+    assert not any(
+        step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
+        for step in publish_steps
+    )
+
+    digest = "sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340"
+    assert workflow_text.count(digest) == 4
+    assert '"${payload}/IMAGE_DIGEST"' in workflow_text
+    assert "actual=$(cat engine/IMAGE_DIGEST)" in workflow_text
+    assert (
+        "python release-src/scripts/check_dist.py --dist-dir dist --engine-dir engine"
+        in workflow_text
+    )
+
+
+def test_all_engine_image_pins_use_the_dockerfile_digest():
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    dockerfile_text = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    digest_pattern = r"craevidence/grype-engine@(sha256:[a-f0-9]{64})"
+    dockerfile_digests = re.findall(digest_pattern, dockerfile_text)
+    workflow_digests = re.findall(digest_pattern, workflow_text)
+
+    assert len(dockerfile_digests) == 1
+    assert len(workflow_digests) == 4
+    assert set(workflow_digests) == set(dockerfile_digests)
 
 
 def test_v4_release_docs_use_the_v4_major_tag_before_release():

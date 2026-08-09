@@ -7,9 +7,9 @@ the sidecar is gone while PyPI has already accepted the attestation. PyPI
 serves accepted attestations through its integrity API, so the sidecar can
 be rebuilt from there.
 
-For package ``craevidence`` at ``VERSION`` the two distributions are exactly:
+For package ``craevidence`` at ``VERSION`` the distributions are exactly:
 
-  - craevidence-VERSION-py3-none-any.whl
+  - six Linux and macOS platform wheels carrying the promoted engine
   - craevidence-VERSION.tar.gz
 
 For each expected sidecar this script leaves existing files untouched,
@@ -48,6 +48,14 @@ STATUS_SKIPPED = "not on PyPI; skipping"
 # these on the module; production uses the standard library defaults.
 DEFAULT_OPENER = urllib.request.urlopen
 REQUEST_TIMEOUT = 30
+WHEEL_PLATFORM_TAGS = (
+    "manylinux_2_17_x86_64",
+    "musllinux_1_2_x86_64",
+    "manylinux_2_17_aarch64",
+    "musllinux_1_2_aarch64",
+    "macosx_12_0_x86_64",
+    "macosx_12_0_arm64",
+)
 
 
 class RecoveryError(Exception):
@@ -58,11 +66,14 @@ class ProvenanceNotAvailableError(RecoveryError):
     """The distribution or its provenance is not on PyPI (nothing to recover)."""
 
 
-def expected_filenames(version: str) -> tuple[str, str]:
-    """Return the wheel and sdist filenames for the given version."""
-    wheel = f"{PACKAGE}-{version}-py3-none-any.whl"
+def expected_filenames(version: str) -> tuple[str, ...]:
+    """Return all wheel and sdist filenames for the given version."""
+    wheels = tuple(
+        f"{PACKAGE}-{version}-py3-none-{platform}.whl"
+        for platform in WHEEL_PLATFORM_TAGS
+    )
     sdist = f"{PACKAGE}-{version}.tar.gz"
-    return wheel, sdist
+    return (*wheels, sdist)
 
 
 def fetch_provenance(

@@ -1,15 +1,15 @@
 """PyPI release verifier.
 
-Checks that the two expected distributions for a released version are served by
+Checks that all expected distributions for a released version are served by
 PyPI with a sha256 that matches the locally built files. For package
-``craevidence`` at ``VERSION`` the two distributions are exactly:
+``craevidence`` at ``VERSION`` the distributions are exactly:
 
-  - craevidence-VERSION-py3-none-any.whl
+  - six Linux and macOS platform wheels carrying the promoted engine
   - craevidence-VERSION.tar.gz
 
-Only those two names are considered locally: any other files in the local dist
+Only those names are considered locally: any other files in the local dist
 directory (for example publish sidecar files) are ignored. On PyPI the served
-set must be exactly those two distributions, so an unexpected distribution
+set must be exactly those distributions, so an unexpected distribution
 filename is a failure.
 
 This verifies availability, content integrity by sha256, and PyPI Trusted
@@ -54,6 +54,14 @@ DEFAULT_SLEEP = time.sleep
 FETCH_ATTEMPTS = 6
 RETRY_DELAY = 20
 REQUEST_TIMEOUT = 30
+WHEEL_PLATFORM_TAGS = (
+    "manylinux_2_17_x86_64",
+    "musllinux_1_2_x86_64",
+    "manylinux_2_17_aarch64",
+    "musllinux_1_2_aarch64",
+    "macosx_12_0_x86_64",
+    "macosx_12_0_arm64",
+)
 
 
 class VerificationError(Exception):
@@ -76,11 +84,14 @@ class ProvenanceNotAvailableError(MissingOnPyPIError):
     """A distribution's PyPI provenance is not yet published (retryable)."""
 
 
-def expected_filenames(version: str) -> tuple[str, str]:
-    """Return the wheel and sdist filenames for the given version."""
-    wheel = f"{PACKAGE}-{version}-py3-none-any.whl"
+def expected_filenames(version: str) -> tuple[str, ...]:
+    """Return all wheel and sdist filenames for the given version."""
+    wheels = tuple(
+        f"{PACKAGE}-{version}-py3-none-{platform}.whl"
+        for platform in WHEEL_PLATFORM_TAGS
+    )
     sdist = f"{PACKAGE}-{version}.tar.gz"
-    return wheel, sdist
+    return (*wheels, sdist)
 
 
 def _sha256_file(path: Path) -> str:
@@ -92,7 +103,7 @@ def _sha256_file(path: Path) -> str:
 
 
 def local_sha256(dist_dir: str | os.PathLike[str], version: str) -> dict[str, str]:
-    """Return sha256 for only the two expected files found in dist_dir.
+    """Return sha256 for only the expected files found in dist_dir.
 
     Raises VerificationError naming any expected file that is absent. Files in
     dist_dir other than the two expected names are never read.
@@ -120,7 +131,7 @@ def pypi_sha256(pypi_data: dict, version: str) -> dict[str, str]:
 
 
 def verify(version: str, dist_dir: str | os.PathLike[str], pypi_data: dict) -> None:
-    """Verify PyPI serves exactly the two expected distributions with matching bytes.
+    """Verify PyPI serves exactly the expected distributions with matching bytes.
 
     Raises VerificationError if a local file is missing or PyPI serves an
     unexpected distribution, HashMismatchError if a present distribution has a
@@ -131,7 +142,7 @@ def verify(version: str, dist_dir: str | os.PathLike[str], pypi_data: dict) -> N
     remote = pypi_sha256(pypi_data, version)
     expected = expected_filenames(version)
 
-    # PyPI must serve nothing beyond the two expected distributions for this
+    # PyPI must serve nothing beyond the expected distributions for this
     # version. Attestation sidecars are not listed as distributions, so this
     # stays strict without being tripped by them.
     remote_all = {
@@ -438,10 +449,10 @@ def main(argv: list[str] | None = None) -> int:
             sys.stderr.write(f"verification failed: {error}\n")
             return 1
         else:
-            wheel, sdist = expected_filenames(version)
+            names = expected_filenames(version)
             sys.stdout.write(
-                f"verified {PACKAGE} {version} on PyPI: {wheel} and {sdist} "
-                f"match local sha256 and carry matching Trusted Publishing provenance\n",
+                f"verified {PACKAGE} {version} on PyPI: {len(names)} distributions "
+                "match local sha256 and carry matching Trusted Publishing provenance\n",
             )
             return 0
     return 1

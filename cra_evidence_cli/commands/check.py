@@ -42,10 +42,10 @@ from cra_evidence_cli.local.vex import VexParseError, apply_vex, load_vex
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
     SBOMGenerationResult,
-    _get_syft_version,
     cleanup_generated_sbom,
     generate_sbom_from_directory,
     generate_sbom_from_image,
+    get_embedded_syft_version,
 )
 from cra_evidence_cli.sbomqs_check import run_sbomqs
 
@@ -482,8 +482,8 @@ def _run_local_check_on_sbom(
         except ScanEngineUnavailable as exc:
             reason = (str(exc).splitlines() or ["no detail"])[0][:200]
             click.echo(
-                f"Local matcher failed ({reason}); "
-                "querying OSV.dev over the network instead.",
+                f"Warning: local matcher failed ({reason}); attempting an OSV.dev "
+                "fallback. This may use the network and results may differ.",
                 err=True,
             )
             coverage.append(CoverageSource("grype-db", "unavailable", detail=str(exc)))
@@ -492,6 +492,16 @@ def _run_local_check_on_sbom(
             sources_consulted.add("osv.dev")
             engine = "osv-online"
     else:
+        # Never downgrade silently. Stock Grype, an unstamped build and an older
+        # CRA Evidence engine without SBOM generation are all rejected as product
+        # engines, and a user who has one of those installed would otherwise see
+        # no reason why the local matcher was skipped.
+        reason = (scanner.unavailable_reason().splitlines() or ["no detail"])[0][:200]
+        click.echo(
+            f"Warning: local matcher unavailable ({reason}); attempting an OSV.dev "
+            "fallback. This may use the network and results may differ.",
+            err=True,
+        )
         findings, source = OSVClient().query_components(components)
         coverage.append(source)
         sources_consulted.add("osv.dev")
@@ -549,7 +559,7 @@ def _run_local_check_on_sbom(
     assert_no_cra_pass(dimensions)
     provenance = {
         "engine": engine,
-        "syft_version": _format_syft_version(_get_syft_version()),
+        "syft_version": _format_syft_version(get_embedded_syft_version()),
         "sbom_path": str(sbom_path),
     }
     if quality is not None:
@@ -651,10 +661,10 @@ def _count_at_or_above(findings: list[Any], severity: str) -> int:
     return sum(1 for finding in findings if finding.severity_rank >= threshold)
 
 
-def _format_syft_version(version: tuple[int, int, int] | None) -> str:
+def _format_syft_version(version: str | None) -> str:
     if version is None:
         return "unavailable"
-    return ".".join(str(part) for part in version)
+    return version
 
 
 def _baseline_delta(path: Path | None, findings: list[Any]) -> dict[str, Any] | None:

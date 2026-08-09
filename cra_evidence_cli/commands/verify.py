@@ -141,7 +141,7 @@ def verify_run(
     fail_on_discrepancies: bool,
 ) -> None:
     """
-    Scan a directory with Syft and compare against the declared SBOM.
+    Scan a directory with the CRA Evidence engine and compare it with the declared SBOM.
 
     DIRECTORY is the path to the rootfs or source directory to scan.
 
@@ -158,7 +158,7 @@ def verify_run(
         validate_config(config)
         client = CRAEvidenceClient(config)
 
-        # Step A: Generate binary SBOM via Syft
+        # Step A: Generate the observed binary SBOM.
         err_console.print(f"[cyan]Scanning directory:[/cyan] {directory}")
         try:
             result = generate_sbom_from_directory(
