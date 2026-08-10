@@ -74,3 +74,10 @@ def ok_sql_parameterized(cur):
     uid = request.args.get("id")
     # ok: cra-python-taint-sql-inject
     cur.execute("SELECT * FROM users WHERE id = ?", (uid,))
+
+
+# Bad: the value is read with subscript access rather than get()
+def bad_subscript_args_to_query(cursor):
+    identifier = request.args["id"]
+    # ruleid: cra-python-taint-sql-inject
+    cursor.execute("SELECT * FROM items WHERE id = " + identifier)

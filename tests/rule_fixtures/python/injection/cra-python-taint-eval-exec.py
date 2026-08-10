@@ -79,3 +79,10 @@ def ok_request_no_eval():
     name = request.args.get("name")
     # ok: cra-python-taint-eval-exec
     return str(name)
+
+
+# Bad: the value is read with subscript access rather than get()
+def bad_subscript_args_to_eval():
+    expression = request.args["expr"]
+    # ruleid: cra-python-taint-eval-exec
+    eval(expression)

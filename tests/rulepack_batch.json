@@ -1,6 +1,6 @@
 {
   "files_scanned": 101,
-  "finding_count": 427,
+  "finding_count": 434,
   "findings": [
     {
       "end": [
@@ -4268,6 +4268,19 @@
     },
     {
       "end": [
+        83,
+        67
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        83,
+        5
+      ]
+    },
+    {
+      "end": [
         6,
         65
       ],
@@ -4736,6 +4749,32 @@
     },
     {
       "end": [
+        108,
+        40
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        108,
+        5
+      ]
+    },
+    {
+      "end": [
+        115,
+        40
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        115,
+        5
+      ]
+    },
+    {
+      "end": [
         12,
         20
       ],
@@ -4853,6 +4892,19 @@
     },
     {
       "end": [
+        88,
+        20
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        88,
+        10
+      ]
+    },
+    {
+      "end": [
         20,
         22
       ],
@@ -4940,6 +4992,19 @@
       "start": [
         69,
         17
+      ]
+    },
+    {
+      "end": [
+        83,
+        66
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        83,
+        20
       ]
     },
     {
@@ -5083,6 +5148,32 @@
       "start": [
         83,
         14
+      ]
+    },
+    {
+      "end": [
+        108,
+        27
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        108,
+        20
+      ]
+    },
+    {
+      "end": [
+        115,
+        27
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        115,
+        20
       ]
     },
     {
@@ -5631,15 +5722,15 @@
     "cra-python-jwt-decode-verify-disabled": 5,
     "cra-python-jwt-hardcoded-secret": 4,
     "cra-python-pickle-loads": 2,
-    "cra-python-sql-injection": 4,
+    "cra-python-sql-injection": 5,
     "cra-python-sqlalchemy-exec-driver-sql-interpolation": 5,
     "cra-python-sqlalchemy-literal-column-dynamic": 6,
     "cra-python-sqlalchemy-order-by-text-interpolation": 5,
     "cra-python-sqlalchemy-text-interpolation": 7,
-    "cra-python-subprocess-shell": 13,
-    "cra-python-taint-eval-exec": 9,
-    "cra-python-taint-sql-inject": 7,
-    "cra-python-taint-subprocess-shell": 11,
+    "cra-python-subprocess-shell": 15,
+    "cra-python-taint-eval-exec": 10,
+    "cra-python-taint-sql-inject": 8,
+    "cra-python-taint-subprocess-shell": 13,
     "cra-python-yaml-load": 3,
     "cra-rust-file-env-taint": 14,
     "cra-rust-jsonwebtoken-hardcoded-secret": 3,

@@ -41,6 +41,16 @@ rules:
       - pattern: flask.request.data
       - pattern: flask.request.headers.get(...)
       - pattern: flask.request.cookies.get(...)
+      - pattern: request.args[...]
+      - pattern: request.form[...]
+      - pattern: request.values[...]
+      - pattern: request.headers[...]
+      - pattern: request.cookies[...]
+      - pattern: flask.request.args[...]
+      - pattern: flask.request.form[...]
+      - pattern: flask.request.values[...]
+      - pattern: flask.request.headers[...]
+      - pattern: flask.request.cookies[...]
       - pattern: input(...)
     pattern-sinks:
       - patterns:

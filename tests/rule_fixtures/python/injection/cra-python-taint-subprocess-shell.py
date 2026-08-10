@@ -99,3 +99,17 @@ def ok_run_list():
 def ok_run_fixed_command():
     # ok: cra-python-taint-subprocess-shell
     subprocess.run(["echo", "hello"], shell=False)
+
+
+# Bad: the value is read with subscript access rather than get()
+def bad_subscript_args_to_shell():
+    command = request.args["cmd"]
+    # ruleid: cra-python-taint-subprocess-shell
+    subprocess.run(command, shell=True)
+
+
+# Bad: form subscript access
+def bad_subscript_form_to_shell():
+    command = request.form["cmd"]
+    # ruleid: cra-python-taint-subprocess-shell
+    subprocess.run(command, shell=True)
