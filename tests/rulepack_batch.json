@@ -1,6 +1,6 @@
 {
   "files_scanned": 101,
-  "finding_count": 425,
+  "finding_count": 427,
   "findings": [
     {
       "end": [
@@ -1923,6 +1923,32 @@
       "severity": "ERROR",
       "start": [
         87,
+        5
+      ]
+    },
+    {
+      "end": [
+        101,
+        24
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        101,
+        5
+      ]
+    },
+    {
+      "end": [
+        107,
+        54
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        107,
         5
       ]
     },
@@ -5564,7 +5590,7 @@
     "cra-java-weak-message-digest": 18,
     "cra-java-xxe-doctype-enabled": 4,
     "cra-javascript-eval": 3,
-    "cra-javascript-exec-injection": 13,
+    "cra-javascript-exec-injection": 15,
     "cra-php-command-superglobal": 8,
     "cra-php-curl-url-superglobal-taint": 4,
     "cra-php-echo-superglobal-taint": 3,

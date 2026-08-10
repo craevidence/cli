@@ -93,3 +93,16 @@ function okVarRequireExecFile(filename) {
     // ok: cra-javascript-exec-injection
     cp.execFile("ls", [filename], (err, stdout) => { console.log(stdout); });
 }
+
+// Bad: the function is taken off the module with a member access
+function badMemberAccessBinding(host) {
+    var run = require("child_process").exec;
+    // ruleid: cra-javascript-exec-injection
+    run("ping " + host);
+}
+
+// Bad: single-name ESM import rather than a pair
+function badSingleNameImportPlaceholder(host) {
+    // ruleid: cra-javascript-exec-injection
+    require("child_process").execSync("ping " + host);
+}

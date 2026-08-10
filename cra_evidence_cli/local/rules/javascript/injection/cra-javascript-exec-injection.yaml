@@ -76,6 +76,18 @@ rules:
               - pattern: execSync(`...${$VALUE}...`, ...)
           - pattern-either:
               - pattern-inside: |
+                  import { exec } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { exec } from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import { execSync } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { execSync } from "node:child_process";
+                  ...
+              - pattern-inside: |
                   const { exec, execSync } = require("child_process");
                   ...
               - pattern-inside: |
@@ -104,6 +116,18 @@ rules:
               - pattern: $EXEC($A + $B, ...)
               - pattern: $EXEC(`...${$VALUE}...`, ...)
           - pattern-either:
+              - pattern-inside: |
+                  $EXEC = require("child_process").exec;
+                  ...
+              - pattern-inside: |
+                  $EXEC = require("node:child_process").exec;
+                  ...
+              - pattern-inside: |
+                  $EXEC = require("child_process").execSync;
+                  ...
+              - pattern-inside: |
+                  $EXEC = require("node:child_process").execSync;
+                  ...
               - pattern-inside: |
                   const { exec: $EXEC } = require("child_process");
                   ...

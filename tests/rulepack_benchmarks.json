@@ -256,6 +256,45 @@
       },
       "promotion_ready": false,
       "promotion_blocker": "Recall evidence only. Juliet's non-vulnerable variants for this category often still call the same name generator and fix the problem with O_EXCL on the later open, so its safe cases are safe on a different axis than this rule reports on and cannot supply a precision denominator. The 36 skipped files are Windows variants that need Windows headers."
+    },
+    {
+      "name": "nist-juliet-csharp-cwe328",
+      "benchmark_type": "juliet-methods",
+      "source_type": "archive-preprocessed",
+      "directory": "juliet-csharp",
+      "repository": "https://samate.nist.gov/SARD/test-suites/110",
+      "archive_file": "juliet-csharp-1.3.zip",
+      "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
+      "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
+      "rules_subdir": "csharp/crypto",
+      "source_path": "src/testcases/CWE328_Reversible_One_Way_Hash",
+      "expected": {
+        "files_with_bad_finding": 34,
+        "findings_in_good_methods": 0,
+        "findings_not_attributed": 0
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "Strong for this rule: 34 of 34 vulnerable cases detected with no finding in a Good method. The suite covers only 3 of the 8 C# rule CWEs and its HTTP source idiom is System.Web rather than ASP.NET Core, so the other C# rules get no evidence from it."
+    },
+    {
+      "name": "codeql-rust-cwe295",
+      "benchmark_type": "codeql-markers",
+      "source_type": "git",
+      "directory": "codeql-rust",
+      "repository": "https://github.com/github/codeql.git",
+      "commit": "f3d78a4e0bcc60bcd11199bc6357d83379851872",
+      "license_note": "MIT, per the github/codeql repository LICENSE. Fixture text is reused as ground truth; the CodeQL engine is not run.",
+      "rules_subdir": "rust/tls",
+      "source_path": "rust/ql/test/query-tests/security/CWE-295",
+      "alert_query": "rust/disabled-certificate-check",
+      "expected": {
+        "alert_lines": 18,
+        "alert_lines_covered": 11,
+        "good_lines": 5,
+        "good_lines_reported": 0
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "All 10 alerts whose argument is the literal true are covered, with no finding on a good line. The 7 uncovered alerts pass a variable or const, which the rule does not resolve, the same non-literal boolean boundary the Go TLS rule has."
     }
   ]
 }

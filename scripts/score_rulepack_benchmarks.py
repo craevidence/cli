@@ -454,6 +454,96 @@ def _score_juliet_preprocessed(document: dict, preprocessed: int, skipped: int) 
     }
 
 
+CSHARP_METHOD_RE = re.compile(
+    r"^\s*(?:(?:public|private|protected|internal|static|override|virtual|sealed|new|async)\s+)+"
+    r"[\w\[\]<>,\.]+\s+(\w+)\s*\(",
+    re.MULTILINE,
+)
+
+
+def _score_juliet_methods(document: dict, method_re: re.Pattern[str]) -> dict:
+    """Score against Juliet's Bad and Good method naming.
+
+    Juliet C# ships no manifest. Its ground truth is the method name: a finding
+    inside a Bad method is a true positive and one inside a Good method is a
+    false positive.
+    """
+    files_with_bad_finding: set[str] = set()
+    in_good = 0
+    unattributed = 0
+    cache: dict[str, list[str]] = {}
+    for result in document.get("results") or []:
+        path = str(result["path"])
+        if path not in cache:
+            cache[path] = Path(path).read_text(
+                encoding="utf-8", errors="ignore"
+            ).splitlines()
+        lines = cache[path]
+        line = int(result["start"]["line"])
+        name = ""
+        for index in range(min(line, len(lines)) - 1, -1, -1):
+            match = method_re.match(lines[index])
+            if match:
+                name = match.group(1)
+                break
+        lowered = name.lower()
+        if lowered.startswith("bad"):
+            files_with_bad_finding.add(Path(path).name)
+        elif lowered.startswith("good"):
+            in_good += 1
+        else:
+            unattributed += 1
+    return {
+        "files_with_bad_finding": len(files_with_bad_finding),
+        "findings_in_good_methods": in_good,
+        "findings_not_attributed": unattributed,
+    }
+
+
+CODEQL_GOOD_RE = re.compile(r"//\s*good\b", re.IGNORECASE)
+# CodeQL marks its own known false negatives with MISSING. Those lines are not
+# alerts the corpus asserts, so they are not counted as expected detections.
+CODEQL_MISSING_RE = re.compile(r"\$\s*MISSING")
+
+
+def _score_codeql_markers(document: dict, source: Path, alert_query: str) -> dict:
+    """Score against CodeQL's inline alert and good markers.
+
+    A finding is credited to an alert when the alert line falls inside the
+    finding's own start..end source range. Proximity windows were rejected: our
+    rules often anchor at the start of a call chain while CodeQL anchors at the
+    method call, and a window either credits a neighbouring construct or lets one
+    finding absorb every remaining alert.
+    """
+    spans: dict[str, list[tuple[int, int]]] = {}
+    for result in document.get("results") or []:
+        name = Path(str(result["path"])).name
+        spans.setdefault(name, []).append(
+            (int(result["start"]["line"]), int(result["end"]["line"]))
+        )
+    alerts = covered = good_lines = good_hit = 0
+    for path in sorted(source.rglob("*")):
+        if not path.is_file() or path.name.endswith(".expected"):
+            continue
+        lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+        file_spans = spans.get(path.name, [])
+        for index, text in enumerate(lines, start=1):
+            if alert_query in text and not CODEQL_MISSING_RE.search(text):
+                alerts += 1
+                if any(start <= index <= end for start, end in file_spans):
+                    covered += 1
+            elif CODEQL_GOOD_RE.search(text):
+                good_lines += 1
+                if any(start <= index <= end for start, end in file_spans):
+                    good_hit += 1
+    return {
+        "alert_lines": alerts,
+        "alert_lines_covered": covered,
+        "good_lines": good_lines,
+        "good_lines_reported": good_hit,
+    }
+
+
 def _score_gosec(
     binary: Path,
     rules: Path,
@@ -561,7 +651,12 @@ def main() -> int:
             failures.append(f"{benchmark['name']}: no licence file or licence note")
             continue
         source_type = benchmark.get("source_type", "git")
-        if source_type == "git":
+        if source_type == "git" and benchmark.get("benchmark_type") == "codeql-markers":
+            # Fixture text is vendored rather than cloned: the CodeQL repository
+            # is far too large to check out for a handful of test files. The
+            # pinned commit records the provenance of that text.
+            pass
+        elif source_type == "git":
             actual_commit = _git_head(checkout)
             if actual_commit != benchmark["commit"]:
                 failures.append(
@@ -675,6 +770,35 @@ def main() -> int:
                 if _exact_findings(first, out) != _exact_findings(second, out):
                     failures.append(f"{benchmark['name']}: repeated findings differ")
                 actual = _score_juliet_preprocessed(first, done, skipped)
+        elif benchmark_type == "codeql-markers":
+            benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
+            source = checkout / str(benchmark["source_path"])
+            if not source.is_dir():
+                failures.append(f"{benchmark['name']}: source path missing: {source}")
+                continue
+            with tempfile.TemporaryDirectory() as neutral_root:
+                # Opengrep's built-in exclusions drop paths with a component
+                # named test or tests, which every CodeQL query-test path has.
+                neutral = Path(neutral_root) / "corpus"
+                shutil.copytree(source, neutral)
+                first = _scan(args.opengrep, benchmark_rules, neutral)
+                second = _scan(args.opengrep, benchmark_rules, neutral)
+                if _exact_findings(first, neutral) != _exact_findings(second, neutral):
+                    failures.append(f"{benchmark['name']}: repeated findings differ")
+                actual = _score_codeql_markers(
+                    first, neutral, str(benchmark["alert_query"])
+                )
+        elif benchmark_type == "juliet-methods":
+            benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
+            source = checkout / str(benchmark["source_path"])
+            if not source.is_dir():
+                failures.append(f"{benchmark['name']}: source path missing: {source}")
+                continue
+            first = _scan(args.opengrep, benchmark_rules, source)
+            second = _scan(args.opengrep, benchmark_rules, source)
+            if _exact_findings(first, source) != _exact_findings(second, source):
+                failures.append(f"{benchmark['name']}: repeated findings differ")
+            actual = _score_juliet_methods(first, CSHARP_METHOD_RE)
         elif benchmark_type == "gosec-samples":
             # Each benchmark states the rule subtree it is scored against. The
             # --rules default targets the Java corpora, so a Go benchmark that
@@ -730,6 +854,21 @@ def main() -> int:
                 f"{benchmark['name']}: "
                 f"{benchmark.get('promotion_blocker', 'not ready')}"
             )
+        if benchmark_type == "codeql-markers":
+            print(
+                f"{benchmark['name']}: "
+                f"{actual['alert_lines_covered']} of {actual['alert_lines']} alert lines covered, "
+                f"{actual['good_lines_reported']} of {actual['good_lines']} good lines reported"
+            )
+            continue
+        if benchmark_type == "juliet-methods":
+            print(
+                f"{benchmark['name']}: "
+                f"{actual['files_with_bad_finding']} files with a finding in a Bad method, "
+                f"{actual['findings_in_good_methods']} findings in Good methods, "
+                f"{actual['findings_not_attributed']} unattributed"
+            )
+            continue
         if benchmark_type == "juliet-preprocessed":
             print(
                 f"{benchmark['name']}: {actual['preprocessed_files']} preprocessed, "
