@@ -139,7 +139,16 @@ def _score(
     document: dict,
     cases: dict[str, tuple[int, bool]],
     rule_cwes: dict[str, set[int]],
+    cwe_aliases: dict[int, int] | None = None,
 ) -> dict:
+    """Score an OWASP-style corpus.
+
+    cwe_aliases maps a benchmark CWE onto the rule CWE that covers it, for the
+    case where a corpus labels a case with a class-level weakness while the rule
+    declares the precise child MITRE prefers for mapping. The relationship is
+    declared per benchmark so it stays visible rather than being hidden by
+    widening a rule's own CWE list.
+    """
     scanned = document.get("paths", {}).get("scanned") or []
     if not scanned:
         message = "benchmark scan evaluated zero files"
@@ -157,11 +166,13 @@ def _score(
         for rule_id, cwes in rule_cwes.items()
         if cwes & set(applicable_cwes)
     }
+    aliases = cwe_aliases or {}
     for rule_id, test_id, _, _ in _normalized_findings(document):
         if test_id not in cases:
             message = f"finding references unknown benchmark case: {test_id}"
             raise BenchmarkGateError(message)
         expected_cwe, _ = cases[test_id]
+        expected_cwe = aliases.get(expected_cwe, expected_cwe)
         finding_cwes = rule_cwes.get(rule_id, set())
         if expected_cwe not in finding_cwes:
             message = (
@@ -699,7 +710,24 @@ def main() -> int:
         if benchmark_type == "owasp-csv":
             source = checkout / benchmark["source_path"]
             cases = _expected_cases(checkout / benchmark["expected_results"])
-            rule_cwes = _rule_cwes(args.rules)
+            cwe_aliases = {
+                int(source): int(target)
+                for source, target in (benchmark.get("cwe_aliases") or {}).items()
+            }
+            if cwe_aliases:
+                cases = {
+                    name: (cwe_aliases.get(cwe, cwe), vulnerable)
+                    for name, (cwe, vulnerable) in cases.items()
+                }
+            # A benchmark states the rule subtree it is scored against. The
+            # --rules default targets the Java corpora, so a benchmark for
+            # another language that relied on it would silently score zero.
+            benchmark_rules = (
+                DEFAULT_RULES / str(benchmark["rules_subdir"])
+                if benchmark.get("rules_subdir")
+                else args.rules
+            )
+            rule_cwes = _rule_cwes(benchmark_rules)
             selected_cwes = sorted(
                 {cwe for values in rule_cwes.values() for cwe in values}
             )
@@ -714,13 +742,13 @@ def main() -> int:
                 )
             print(f"  applicable CWEs: {applicable_cwes}")
             print(f"  excluded benchmark CWEs: {excluded_cwes}")
-            first_document = _scan(args.opengrep, args.rules, source)
-            second_document = _scan(args.opengrep, args.rules, source)
+            first_document = _scan(args.opengrep, benchmark_rules, source)
+            second_document = _scan(args.opengrep, benchmark_rules, source)
             if _normalized_findings(first_document) != _normalized_findings(
                 second_document
             ):
                 failures.append(f"{benchmark['name']}: repeated findings differ")
-            actual = _score(first_document, cases, rule_cwes)
+            actual = _score(first_document, cases, rule_cwes, cwe_aliases)
         elif benchmark_type == "juliet-xml":
             source_root = checkout / str(benchmark["source_root"])
             sources = [source_root / path for path in benchmark["source_paths"]]

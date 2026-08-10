@@ -315,6 +315,304 @@
       },
       "promotion_ready": false,
       "promotion_blocker": "The 96 alert lines are the whole CodeQL command injection tree, which is dominated by sinks these rules never claimed: execa, cross-spawn, ssh2, opener, @actions/exec, promisified exec wrappers, and spawn or execFile argument arrays. 11 alert lines are inside the published scope of cra-javascript-exec-injection, exec or execSync resolved from child_process with the command built by concatenation or template interpolation, and all 11 are covered. Read the covered figure against that 11, not against 96. The tree carries no good-marked lines, so this benchmark measures recall only and gives no false positive signal."
+    },
+    {
+      "name": "owasp-benchmark-python",
+      "benchmark_type": "owasp-csv",
+      "source_type": "git",
+      "directory": "owasp-python",
+      "repository": "https://github.com/OWASP-Benchmark/BenchmarkPython.git",
+      "commit": "f1291485808b66e20ddb6b01b10dc71b3df8c8ba",
+      "license_file": "LICENSE",
+      "expected_results": "expectedresults-0.1.csv",
+      "source_path": "testcode",
+      "rules_subdir": "python",
+      "full_denominator": {
+        "cases": 1230,
+        "vulnerable_cases": 452,
+        "scored_cases": 473,
+        "scored_vulnerable_cases": 189,
+        "excluded_cases": 757,
+        "excluded_vulnerable_cases": 263,
+        "excluded_categories": {
+          "90": 16,
+          "328": 71,
+          "330": 99,
+          "501": 18,
+          "611": 8,
+          "643": 51
+        }
+      },
+      "expected": {
+        "files_scanned": 1230,
+        "engine_errors": 0,
+        "metrics_by_cwe": {
+          "22": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 65,
+            "tn": 103
+          },
+          "78": {
+            "tp": 7,
+            "fp": 7,
+            "fn": 6,
+            "tn": 0
+          },
+          "79": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 31,
+            "tn": 58
+          },
+          "89": {
+            "tp": 2,
+            "fp": 0,
+            "fn": 3,
+            "tn": 11
+          },
+          "95": {
+            "tp": 3,
+            "fp": 4,
+            "fn": 17,
+            "tn": 29
+          },
+          "502": {
+            "tp": 18,
+            "fp": 12,
+            "fn": 0,
+            "tn": 24
+          },
+          "601": {
+            "tp": 6,
+            "fp": 5,
+            "fn": 7,
+            "tn": 16
+          },
+          "614": {
+            "tp": 0,
+            "fp": 0,
+            "fn": 24,
+            "tn": 15
+          }
+        },
+        "metrics_by_rule": {
+          "cra-python-django-file-path-traversal": {
+            "22": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 65,
+              "tn": 103
+            }
+          },
+          "cra-python-django-format-html-interpolated": {
+            "79": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 31,
+              "tn": 58
+            }
+          },
+          "cra-python-django-httpresponse-html-taint": {
+            "79": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 31,
+              "tn": 58
+            }
+          },
+          "cra-python-django-mark-safe-request": {
+            "79": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 31,
+              "tn": 58
+            }
+          },
+          "cra-python-django-open-redirect": {
+            "601": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 13,
+              "tn": 21
+            }
+          },
+          "cra-python-django-queryset-extra-format": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-django-raw-sql-format": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-django-rawsql-expression": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-django-safe-filter-templatetag": {
+            "79": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 31,
+              "tn": 58
+            }
+          },
+          "cra-python-django-session-cookie-insecure": {
+            "614": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 24,
+              "tn": 15
+            }
+          },
+          "cra-python-django-signing-loads-untrusted": {
+            "502": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 18,
+              "tn": 36
+            }
+          },
+          "cra-python-flask-markup-untrusted": {
+            "79": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 31,
+              "tn": 58
+            }
+          },
+          "cra-python-flask-open-redirect": {
+            "601": {
+              "tp": 6,
+              "fp": 5,
+              "fn": 7,
+              "tn": 16
+            }
+          },
+          "cra-python-flask-send-file-path-traversal": {
+            "22": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 65,
+              "tn": 103
+            }
+          },
+          "cra-python-flask-session-cookie-insecure-false": {
+            "614": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 24,
+              "tn": 15
+            }
+          },
+          "cra-python-pickle-loads": {
+            "502": {
+              "tp": 13,
+              "fp": 7,
+              "fn": 5,
+              "tn": 29
+            }
+          },
+          "cra-python-sql-injection": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-sqlalchemy-exec-driver-sql-interpolation": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-sqlalchemy-literal-column-dynamic": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-sqlalchemy-order-by-text-interpolation": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-sqlalchemy-text-interpolation": {
+            "89": {
+              "tp": 0,
+              "fp": 0,
+              "fn": 5,
+              "tn": 11
+            }
+          },
+          "cra-python-subprocess-shell": {
+            "78": {
+              "tp": 7,
+              "fp": 7,
+              "fn": 6,
+              "tn": 0
+            }
+          },
+          "cra-python-taint-eval-exec": {
+            "95": {
+              "tp": 3,
+              "fp": 4,
+              "fn": 17,
+              "tn": 29
+            }
+          },
+          "cra-python-taint-sql-inject": {
+            "89": {
+              "tp": 2,
+              "fp": 0,
+              "fn": 3,
+              "tn": 11
+            }
+          },
+          "cra-python-taint-subprocess-shell": {
+            "78": {
+              "tp": 2,
+              "fp": 0,
+              "fn": 11,
+              "tn": 7
+            }
+          },
+          "cra-python-yaml-load": {
+            "502": {
+              "tp": 5,
+              "fp": 5,
+              "fn": 13,
+              "tn": 31
+            }
+          }
+        }
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "First external measurement of the default tier, and it does not support promotion. Three of the eight applicable CWEs score zero recall: path traversal 0 of 65, XSS 0 of 31, and insecure session cookie 0 of 24. Precision is between 43 and 60 percent for command injection, eval, deserialization and open redirect. Only deserialization reaches full recall, at 60 percent precision. The corpus carries no hardcoded secret, SSRF or Flask configuration cases, so those rules remain unmeasured.",
+      "cwe_aliases": {
+        "94": 95
+      },
+      "cwe_alias_note": "The corpus labels eval and exec injection cases CWE-94, a class-level weakness that MITRE 4.20 does not list as mappable. The rule declares CWE-95, the precise child. The alias records that relationship for scoring without weakening the rule's own mapping."
     }
   ]
 }
