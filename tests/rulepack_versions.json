@@ -48,5 +48,9 @@
   "2.13.0": {
     "rules": "161a63e5799fcdc63c592ef6de216a847baf3b0b7b26ea0d12f0665fb5e5d53d",
     "fixtures": "7b5450c57b52d855c6e028749e6b4fe91103723d8784c43c2e2ad43389a1a788"
+  },
+  "2.14.0": {
+    "rules": "66e9e76d43ce84c9deea2e7624cccf3ed93c0b253ceb35b298cfc4c73bd47b9b",
+    "fixtures": "7b5450c57b52d855c6e028749e6b4fe91103723d8784c43c2e2ad43389a1a788"
   }
 }

@@ -15,6 +15,12 @@ rules:
       category: security
       technology: [c, posix]
       confidence: VERY HIGH
+      scope: >
+        Reports a call to tmpnam, tempnam, or mktemp. The name generator alone
+        determines the finding; the flags used to open the resulting path are
+        not examined, so a call is reported even when the later open passes
+        O_EXCL. Names produced through a macro alias are matched only after the
+        preprocessor has run.
       license: MIT
       author: CRA Evidence
     languages: [c]

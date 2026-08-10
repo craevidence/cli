@@ -146,6 +146,25 @@ coverage.
 The command-line argument rules test both `char *argv[]` and `char **argv`.
 The C++ fixtures also test qualified and unqualified standard-library calls.
 
+The temporary filename rule was measured against the NIST Juliet C/C++ 1.3
+suite, CWE-377, archive SHA-256
+`ada9d7e1c323d283446df3f55bdee0d00bda1fed786785fe98764d58688f38eb`. Juliet
+routes its sink calls through macro aliases such as `#define MKTEMP mktemp`, so
+the rule reports nothing on the sources as shipped. After running the 146 files
+through the C preprocessor, 108 preprocess cleanly on Linux and the rule reports
+a finding in the vulnerable function of all 108, with no finding on a secure
+call. The remaining 38 are Windows variants that need Windows headers.
+
+This measurement is enforced. `tests/rulepack_benchmarks.json` pins the archive
+checksum and the expected counts, and the benchmark gate reruns the
+preprocessing and the scan on every invocation, so a rule change that loses a
+detection fails the gate rather than silently invalidating this paragraph.
+
+Read that number as recall only. Juliet's non-vulnerable variants for this
+category often still call the same name generator and fix the problem by adding
+O_EXCL to the later open, so the suite's safe cases are safe on a different axis
+than the one this rule reports on, and cannot supply a precision denominator.
+
 The engine does not evaluate preprocessor conditionals, so these rules report
 code that the compiler would discard. A `system(argv[1])` call inside `#if 0`
 or an `#ifdef` whose macro is never defined is reported the same as live code.

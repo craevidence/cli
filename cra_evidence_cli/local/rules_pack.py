@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-PACK_VERSION = "2.13.0"
+PACK_VERSION = "2.14.0"
 TESTED_OPENGREP_VERSION = "1.26.0"
 
 VALID_RULE_TIERS = frozenset({"default", "experimental"})

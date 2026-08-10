@@ -233,6 +233,29 @@
       "promotion_ready": false,
       "promotion_blocker": "Detection outside the rules' published scope is expected: G115 is general integer conversion while the rule covers parse-then-downcast, and G402 covers cipher suites and TLS versions the rule does not claim. The corpus supplies precision evidence and in-scope recall, not whole-rule recall.",
       "rules_subdir": "go"
+    },
+    {
+      "name": "nist-juliet-c-cwe377",
+      "benchmark_type": "juliet-preprocessed",
+      "source_type": "archive-preprocessed",
+      "directory": "juliet-c",
+      "repository": "https://samate.nist.gov/SARD/test-suites/112",
+      "archive_file": "juliet-c-cpp-1.3.zip",
+      "archive_sha256": "ada9d7e1c323d283446df3f55bdee0d00bda1fed786785fe98764d58688f38eb",
+      "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
+      "rules_subdir": "c/filesystem",
+      "source_path": "C/testcases/CWE377_Insecure_Temporary_File",
+      "support_path": "C/testcasesupport",
+      "file_glob": "*.c",
+      "expected": {
+        "preprocessed_files": 108,
+        "skipped_files": 36,
+        "files_with_bad_finding": 108,
+        "findings_in_good_on_insecure_call": 96,
+        "findings_in_good_on_secure_call": 0
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "Recall evidence only. Juliet's non-vulnerable variants for this category often still call the same name generator and fix the problem with O_EXCL on the later open, so its safe cases are safe on a different axis than this rule reports on and cannot supply a precision denominator. The 36 skipped files are Windows variants that need Windows headers."
     }
   ]
 }

@@ -372,6 +372,88 @@ def _gosec_cases(sample_file: Path) -> list[tuple[list[str], int]]:
     return cases
 
 
+JULIET_FUNC_RE = re.compile(
+    r"^(?:static\s+)?(?:void|int|char\s*\*)\s+(\w+)\s*\(", re.MULTILINE
+)
+JULIET_INSECURE_CALL_RE = re.compile(r"\b(mktemp|tmpnam|tempnam)\s*\(")
+
+
+def _enclosing_function(lines: list[str], line: int) -> str:
+    """Name of the function a 1-indexed source line sits in, or an empty string."""
+    for index in range(min(line, len(lines)) - 1, -1, -1):
+        match = JULIET_FUNC_RE.match(lines[index])
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _preprocess_juliet(
+    source_dir: Path, support_dir: Path, out_dir: Path, pattern: str
+) -> tuple[int, int]:
+    """Expand macros so aliased sink calls become matchable.
+
+    Juliet routes its sinks through identity macros such as `#define MKTEMP
+    mktemp`, which no syntactic rule can match as shipped. Windows-only variants
+    fail to preprocess on Linux and are counted separately rather than hidden.
+    """
+    compiler = shutil.which("gcc")
+    if compiler is None:
+        message = "gcc is required to preprocess this benchmark"
+        raise BenchmarkGateError(message)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    done = 0
+    skipped = 0
+    for source in sorted(source_dir.glob(pattern)):
+        target = out_dir / source.name
+        result = subprocess.run(  # noqa: S603
+            [compiler, "-E", "-P", "-I", str(support_dir), str(source), "-o", str(target)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode == 0 and target.is_file():
+            done += 1
+        else:
+            target.unlink(missing_ok=True)
+            skipped += 1
+    return done, skipped
+
+
+def _score_juliet_preprocessed(document: dict, preprocessed: int, skipped: int) -> dict:
+    """Score by Juliet's bad/good function naming, not by manifest line numbers.
+
+    Preprocessing shifts every line, so the shipped manifest offsets no longer
+    apply. The function name is stable across preprocessing and carries the same
+    ground truth.
+    """
+    files_with_bad_finding = set()
+    in_good_on_insecure_call = 0
+    in_good_on_secure_call = 0
+    cache: dict[str, list[str]] = {}
+    for result in document.get("results") or []:
+        path = str(result["path"])
+        if path not in cache:
+            cache[path] = Path(path).read_text(encoding="utf-8", errors="ignore").splitlines()
+        lines = cache[path]
+        line = int(result["start"]["line"])
+        name = _enclosing_function(lines, line)
+        text = lines[line - 1] if 0 < line <= len(lines) else ""
+        if "_bad" in name:
+            files_with_bad_finding.add(Path(path).name)
+        elif "good" in name.lower():
+            if JULIET_INSECURE_CALL_RE.search(text):
+                in_good_on_insecure_call += 1
+            else:
+                in_good_on_secure_call += 1
+    return {
+        "preprocessed_files": preprocessed,
+        "skipped_files": skipped,
+        "files_with_bad_finding": len(files_with_bad_finding),
+        "findings_in_good_on_insecure_call": in_good_on_insecure_call,
+        "findings_in_good_on_secure_call": in_good_on_secure_call,
+    }
+
+
 def _score_gosec(
     binary: Path,
     rules: Path,
@@ -471,8 +553,12 @@ def main() -> int:
         if not checkout.is_dir():
             failures.append(f"{benchmark['name']}: checkout is missing: {checkout}")
             continue
-        if not (checkout / benchmark["license_file"]).is_file():
+        license_file = benchmark.get("license_file")
+        if license_file and not (checkout / str(license_file)).is_file():
             failures.append(f"{benchmark['name']}: licence file is missing")
+            continue
+        if not license_file and not benchmark.get("license_note"):
+            failures.append(f"{benchmark['name']}: no licence file or licence note")
             continue
         source_type = benchmark.get("source_type", "git")
         if source_type == "git":
@@ -482,6 +568,11 @@ def main() -> int:
                     f"{benchmark['name']}: expected commit {benchmark['commit']}, "
                     f"found {actual_commit}"
                 )
+                continue
+        elif source_type == "archive-preprocessed":
+            archive = checkout / str(benchmark["archive_file"])
+            if not archive.is_file() or _sha256(archive) != benchmark["archive_sha256"]:
+                failures.append(f"{benchmark['name']}: archive identity mismatch")
                 continue
         elif source_type == "archive":
             archive = checkout / str(benchmark["archive_file"])
@@ -567,6 +658,23 @@ def main() -> int:
                 source_root / str(benchmark["manifest_file"]),
                 rule_cwes,
             )
+        elif benchmark_type == "juliet-preprocessed":
+            benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
+            source = checkout / str(benchmark["source_path"])
+            support = checkout / str(benchmark["support_path"])
+            if not source.is_dir() or not support.is_dir():
+                failures.append(f"{benchmark['name']}: source or support path missing")
+                continue
+            with tempfile.TemporaryDirectory() as work:
+                out = Path(work) / "preprocessed"
+                done, skipped = _preprocess_juliet(
+                    source, support, out, str(benchmark["file_glob"])
+                )
+                first = _scan(args.opengrep, benchmark_rules, out)
+                second = _scan(args.opengrep, benchmark_rules, out)
+                if _exact_findings(first, out) != _exact_findings(second, out):
+                    failures.append(f"{benchmark['name']}: repeated findings differ")
+                actual = _score_juliet_preprocessed(first, done, skipped)
         elif benchmark_type == "gosec-samples":
             # Each benchmark states the rule subtree it is scored against. The
             # --rules default targets the Java corpora, so a Go benchmark that
@@ -622,6 +730,21 @@ def main() -> int:
                 f"{benchmark['name']}: "
                 f"{benchmark.get('promotion_blocker', 'not ready')}"
             )
+        if benchmark_type == "juliet-preprocessed":
+            print(
+                f"{benchmark['name']}: {actual['preprocessed_files']} preprocessed, "
+                f"{actual['skipped_files']} skipped"
+            )
+            print(
+                f"  files with a finding in the vulnerable function: "
+                f"{actual['files_with_bad_finding']}"
+            )
+            print(
+                f"  findings in non-vulnerable functions: "
+                f"{actual['findings_in_good_on_insecure_call']} on an insecure call, "
+                f"{actual['findings_in_good_on_secure_call']} on a secure call"
+            )
+            continue
         if benchmark_type == "gosec-samples":
             print(f"{benchmark['name']}: {actual['cases_total']} cases")
             for gosec_rule, values in sorted(actual["by_rule"].items()):
