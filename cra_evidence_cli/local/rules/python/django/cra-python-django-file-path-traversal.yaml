@@ -10,6 +10,7 @@ rules:
     severity: ERROR
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
       owasp:
@@ -34,9 +35,8 @@ rules:
       - pattern: request.query_params[...]
     pattern-sanitizers:
       - pattern: os.path.basename(...)
-      - pattern: safe_join(...)
       - pattern: django.utils._os.safe_join(...)
-      - pattern: secure_filename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
     pattern-sinks:
       - patterns:
           - pattern-either:

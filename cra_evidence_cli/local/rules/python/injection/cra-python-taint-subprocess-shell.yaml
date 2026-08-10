@@ -2,13 +2,14 @@ rules:
   - id: cra-python-taint-subprocess-shell
     mode: taint
     message: >
-      Untrusted input flows into a subprocess call with shell=True. This
-      allows OS command injection. Pass arguments as a list and remove
-      shell=True, or sanitize the input strictly before constructing the
-      command string.
+      Untrusted input flows into a shell command through subprocess with
+      shell=True, os.system(), or os.popen(). This allows OS command injection.
+      Pass arguments as a list without a shell, or apply strict validation before
+      constructing the command string.
     severity: ERROR
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
       owasp:
@@ -21,6 +22,9 @@ rules:
         - python
         - flask
       confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: The remediation removes shell mode or applies application-specific validation before changing command structure.
       license: MIT
       author: CRA Evidence
     pattern-sources:
@@ -31,8 +35,18 @@ rules:
       - pattern: request.data
       - pattern: request.headers.get(...)
       - pattern: request.cookies.get(...)
+      - pattern: flask.request.args.get(...)
+      - pattern: flask.request.form.get(...)
+      - pattern: flask.request.values.get(...)
+      - pattern: flask.request.json
+      - pattern: flask.request.data
+      - pattern: flask.request.headers.get(...)
+      - pattern: flask.request.cookies.get(...)
       - pattern: input(...)
     pattern-sinks:
       - patterns:
-          - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+          - pattern-either:
+              - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+              - pattern: os.system($CMD)
+              - pattern: os.popen($CMD, ...)
           - focus-metavariable: $CMD

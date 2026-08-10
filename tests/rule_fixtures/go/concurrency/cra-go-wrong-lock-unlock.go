@@ -31,6 +31,14 @@ func badRLockRLock(mu *sync.RWMutex) {
 	defer mu.RLock()
 }
 
+func badLockRUnlockAfterStatement(mu *sync.RWMutex) {
+	// ruleid: cra-go-wrong-lock-unlock
+	mu.Lock()
+	value := 1
+	defer mu.RUnlock()
+	_ = value
+}
+
 // Safe: Lock() + defer Unlock() -- correct pair
 func okLockUnlock(mu *sync.Mutex) {
 	// ok: cra-go-wrong-lock-unlock

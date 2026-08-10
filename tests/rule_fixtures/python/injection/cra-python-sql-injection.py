@@ -24,6 +24,12 @@ def bad_sql_fstring(cur, username):
     cur.execute(f"SELECT * FROM users WHERE name = '{username}'")
 
 
+# Branch 4: string concatenation in execute()
+def bad_sql_concat(cur, username):
+    # ruleid: cra-python-sql-injection
+    cur.execute("SELECT * FROM users WHERE name = '" + username + "'")
+
+
 # Safe: parameterized query -- value passed as second argument
 def ok_sql_parameterized(cur, username):
     # ok: cra-python-sql-injection
@@ -34,3 +40,9 @@ def ok_sql_parameterized(cur, username):
 def ok_sql_literal(cur):
     # ok: cra-python-sql-injection
     cur.execute("SELECT COUNT(*) FROM users")
+
+
+# Safe: an f-string without interpolation is still a constant query
+def ok_sql_constant_fstring(cur):
+    # ok: cra-python-sql-injection
+    cur.execute(f"SELECT COUNT(*) FROM users")

@@ -209,8 +209,8 @@ craevidence code-check . \
   --upload
 ```
 
-`code-check` runs Opengrep locally and uploads SARIF findings only. Source code
-is not uploaded.
+`code-check` runs Opengrep locally and uploads sanitized SARIF finding metadata.
+Source code is not uploaded.
 
 ## `upload-sbom`
 

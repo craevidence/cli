@@ -1,0 +1,25 @@
+rules:
+  - id: cra-csharp-certificate-callback-accept-all
+    message: >
+      This certificate validation callback accepts every TLS certificate.
+      Remove the callback and use the platform certificate validation policy.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.servercertificatecustomvalidationcallback
+      category: security
+      technology: [csharp, dotnet, tls]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [csharp]
+    pattern-either:
+      - pattern: $HANDLER.ServerCertificateCustomValidationCallback = ($A, $B, $C, $D) => true
+      - pattern: ServicePointManager.ServerCertificateValidationCallback = ($A, $B, $C, $D) => true
+      - pattern: $HANDLER.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+      - pattern: $HANDLER.ServerCertificateCustomValidationCallback = ($A, $B, $C, $D) => { return true; }
+      - pattern: ServicePointManager.ServerCertificateValidationCallback = ($A, $B, $C, $D) => { return true; }

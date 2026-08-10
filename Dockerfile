@@ -61,6 +61,9 @@ ARG BASE_IMAGE=dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
 FROM ${BASE_IMAGE_BUILDER} AS builder
+ARG TARGETARCH
+ARG OPENGREP_VERSION=1.26.0
+ARG OPENGREP_COMMIT=1bef4ea4ff3264754132eec823b5b1d8cde3e4ee
 
 # Build-time environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -82,6 +85,11 @@ RUN set -eux; \
     grype version --output json; \
     grype sbom --help | grep -F 'grype sbom SOURCE' >/dev/null; \
     grype sbom --help | grep -F -- '--offline' >/dev/null
+
+# Fetch the official Opengrep binary by immutable release checksum. Release CI
+# additionally verifies the upstream Sigstore signature before publishing.
+RUN python -c 'import hashlib, json, os, pathlib, re, urllib.request; arch=os.environ["TARGETARCH"]; version=os.environ["OPENGREP_VERSION"]; commit=os.environ["OPENGREP_COMMIT"]; assets={"amd64":("opengrep_manylinux_x86","40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26"),"arm64":("opengrep_manylinux_aarch64","3042a3b1aa98fa93407b9d66a45ab1f179b5b367e76965f56afdbd2c038fb1fa")}; asset,expected=assets[arch]; target=pathlib.Path("/usr/local/bin/opengrep"); urllib.request.urlretrieve(f"https://github.com/opengrep/opengrep/releases/download/v{version}/{asset}", target); content=target.read_bytes(); actual=hashlib.sha256(content).hexdigest(); assert actual == expected, f"Opengrep SHA-256 mismatch: {actual}"; target.chmod(0o755); license_dir=pathlib.Path("/licenses/opengrep"); license_dir.mkdir(parents=True); urllib.request.urlretrieve(f"https://raw.githubusercontent.com/opengrep/opengrep/{commit}/LICENSE", license_dir / "LICENSE"); urllib.request.urlretrieve(f"https://raw.githubusercontent.com/opengrep/opengrep/{commit}/COPYRIGHT", license_dir / "COPYRIGHT"); libraries=sorted({match.group(0)[:-1].decode("ascii") for match in re.finditer(rb"(?:lib[A-Za-z0-9_+.-]+\.(?:so(?:\.[0-9.]+)?|dylib))\x00", content)}); assert libraries, f"no native dependencies found in {asset}"; (license_dir / "NATIVE-DEPENDENCIES.json").write_text(json.dumps({asset:libraries}, indent=2, sort_keys=True)+"\n", encoding="utf-8"); (license_dir / "NOTICE").write_text(f"This product includes Opengrep {version}, licensed under the GNU Lesser General Public License version 2.1. Source commit: {commit}. The upstream repository is https://github.com/opengrep/opengrep. The matching CRA Evidence CLI GitHub release includes opengrep-{version}-source.tar.gz with the pinned build-source modules. Upstream copyright notices and the native dependency inventory accompany this notice.\n", encoding="utf-8")'
+RUN opengrep --version | grep -F "${OPENGREP_VERSION}" >/dev/null
 
 # Create virtual environment for clean dependency isolation
 RUN python -m venv /opt/venv
@@ -127,16 +135,15 @@ ARG SECURITY_NO_SHELL="true"
 ARG SECURITY_NO_PACKAGE_MANAGER="true"
 
 # OCI Image Labels for CRA compliance and traceability.
-# org.opencontainers.image.licenses is "MIT AND Apache-2.0": MIT is the CLI's own
-# licence; Apache-2.0 covers the redistributed Grype binary and its embedded
-# Syft library. LICENSE and NOTICE are available at /licenses/grype/.
+# MIT is the CLI license, Apache-2.0 covers Grype and its embedded Syft library,
+# and LGPL-2.1-only covers the redistributed Opengrep executable.
 LABEL org.opencontainers.image.title="CRA Evidence CLI" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
       org.opencontainers.image.vendor="CRA Evidence" \
       org.opencontainers.image.url="https://craevidence.com" \
       org.opencontainers.image.documentation="https://github.com/craevidence/cli/tree/main/docs" \
       org.opencontainers.image.source="https://github.com/craevidence/cli" \
-      org.opencontainers.image.licenses="MIT AND Apache-2.0" \
+      org.opencontainers.image.licenses="MIT AND Apache-2.0 AND LGPL-2.1-only" \
       org.opencontainers.image.base.name="${BASE_IMAGE_NAME}" \
       org.opencontainers.image.python.version="3.14" \
       eu.cra.security.hardened="${SECURITY_HARDENED}" \
@@ -160,6 +167,7 @@ COPY --from=builder --chown=1001:1001 /opt/venv /opt/venv
 
 # Copy the local check engine binary
 COPY --from=builder /usr/local/bin/grype /usr/local/bin/grype
+COPY --from=builder /usr/local/bin/opengrep /usr/local/bin/opengrep
 
 # Third-party LICENSE and NOTICE files for redistributed Apache-2.0 binaries
 COPY --from=builder /licenses /licenses

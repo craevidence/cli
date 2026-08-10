@@ -6,6 +6,7 @@ gate (opengrep per-rule execution) lives in scripts/rulepack_gate.sh.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -20,11 +21,30 @@ REPO_ROOT = Path(__file__).parent.parent
 RULES_ROOT = REPO_ROOT / "cra_evidence_cli" / "local" / "rules"
 FIXTURES_ROOT = REPO_ROOT / "tests" / "rule_fixtures"
 VERSIONS_FILE = Path(__file__).parent / "rulepack_versions.json"
+CWE_POLICY_FILE = Path(__file__).parent / "cwe_mapping_policy.json"
 
 LANG_EXT = {
     "python": "py",
     "javascript": "js",
     "go": "go",
+    "java": "java",
+    "c": "c",
+    "cpp": "cpp",
+    "rust": "rs",
+    "php": "php",
+    "csharp": "cs",
+}
+
+EXPECTED_LANGUAGE_GROUPS = {
+    "python": {"python"},
+    "javascript": {"javascript", "typescript"},
+    "go": {"go"},
+    "java": {"java"},
+    "c": {"c"},
+    "cpp": {"cpp"},
+    "rust": {"rust"},
+    "php": {"php"},
+    "csharp": {"csharp"},
 }
 
 DETECTION_KEYS = frozenset(
@@ -44,8 +64,9 @@ DETECTION_KEYS = frozenset(
 
 VALID_SEVERITIES = {"ERROR", "WARNING", "INFO"}
 VALID_CONFIDENCES = {"LOW", "MEDIUM", "HIGH", "VERY HIGH"}
+VALID_TIERS = {"default", "experimental"}
 
-CWE_RE = re.compile(r"^CWE-\d+")
+CWE_RE = re.compile(r"^CWE-(\d+)")
 OWASP_RE = re.compile(r"^A\d{2}:\d{4}")
 URL_RE = re.compile(r"^https?://")
 
@@ -78,6 +99,95 @@ def _annotation_re(rule_id: str) -> tuple[re.Pattern, re.Pattern]:
     hit = re.compile(rf"(?:#|//)\s+ruleid:\s+{escaped}")
     ok = re.compile(rf"(?:#|//)\s+ok:\s+{escaped}")
     return hit, ok
+
+
+def _python_import_aliases(tree: ast.Module) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Import):
+            for item in node.names:
+                bound = item.asname or item.name.split(".", 1)[0]
+                aliases[bound] = item.name if item.asname else bound
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for item in node.names:
+                if item.name == "*":
+                    continue
+                aliases[item.asname or item.name] = f"{node.module}.{item.name}"
+    return aliases
+
+
+def _python_call_name(node: ast.expr, aliases: dict[str, str]) -> str | None:
+    parts: list[str] = []
+    current = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if not isinstance(current, ast.Name):
+        return None
+    parts.append(current.id)
+    parts.reverse()
+    parts[0] = aliases.get(parts[0], parts[0])
+    return ".".join(parts)
+
+
+def _python_calls_in_ok_functions(fixture: Path, rule_id: str) -> set[str]:
+    source = fixture.read_text(encoding="utf-8")
+    lines = source.splitlines()
+    tree = ast.parse(source, filename=str(fixture))
+    aliases = _python_import_aliases(tree)
+    calls: set[str] = set()
+    marker = f"ok: {rule_id}"
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        function_lines = lines[node.lineno - 1 : node.end_lineno]
+        if not any(marker in line for line in function_lines):
+            continue
+        for child in ast.walk(node):
+            if isinstance(child, ast.Call):
+                name = _python_call_name(child.func, aliases)
+                if name:
+                    calls.add(name)
+    return calls
+
+
+def _nested_strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [item for child in value.values() for item in _nested_strings(child)]
+    if isinstance(value, list):
+        return [item for child in value for item in _nested_strings(child)]
+    return []
+
+
+def _callable_sanitizers(rule: dict) -> set[str]:
+    callables: set[str] = set()
+    for value in _nested_strings(rule.get("pattern-sanitizers", [])):
+        match = re.match(r"^([A-Za-z_][A-Za-z0-9_.]*)\(", value.strip())
+        if match:
+            callables.add(match.group(1))
+    return callables
+
+
+_METHOD_CALL_RE = re.compile(r"\$[A-Za-z_][A-Za-z0-9_]*\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+_NAMESPACED_CALL_RE = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_]*::)+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+
+
+def _method_sanitizers(rule: dict) -> set[str]:
+    """Sanitizer names written as a method on a metavariable or a namespaced call.
+
+    _callable_sanitizers only matches a bare callable at the start of a pattern,
+    so it returns nothing for shapes such as ``$PATH.StartsWith(...)`` or
+    ``std::fs::canonicalize(...)``. Those rules would otherwise be exempt from
+    the fixture coverage checks below.
+    """
+    names: set[str] = set()
+    for value in _nested_strings(rule.get("pattern-sanitizers", [])):
+        names.update(_METHOD_CALL_RE.findall(value))
+        names.update(_NAMESPACED_CALL_RE.findall(value))
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +252,27 @@ def test_rule_structure(rule_path: Path) -> None:
             f"{rule_path}: cwe entry '{entry}' must match ^CWE-\\d+"
         )
 
+        cwe_id = CWE_RE.match(str(entry)).group(1)
+        policy = json.loads(CWE_POLICY_FILE.read_text(encoding="utf-8"))
+        known = policy["known_mapping_ids"]
+        assert cwe_id in known, (
+            f"{rule_path}: CWE-{cwe_id} is absent from {policy['source']}"
+        )
+        assert known[cwe_id]["kind"] == "weakness", (
+            f"{rule_path}: CWE-{cwe_id} is a {known[cwe_id]['kind']}, not a Weakness"
+        )
+        disallowed = policy["disallowed_mapping_ids"]
+        assert cwe_id not in disallowed, (
+            f"{rule_path}: CWE-{cwe_id} mapping is {disallowed.get(cwe_id)} "
+            f"in {policy['source']}"
+        )
+        review_entries = policy["allowed_with_review_mapping_ids"]
+        if review_entries.get(cwe_id) == "class":
+            assert cwe_id in policy["reviewed_current_mappings"], (
+                f"{rule_path}: CWE-{cwe_id} is a Class-level "
+                "Allowed-with-Review mapping without a recorded review"
+            )
+
     # owasp
     owasp = meta.get("owasp")
     assert isinstance(owasp, list), f"{rule_path}: metadata.owasp must be a list"
@@ -176,6 +307,11 @@ def test_rule_structure(rule_path: Path) -> None:
         f"got '{meta.get('confidence')}'"
     )
 
+    assert meta.get("tier") in VALID_TIERS, (
+        f"{rule_path}: metadata.tier must be one of {VALID_TIERS}, "
+        f"got '{meta.get('tier')}'"
+    )
+
     # license
     assert meta.get("license") == "MIT", (
         f"{rule_path}: metadata.license must be 'MIT', got '{meta.get('license')}'"
@@ -195,6 +331,32 @@ def test_taint_rule_has_sources_and_sinks(rule_path: Path) -> None:
         pytest.skip("not a taint rule")
     assert r.get("pattern-sources"), f"{rule_path}: taint rule missing pattern-sources"
     assert r.get("pattern-sinks"), f"{rule_path}: taint rule missing pattern-sinks"
+    if not r.get("pattern-sanitizers"):
+        analysis = (r.get("metadata") or {}).get("sanitizer_analysis")
+        assert isinstance(analysis, dict), (
+            f"{rule_path}: taint rule without sanitizers must declare "
+            "metadata.sanitizer_analysis"
+        )
+        assert analysis.get("status") == "not-modeled"
+        reason = str(analysis.get("reason") or "").strip()
+        assert len(reason) >= 40, (
+            f"{rule_path}: sanitizer_analysis.reason must explain the concrete "
+            "boundary, sink replacement, or required control flow"
+        )
+        assert len(reason.split()) >= 6
+
+
+def test_cwe_mapping_policy_is_pinned_and_complete() -> None:
+    policy = json.loads(CWE_POLICY_FILE.read_text(encoding="utf-8"))
+    assert policy["source"] == "MITRE CWE 4.20"
+    assert policy["catalog_date"] == "2026-04-30"
+    assert len(policy["known_mapping_ids"]) == 1450
+    disallowed = policy["disallowed_mapping_ids"]
+    assert len(disallowed) == 608
+    assert len(policy["allowed_with_review_mapping_ids"]) == 93
+    assert disallowed["16"] == "prohibited"
+    assert disallowed["200"] == "discouraged"
+    assert "99999" not in policy["known_mapping_ids"]
 
 
 # Go rules adapted from dgryski/semgrep-go (MIT). Each MUST carry provenance.
@@ -217,6 +379,80 @@ def test_dgryski_derived_rules_carry_origin_metadata() -> None:
             f"rule {rule_id!r} origin {origin!r} must reference dgryski/semgrep-go"
         )
         assert "MIT" in origin, f"rule {rule_id!r} origin {origin!r} must declare MIT"
+
+
+def test_every_supported_language_group_has_an_executable_rule() -> None:
+    counts = dict.fromkeys(EXPECTED_LANGUAGE_GROUPS, 0)
+    for rule_file in _rule_files:
+        language = rule_file.relative_to(RULES_ROOT).parts[0]
+        assert language in counts, f"unregistered language directory: {language}"
+        counts[language] += 1
+        declared = set(_load_rule(rule_file)["rules"][0]["languages"])
+        assert declared & EXPECTED_LANGUAGE_GROUPS[language], (
+            f"{rule_file}: languages {sorted(declared)} do not match directory {language}"
+        )
+
+    assert all(count >= 1 for count in counts.values()), counts
+
+
+def test_runtime_inventory_matches_rules_on_disk() -> None:
+    from cra_evidence_cli.local.rules_pack import inspect_rule_pack
+
+    inventory = inspect_rule_pack(RULES_ROOT)
+    assert set(inventory.rule_tiers) == set(_rule_ids)
+    assert len(inventory.rule_tiers) == len(_rule_files)
+
+    expected_default = sum(tier == "default" for tier in inventory.rule_tiers.values())
+    expected_experimental = sum(
+        tier == "experimental" for tier in inventory.rule_tiers.values()
+    )
+
+    default_count, experimental_count, language_counts = inventory.selection(
+        include_experimental=False
+    )
+    assert default_count == expected_default
+    assert experimental_count == 0
+    assert sum(language_counts.values()) == expected_default
+
+    default_count, experimental_count, language_counts = inventory.selection(
+        include_experimental=True
+    )
+    assert default_count == expected_default
+    assert experimental_count == expected_experimental
+    assert sum(language_counts.values()) == len(_rule_files)
+
+
+def test_runtime_inventory_supports_mixed_tiers_within_one_language(tmp_path) -> None:
+    from cra_evidence_cli.local.rules_pack import inspect_rule_pack
+
+    rules = tmp_path / "java" / "crypto"
+    rules.mkdir(parents=True)
+    for rule_id, tier in (("default-rule", "default"), ("experimental-rule", "experimental")):
+        (rules / f"{rule_id}.yaml").write_text(
+            "rules:\n"
+            f"  - id: {rule_id}\n"
+            "    languages: [java]\n"
+            "    metadata:\n"
+            f"      tier: {tier}\n",
+            encoding="utf-8",
+        )
+
+    inventory = inspect_rule_pack(tmp_path)
+    assert inventory.selection(include_experimental=False) == (1, 0, {"java": 1})
+    assert inventory.selection(include_experimental=True) == (1, 1, {"java": 2})
+
+
+def test_java_rules_publish_scope_and_limitations() -> None:
+    java_rules = [
+        _load_rule(path)["rules"][0]
+        for path in _rule_files
+        if path.relative_to(RULES_ROOT).parts[0] == "java"
+    ]
+    assert len(java_rules) == 8
+    for rule in java_rules:
+        metadata = rule["metadata"]
+        assert len(str(metadata.get("scope") or "").split()) >= 10, rule["id"]
+        assert len(str(metadata.get("limitations") or "").split()) >= 8, rule["id"]
 
 
 @pytest.mark.parametrize("rule_path", _rule_files, ids=_rule_ids)
@@ -244,6 +480,59 @@ def test_rule_fixture_exists(rule_path: Path) -> None:
     )
     assert ok_re.search(content), (
         f"{fixture}: no 'ok: {rule_id}' annotation found"
+    )
+
+
+def test_default_python_callable_sanitizers_have_safe_fixtures() -> None:
+    missing: list[str] = []
+    for rule_path in _rule_files:
+        if rule_path.relative_to(RULES_ROOT).parts[0] != "python":
+            continue
+        rule = _load_rule(rule_path)["rules"][0]
+        if (rule.get("metadata") or {}).get("tier") != "default":
+            continue
+        sanitizers = _callable_sanitizers(rule)
+        if not sanitizers:
+            continue
+        fixture = _fixture_path(rule_path)
+        assert fixture is not None
+        assert fixture.exists()
+        calls = _python_calls_in_ok_functions(fixture, rule["id"])
+        for sanitizer in sorted(sanitizers - calls):
+            missing.append(f"{rule['id']}: {sanitizer}")
+
+    assert not missing, "sanitizers without an annotated safe fixture:\n" + "\n".join(
+        missing
+    )
+
+
+def test_callable_sanitizers_have_nearby_safe_annotations() -> None:
+    missing: list[str] = []
+    for rule_path in _rule_files:
+        rule = _load_rule(rule_path)["rules"][0]
+        sanitizers = _callable_sanitizers(rule) | _method_sanitizers(rule)
+        if not sanitizers:
+            continue
+        fixture = _fixture_path(rule_path)
+        assert fixture is not None
+        assert fixture.exists()
+        lines = fixture.read_text(encoding="utf-8").splitlines()
+        marker = f"ok: {rule['id']}"
+        for sanitizer in sorted(sanitizers):
+            call_lines = [
+                index
+                for index, line in enumerate(lines)
+                if f"{sanitizer}(" in line
+            ]
+            covered = any(
+                any(marker in line for line in lines[max(0, index - 8) : index + 9])
+                for index in call_lines
+            )
+            if not covered:
+                missing.append(f"{rule['id']}: {sanitizer}")
+
+    assert not missing, "sanitizers without nearby safe annotations:\n" + "\n".join(
+        missing
     )
 
 
@@ -292,6 +581,18 @@ def _compute_pack_hash() -> str:
     return h.hexdigest()
 
 
+def _compute_fixture_hash() -> str:
+    """Stable hash over every rule fixture path and byte body."""
+    h = hashlib.sha256()
+    for fixture in sorted(path for path in FIXTURES_ROOT.rglob("*") if path.is_file()):
+        relative = fixture.relative_to(FIXTURES_ROOT).as_posix()
+        h.update(relative.encode())
+        h.update(b"\x00")
+        h.update(fixture.read_bytes())
+        h.update(b"\x00")
+    return h.hexdigest()
+
+
 def test_pack_version_bump() -> None:
     """A change to the rule set must be released under a new PACK_VERSION.
 
@@ -308,22 +609,42 @@ def test_pack_version_bump() -> None:
 
     ledger = json.loads(VERSIONS_FILE.read_text())
     computed = _compute_pack_hash()
+    computed_fixtures = _compute_fixture_hash()
 
     fix = (
         "\n\nTo fix: bump PACK_VERSION in cra_evidence_cli/local/rules_pack.py"
         " and add an entry to tests/rulepack_versions.json:"
-        f'\n    "<new PACK_VERSION>": "{computed}"\n'
+        f'\n    "<new PACK_VERSION>": {{"rules": "{computed}", '
+        f'"fixtures": "{computed_fixtures}"}}\n'
     )
 
     assert PACK_VERSION in ledger, (
         f"PACK_VERSION {PACK_VERSION!r} has no entry in {VERSIONS_FILE.name}." + fix
     )
-    assert ledger[PACK_VERSION] == computed, (
-        f"\n  Version {PACK_VERSION} recorded hash: {ledger[PACK_VERSION]}"
+    current_entry = ledger[PACK_VERSION]
+    assert isinstance(current_entry, dict), (
+        f"PACK_VERSION {PACK_VERSION!r} must record both rules and fixtures"
+    )
+    assert current_entry.get("rules") == computed, (
+        f"\n  Version {PACK_VERSION} recorded hash: {current_entry.get('rules')}"
         f"\n  Current rule-set hash            : {computed}"
         "\n  The rule set changed under an unchanged PACK_VERSION." + fix
     )
-    reused = [v for v, h in ledger.items() if h == computed and v != PACK_VERSION]
+    assert current_entry.get("fixtures") == computed_fixtures, (
+        f"\n  Version {PACK_VERSION} recorded fixture hash: "
+        f"{current_entry.get('fixtures')}"
+        f"\n  Current fixture hash                  : {computed_fixtures}"
+        "\n  Rule evidence changed under an unchanged PACK_VERSION." + fix
+    )
+    reused = [
+        version
+        for version, entry in ledger.items()
+        if version != PACK_VERSION
+        and (
+            entry == computed
+            or (isinstance(entry, dict) and entry.get("rules") == computed)
+        )
+    ]
     assert not reused, (
         f"The current rule set is already recorded under version(s) {reused}; "
         f"do not assign it a second version ({PACK_VERSION})."

@@ -7,6 +7,16 @@ def bad_yaml_load(data: str):
     return yaml.load(data)
 
 
+def bad_yaml_explicit_loader(data: str):
+    # ruleid: cra-python-yaml-load
+    return yaml.load(data, Loader=yaml.Loader)
+
+
+def bad_yaml_explicit_unsafe_loader(data: str):
+    # ruleid: cra-python-yaml-load
+    return yaml.load(data, Loader=yaml.UnsafeLoader)
+
+
 # Safe: yaml.safe_load restricts to basic types
 def ok_yaml_safe_load(data: str):
     # ok: cra-python-yaml-load

@@ -10,6 +10,7 @@ rules:
     severity: ERROR
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-22: Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')"
       owasp:
@@ -32,10 +33,14 @@ rules:
       - pattern: request.json
       - pattern: request.view_args
       - pattern: request.path
+      - pattern: flask.request.args
+      - pattern: flask.request.form
+      - pattern: flask.request.values
+      - pattern: flask.request.json
+      - pattern: flask.request.view_args
+      - pattern: flask.request.path
     pattern-sanitizers:
-      - pattern: safe_join(...)
       - pattern: werkzeug.utils.safe_join(...)
-      - pattern: secure_filename(...)
       - pattern: werkzeug.utils.secure_filename(...)
     pattern-sinks:
       - patterns:

@@ -8,6 +8,7 @@ rules:
     severity: ERROR
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
       owasp:
@@ -20,6 +21,9 @@ rules:
         - python
         - flask
       confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Numeric conversion cannot be identified safely when Python names can be rebound; use parameterized queries.
       license: MIT
       author: CRA Evidence
     pattern-sources:
@@ -30,10 +34,14 @@ rules:
       - pattern: request.data
       - pattern: request.headers.get(...)
       - pattern: request.cookies.get(...)
+      - pattern: flask.request.args.get(...)
+      - pattern: flask.request.form.get(...)
+      - pattern: flask.request.values.get(...)
+      - pattern: flask.request.json
+      - pattern: flask.request.data
+      - pattern: flask.request.headers.get(...)
+      - pattern: flask.request.cookies.get(...)
       - pattern: input(...)
-    pattern-sanitizers:
-      - pattern: int(...)
-      - pattern: float(...)
     pattern-sinks:
       - patterns:
           - pattern: $CUR.execute($QUERY)

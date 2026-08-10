@@ -1,0 +1,47 @@
+rules:
+  - id: cra-php-file-superglobal-taint
+    message: >
+      HTTP request data reaches a local filesystem operation. Resolve the value
+      beneath a fixed base directory, canonicalize it, and reject paths outside
+      the base.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://www.php.net/manual/en/function.realpath.php
+      category: security
+      technology: [php, filesystem]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Safe containment requires canonicalization plus a checked control-flow branch, not basename alone.
+      license: MIT
+      author: CRA Evidence
+    languages: [php]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: fopen($PATH, ...)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: readfile($PATH, ...)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: unlink($PATH, ...)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: file_get_contents($PATH, ...)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: file_put_contents($PATH, ...)
+              - focus-metavariable: $PATH

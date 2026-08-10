@@ -9,6 +9,7 @@ rules:
     severity: ERROR
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-79: Improper Neutralization of Input During Web Page Generation ('Cross-site Scripting')"
       owasp:
@@ -35,11 +36,10 @@ rules:
       - pattern: request.META[...]
       - pattern: $F.cleaned_data
     pattern-sanitizers:
-      - pattern: escape(...)
       - pattern: html.escape(...)
       - pattern: django.utils.html.escape(...)
-      - pattern: escapejs(...)
-      - pattern: format_html($FMT, $ARG, ...)
+      - pattern: django.utils.html.escapejs(...)
+      - pattern: django.utils.html.format_html($FMT, $ARG, ...)
     pattern-sinks:
       - patterns:
           - pattern-either:

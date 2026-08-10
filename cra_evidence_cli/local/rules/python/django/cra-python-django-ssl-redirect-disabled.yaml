@@ -8,6 +8,7 @@ rules:
     severity: INFO
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-319: Cleartext Transmission of Sensitive Information"
       owasp:

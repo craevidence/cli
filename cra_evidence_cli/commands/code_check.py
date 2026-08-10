@@ -9,7 +9,11 @@ default (exit 0 even when findings are reported); pass --fail-on to gate CI
 from __future__ import annotations
 
 import asyncio
+import copy
+import fnmatch
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,7 +23,7 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.exceptions import CRAEvidenceError
 from cra_evidence_cli.local.disclaimer import advisory_block
-from cra_evidence_cli.local.rules_pack import PACK_VERSION
+from cra_evidence_cli.local.rules_pack import PACK_VERSION, inspect_rule_pack
 from cra_evidence_cli.local.sast_scanner import (
     OPENGREP_INSTALL_HINT,
     SASTReport,
@@ -29,6 +33,7 @@ from cra_evidence_cli.local.sast_scanner import (
 from cra_evidence_cli.repo_config import resolve_identity
 
 _SAST_EXIT_CODE = 27
+_SAST_DEGRADED_EXIT_CODE = 29
 
 _BUNDLED_RULES = Path(__file__).parent.parent / "local" / "rules"
 
@@ -40,8 +45,272 @@ _SCOPE_NOTE = (
 _HONEST_NOTE = (
     "Findings are potential weaknesses to review, not a determination. "
     "This is not an audit; a clean result does not prove the absence of "
-    "vulnerabilities. Code is never sent to CRA Evidence unless --upload is passed."
+    "vulnerabilities. Source code is not uploaded. With --upload, only sanitized "
+    "finding metadata is sent to CRA Evidence."
 )
+
+_DEFAULT_ZERO_FILES_REASON = (
+    "No files matched the enabled default rules. Experimental rules for Go, "
+    "JavaScript, TypeScript, Java, C, C++, Rust, PHP, and C# are disabled; use "
+    "--include-experimental to enable them."
+)
+
+_EXPERIMENTAL_EXTENSIONS = frozenset(
+    {
+        ".go",
+        ".js",
+        ".jsx",
+        ".ts",
+        ".tsx",
+        ".mjs",
+        ".cjs",
+        ".mts",
+        ".cts",
+        ".java",
+        ".c",
+        ".h",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".hpp",
+        ".rs",
+        ".php",
+        ".cs",
+    }
+)
+_IGNORED_DIRECTORY_NAMES = frozenset(
+    {
+        "tests",
+        "test",
+        "__tests__",
+        "vendor",
+        "node_modules",
+        ".git",
+        ".venv",
+        "venv",
+        "dist",
+        "build",
+    }
+)
+
+_EXTENSION_LANGUAGE_GROUPS = {
+    ".py": ("Python", ("python",)),
+    ".go": ("Go", ("go",)),
+    ".js": ("JavaScript", ("javascript",)),
+    ".jsx": ("JavaScript", ("javascript",)),
+    ".mjs": ("JavaScript", ("javascript",)),
+    ".cjs": ("JavaScript", ("javascript",)),
+    ".ts": ("TypeScript", ("javascript",)),
+    ".tsx": ("TypeScript", ("javascript",)),
+    ".mts": ("TypeScript", ("javascript",)),
+    ".cts": ("TypeScript", ("javascript",)),
+    ".java": ("Java", ("java",)),
+    ".c": ("C", ("c",)),
+    ".h": ("C/C++", ("c", "cpp")),
+    ".cc": ("C++", ("cpp",)),
+    ".cpp": ("C++", ("cpp",)),
+    ".cxx": ("C++", ("cpp",)),
+    ".hpp": ("C++", ("cpp",)),
+    ".rs": ("Rust", ("rust",)),
+    ".php": ("PHP", ("php",)),
+    ".cs": ("C#", ("csharp",)),
+}
+
+
+def _code_advisory_block() -> dict:
+    return {**advisory_block(), "code_check": _HONEST_NOTE}
+
+
+def _has_experimental_source(path: Path) -> bool:
+    candidates = [path] if path.is_file() else path.rglob("*")
+    try:
+        for candidate in candidates:
+            if not candidate.is_file():
+                continue
+            try:
+                relative_parts = candidate.relative_to(path).parts if path.is_dir() else ()
+            except ValueError:
+                relative_parts = candidate.parts
+            if _IGNORED_DIRECTORY_NAMES.intersection(relative_parts):
+                continue
+            if candidate.suffix.lower() in _EXPERIMENTAL_EXTENSIONS:
+                return True
+    except OSError:
+        return False
+    return False
+
+
+def _git_visible_files(path: Path) -> list[Path] | None:
+    """Return tracked and non-ignored untracked files when Git can define scope."""
+    git = shutil.which("git")
+    if git is None:
+        return None
+    base = path if path.is_dir() else path.parent
+    try:
+        root_result = subprocess.run(  # noqa: S603
+            [git, "-C", str(base), "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if root_result.returncode != 0:
+        return None
+    root = Path(root_result.stdout.strip()).resolve()
+    target = path.resolve()
+    try:
+        pathspec = target.relative_to(root).as_posix()
+    except ValueError:
+        return None
+    try:
+        list_result = subprocess.run(  # noqa: S603
+            [
+                git,
+                "-C",
+                str(root),
+                "ls-files",
+                "-co",
+                "--exclude-standard",
+                "--",
+                pathspec,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if list_result.returncode != 0:
+        return None
+    return [root / line for line in list_result.stdout.splitlines() if line]
+
+
+def _matches_explicit_exclude(relative: Path, excludes: tuple[str, ...]) -> bool:
+    value = relative.as_posix()
+    for pattern in excludes:
+        normalized = pattern.removeprefix("./").rstrip("/")
+        if not normalized:
+            continue
+        if (
+            fnmatch.fnmatch(value, normalized)
+            or fnmatch.fnmatch(relative.name, normalized)
+            or normalized in relative.parts
+        ):
+            return True
+    return False
+
+
+def _visible_source_files(path: Path, excludes: tuple[str, ...]) -> list[Path]:
+    if path.is_file():
+        candidates = [path.resolve()]
+        root = path.parent.resolve()
+    else:
+        root = path.resolve()
+        candidates = _git_visible_files(path)
+        if candidates is None:
+            candidates = list(path.rglob("*"))
+
+    visible: list[Path] = []
+    for candidate in candidates:
+        if candidate.is_symlink() or not candidate.is_file():
+            continue
+        try:
+            relative = candidate.resolve().relative_to(root)
+        except ValueError:
+            continue
+        if _IGNORED_DIRECTORY_NAMES.intersection(relative.parts[:-1]):
+            continue
+        if _matches_explicit_exclude(relative, excludes):
+            continue
+        if candidate.suffix.lower() in _EXTENSION_LANGUAGE_GROUPS:
+            visible.append(candidate.resolve())
+    return sorted(set(visible))
+
+
+def _unanalysed_source_files(
+    path: Path,
+    report: SASTReport,
+    enabled_language_groups: set[str],
+    excludes: tuple[str, ...],
+) -> list[dict]:
+    scanned: set[Path] = set()
+    for raw in report.scanned_paths:
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = Path.cwd() / candidate
+        scanned.add(candidate.resolve())
+
+    root = path.resolve() if path.is_dir() else path.parent.resolve()
+    missing: list[dict] = []
+    for candidate in _visible_source_files(path, excludes):
+        if candidate in scanned:
+            continue
+        language, groups = _EXTENSION_LANGUAGE_GROUPS[candidate.suffix.lower()]
+        reason = (
+            "engine_not_selected"
+            if enabled_language_groups.intersection(groups)
+            else "no_enabled_rules"
+        )
+        missing.append(
+            {
+                "path": candidate.relative_to(root).as_posix(),
+                "language": language,
+                "reason": reason,
+            }
+        )
+    return missing
+
+
+def _unanalysed_language_counts(report: SASTReport) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in report.unanalysed_files:
+        language = str(item["language"])
+        counts[language] = counts.get(language, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _coverage_degraded(report: SASTReport) -> bool:
+    return bool(
+        not report.scan_failed and (report.engine_errors or report.unanalysed_files)
+    )
+
+
+def _mark_unanalysed_coverage(report: SASTReport) -> None:
+    if not report.sarif_raw or not report.unanalysed_files:
+        return
+    runs = report.sarif_raw.get("runs") or []
+    if not runs:
+        return
+    invocations = runs[0].setdefault("invocations", [])
+    if not invocations:
+        invocations.append({"executionSuccessful": True})
+    invocation = invocations[0]
+    invocation["executionSuccessful"] = True
+    notifications = invocation.setdefault("toolExecutionNotifications", [])
+    notifications.append(
+        {
+            "level": "warning",
+            "message": {
+                "text": (
+                    "Coverage degraded: "
+                    f"{len(report.unanalysed_files)} relevant source file(s) "
+                    "were not analysed"
+                )
+            },
+        }
+    )
+
+
+def _replace_failure_reason(report: SASTReport, reason: str) -> None:
+    report.failure_reason = reason
+    if not report.sarif_raw:
+        return
+    for run in report.sarif_raw.get("runs") or []:
+        for invocation in run.get("invocations") or []:
+            for notification in invocation.get("toolExecutionNotifications") or []:
+                if notification.get("level") == "error":
+                    notification["message"] = {"text": reason}
 
 
 
@@ -52,15 +321,65 @@ def _severity_label(level: str) -> str:
 def _render_text(report: SASTReport, verbose: bool = False) -> str:
     lines = ["Source code security check"]
     lines.append(f"Engine: Opengrep {report.engine_version}")
-    rules_line = f"Rules: {report.rules_path} ({report.rule_count} rules)"
+    rules_line = f"Rules: {report.rules_path} ({report.rule_count} enabled)"
     if report.pack_version:
         rules_line += f", pack {report.pack_version}"
     lines.append(rules_line)
+    if report.default_rule_count is not None:
+        experimental = report.experimental_rule_count or 0
+        available = report.available_experimental_rule_count or 0
+        lines.append(
+            f"Rule tiers: {report.default_rule_count} default, "
+            f"{experimental} experimental enabled, {available} experimental available"
+        )
+    if report.rule_language_counts:
+        coverage = ", ".join(
+            f"{language} {count}"
+            for language, count in report.rule_language_counts.items()
+        )
+        lines.append(f"Enabled rules by language: {coverage}")
+    lines.append(
+        f"Engine target selection: {report.files_scanned} files selected, "
+        f"{report.files_skipped} skipped, {len(report.engine_errors)} engine errors"
+    )
+    lines.append(f"Parser coverage assurance: {report.parser_coverage_assurance}.")
+    if report.language_counts:
+        languages = ", ".join(
+            f"{language} {count}"
+            for language, count in report.language_counts.items()
+        )
+        lines.append(f"Languages: {languages}")
+    if report.engine_errors and not report.scan_failed:
+        lines.append(
+            "Coverage degraded: "
+            f"{len(report.engine_errors)} file parse error(s); other findings are shown."
+        )
+    if report.unanalysed_files and not report.scan_failed:
+        missing_languages = ", ".join(
+            f"{language} {count}"
+            for language, count in _unanalysed_language_counts(report).items()
+        )
+        lines.append(
+            "Coverage degraded: "
+            f"{len(report.unanalysed_files)} relevant source file(s) not analysed "
+            f"({missing_languages})."
+        )
+        if verbose:
+            for item in report.unanalysed_files:
+                lines.append(
+                    f"  {item['path']} [{item['language']}] {item['reason']}"
+                )
 
     if report.scan_failed:
         lines.append(f"Scan failed: {report.failure_reason}")
-        lines.append("No findings rendered.")
-        return "\n".join(lines)
+        if report.findings:
+            lines.append("Findings from completed analysis are shown below.")
+        else:
+            lines.append("No findings rendered.")
+            lines.append("")
+            lines.append(_SCOPE_NOTE)
+            lines.append(_HONEST_NOTE)
+            return "\n".join(lines)
 
     finding_count = len(report.findings)
     lines.append(f"Findings: {finding_count}")
@@ -93,8 +412,7 @@ def _render_text(report: SASTReport, verbose: bool = False) -> str:
 
     lines.append("")
     lines.append(_SCOPE_NOTE)
-    if verbose:
-        lines.append(_HONEST_NOTE)
+    lines.append(_HONEST_NOTE)
     return "\n".join(lines)
 
 
@@ -104,10 +422,27 @@ def _render_json(report: SASTReport) -> str:
         "engine": f"Opengrep {report.engine_version}",
         "rules_path": report.rules_path,
         "rule_count": report.rule_count,
+        "files_scanned": report.files_scanned,
+        "files_skipped": report.files_skipped,
+        "engine_error_count": len(report.engine_errors),
+        "engine_errors": report.engine_errors,
+        "language_counts": report.language_counts,
+        "coverage_degraded": _coverage_degraded(report),
+        "unanalysed_file_count": len(report.unanalysed_files),
+        "unanalysed_files": report.unanalysed_files,
+        "unanalysed_language_counts": _unanalysed_language_counts(report),
+        "parser_coverage_assurance": report.parser_coverage_assurance,
     }
     # The bundled pack version is only meaningful for the bundled rules.
     if report.pack_version:
         payload["pack_version"] = report.pack_version
+    if report.default_rule_count is not None:
+        payload["rule_tiers"] = {
+            "default_enabled": report.default_rule_count,
+            "experimental_enabled": report.experimental_rule_count or 0,
+            "experimental_available": report.available_experimental_rule_count or 0,
+        }
+        payload["rule_language_counts"] = report.rule_language_counts
     return json.dumps(
         {
             **payload,
@@ -115,7 +450,7 @@ def _render_json(report: SASTReport) -> str:
             "failure_reason": report.failure_reason,
             "finding_count": len(report.findings),
             "findings": [f.to_dict() for f in report.findings],
-            "advisory": advisory_block(),
+            "advisory": _code_advisory_block(),
         },
         indent=2,
     )
@@ -123,7 +458,37 @@ def _render_json(report: SASTReport) -> str:
 
 def _render_sarif(report: SASTReport) -> str:
     if report.sarif_raw:
-        return json.dumps(report.sarif_raw, indent=2)
+        document = copy.deepcopy(report.sarif_raw)
+        runs = document.get("runs") or []
+        if runs:
+            driver = runs[0].setdefault("tool", {}).setdefault("driver", {})
+            properties = driver.setdefault("properties", {})
+            properties["craEvidenceCoverageDegraded"] = _coverage_degraded(report)
+            properties["craEvidenceParserCoverageAssurance"] = (
+                report.parser_coverage_assurance
+            )
+            properties["craEvidenceLanguageCounts"] = report.language_counts
+            properties["craEvidenceUnanalysedFileCount"] = len(
+                report.unanalysed_files
+            )
+            properties["craEvidenceUnanalysedLanguageCounts"] = (
+                _unanalysed_language_counts(report)
+            )
+            properties["advisory"] = _code_advisory_block()
+            if report.pack_version:
+                properties["craEvidencePackVersion"] = report.pack_version
+            if report.default_rule_count is not None:
+                properties["craEvidenceRuleTiers"] = {
+                    "defaultEnabled": report.default_rule_count,
+                    "experimentalEnabled": report.experimental_rule_count or 0,
+                    "experimentalAvailable": (
+                        report.available_experimental_rule_count or 0
+                    ),
+                }
+                properties["craEvidenceRuleLanguageCounts"] = (
+                    report.rule_language_counts
+                )
+        return json.dumps(document, indent=2)
 
     doc = {
         "version": "2.1.0",
@@ -134,10 +499,39 @@ def _render_sarif(report: SASTReport) -> str:
                     "driver": {
                         "name": "craevidence code-check",
                         "informationUri": "https://craevidence.com",
-                        "properties": {"advisory": advisory_block()},
+                        "properties": {
+                            "advisory": _code_advisory_block(),
+                            "craEvidenceLanguageCounts": report.language_counts,
+                            "craEvidenceUnanalysedFileCount": len(
+                                report.unanalysed_files
+                            ),
+                            "craEvidenceUnanalysedLanguageCounts": (
+                                _unanalysed_language_counts(report)
+                            ),
+                            "craEvidenceParserCoverageAssurance": (
+                                report.parser_coverage_assurance
+                            ),
+                        },
                     }
                 },
                 "results": [],
+                "invocations": [
+                    {
+                        "executionSuccessful": not report.scan_failed,
+                        "toolExecutionNotifications": (
+                            [
+                                {
+                                    "level": "error",
+                                    "message": {
+                                        "text": report.failure_reason or "scan failed"
+                                    },
+                                }
+                            ]
+                            if report.scan_failed
+                            else []
+                        ),
+                    }
+                ],
             }
         ],
     }
@@ -171,6 +565,7 @@ _UPLOAD_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MiB
     type=click.Choice(["note", "warning", "error"], case_sensitive=False),
     help=(
         "Exit 27 if any finding at or above this severity is found. "
+        "Exit 29 instead if parser coverage is degraded. "
         "Advisory (exit 0) by default."
     ),
 )
@@ -183,12 +578,20 @@ _UPLOAD_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MiB
     help="Maximum seconds to wait for the scan engine.",
 )
 @click.option(
+    "--rule-timeout",
+    "rule_timeout",
+    default=30,
+    type=click.IntRange(min=1),
+    show_default=True,
+    help="Maximum seconds Opengrep may spend on one rule for one file.",
+)
+@click.option(
     "--exclude",
     "excludes",
     multiple=True,
     help=(
         "Pattern to exclude from the scan (passed to --exclude). "
-        "Repeatable. Overrides the default exclude list when provided."
+        "Repeatable. Added to the default exclude list."
     ),
 )
 @click.option(
@@ -196,6 +599,15 @@ _UPLOAD_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MiB
     "exclude_rules",
     multiple=True,
     help="Rule id to skip (passed to --exclude-rule). Repeatable.",
+)
+@click.option(
+    "--include-experimental",
+    is_flag=True,
+    default=False,
+    help=(
+        "Enable early language rules that are disabled by default and have "
+        "limited coverage evidence."
+    ),
 )
 @click.option(
     "--upload",
@@ -229,7 +641,7 @@ _UPLOAD_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MiB
     "--verbose",
     "verbose_opt",
     is_flag=True,
-    help="Show scope and honesty notes. The default output is concise.",
+    help="Enable verbose command output. Advisory limitations are always shown.",
 )
 @click.pass_context
 def code_check(
@@ -238,8 +650,10 @@ def code_check(
     rules_path: Path | None,
     fail_on: str | None,
     timeout: int,
+    rule_timeout: int,
     excludes: tuple[str, ...],
     exclude_rules: tuple[str, ...],
+    include_experimental: bool,
     upload: bool,
     product: str | None,
     version_number: str | None,
@@ -248,19 +662,19 @@ def code_check(
 ) -> None:
     """Check source code for potential security weaknesses (no API key needed).
 
-    Runs Opengrep on PATH using a bundled set of CRA-relevant rules covering SQL
+    Runs the resolved Opengrep executable with CRA-relevant rules covering SQL
     injection, OS command injection, unsafe deserialization, weak cryptographic
     algorithms, and disabled TLS verification. Pass a custom rules directory or
     file with --rules.
 
-    Opengrep must be installed separately; if it is absent the command reports
-    the install hint and exits 0 (advisory). Findings are potential weaknesses to
-    review, not a determination. A clean result does not prove the absence of
-    vulnerabilities.
+    Supported platform wheels and containers include Opengrep. Source installs
+    may use CRA_EVIDENCE_OPENGREP or an opengrep executable on PATH. A missing or
+    failed engine exits nonzero so CI cannot report an unperformed scan as clean.
 
     Advisory by default and exits 0 even when findings are reported. Pass
     --fail-on error|warning|note to exit 27 when any finding at or above that
-    severity is found, so a CI job can gate on it.
+    severity is found, so a CI job can gate on it. Degraded parser coverage
+    takes precedence and exits 29 because the scan result is incomplete.
 
     Secrets are not covered here; use secrets-check. Infrastructure-as-code
     misconfigurations are not covered here; use config-check. Code is never sent
@@ -275,36 +689,62 @@ def code_check(
 
     effective_rules = rules_path if rules_path is not None else _BUNDLED_RULES
 
-    if opengrep_path() is None:
-        click.echo(
-            f"opengrep not found. {OPENGREP_INSTALL_HINT}",
-            err=True,
+    inventory = inspect_rule_pack(_BUNDLED_RULES) if rules_path is None else None
+    effective_exclude_rules = exclude_rules
+    if inventory is not None and not include_experimental:
+        effective_exclude_rules = (
+            *exclude_rules,
+            *inventory.experimental_rule_ids,
         )
-        if fail_on:
-            # A gated run cannot pass when the engine is unavailable to evaluate it.
-            message = (
-                "cannot evaluate the --fail-on gate: opengrep is not installed"
-            )
-            raise click.ClickException(message)
-        if upload:
-            # An explicit upload cannot deliver evidence with no scan to upload.
-            message = "cannot upload: opengrep is not installed, so no scan ran"
-            raise click.ClickException(message)
-        click.echo("Skipping source code check (opengrep not installed).")
-        return
 
-    effective_excludes = excludes if excludes else None
-
-    report = run_scan(
-        path=path,
-        rules=effective_rules,
-        timeout=timeout,
-        excludes=effective_excludes,
-        exclude_rules=exclude_rules,
-    )
+    if opengrep_path() is None:
+        report = SASTReport(
+            engine_version="unavailable",
+            rules_path=str(effective_rules),
+            rule_count=0,
+            findings=[],
+            scan_failed=True,
+            failure_reason=OPENGREP_INSTALL_HINT,
+            sarif_raw=None,
+        )
+    else:
+        report = run_scan(
+            path=path,
+            rules=effective_rules,
+            timeout=timeout,
+            rule_timeout=rule_timeout,
+            excludes=excludes,
+            exclude_rules=effective_exclude_rules,
+            zero_files_reason="Opengrep scanned zero files",
+        )
+        if (
+            report.failure_reason == "Opengrep scanned zero files"
+            and inventory is not None
+            and not include_experimental
+            and _has_experimental_source(path)
+        ):
+            _replace_failure_reason(report, _DEFAULT_ZERO_FILES_REASON)
     # Show the bundled pack version when the bundled rules were used.
     if rules_path is None:
         report.pack_version = PACK_VERSION
+        default_count, experimental_count, language_counts = inventory.selection(
+            include_experimental=include_experimental,
+            excluded_rule_ids=exclude_rules,
+        )
+        report.default_rule_count = default_count
+        report.experimental_rule_count = experimental_count
+        report.available_experimental_rule_count = len(
+            inventory.experimental_rule_ids
+        )
+        report.rule_language_counts = language_counts
+        report.rule_count = default_count + experimental_count
+        report.unanalysed_files = _unanalysed_source_files(
+            path,
+            report,
+            set(language_counts),
+            excludes,
+        )
+        _mark_unanalysed_coverage(report)
 
     if output_format == "json":
         rendered = _render_json(report)
@@ -331,16 +771,131 @@ def code_check(
             raise click.ClickException(message)
         _do_upload(ctx, config, product, version_number, report)
 
+    if report.scan_failed:
+        ctx.exit(1)
+
     if fail_on:
-        if report.scan_failed:
-            # A gated run must not pass when the scan itself failed.
-            message = (
-                f"scan did not complete ({report.failure_reason}); "
-                "refusing to pass the --fail-on gate"
-            )
-            raise click.ClickException(message)
+        if report.engine_errors or report.unanalysed_files:
+            ctx.exit(_SAST_DEGRADED_EXIT_CODE)
         if report.findings_at_or_above(fail_on):
             ctx.exit(_SAST_EXIT_CODE)
+
+
+def _sanitized_sarif(report: SASTReport) -> dict:
+    """Remove source excerpts and local environment details before upload."""
+    document = copy.deepcopy(report.sarif_raw or json.loads(_render_sarif(report)))
+
+    def scrub_locations(value) -> None:
+        if isinstance(value, list):
+            for item in value:
+                scrub_locations(item)
+            return
+        if not isinstance(value, dict):
+            return
+        value.pop("snippet", None)
+        value.pop("contextRegion", None)
+        value.pop("contents", None)
+        artifact = value.get("artifactLocation")
+        if isinstance(artifact, dict) and isinstance(artifact.get("uri"), str):
+            uri = artifact["uri"]
+            candidate = Path(uri.removeprefix("file://"))
+            if candidate.is_absolute():
+                root = Path(report.scan_root) if report.scan_root else None
+                if root and root.is_file():
+                    root = root.parent
+                try:
+                    artifact["uri"] = str(candidate.relative_to(root)) if root else candidate.name
+                except ValueError:
+                    artifact["uri"] = candidate.name
+        for nested in value.values():
+            scrub_locations(nested)
+
+    def scrub_flow_messages(value) -> None:
+        if isinstance(value, list):
+            for item in value:
+                scrub_flow_messages(item)
+            return
+        if not isinstance(value, dict):
+            return
+        value.pop("message", None)
+        for nested in value.values():
+            scrub_flow_messages(nested)
+
+    for run in document.get("runs") or []:
+        run.pop("originalUriBaseIds", None)
+        run.pop("artifacts", None)
+        run.pop("versionControlProvenance", None)
+        run.pop("graphs", None)
+        run.pop("webRequests", None)
+        run.pop("webResponses", None)
+        run.pop("specialLocations", None)
+        for invocation in run.get("invocations") or []:
+            invocation.pop("environmentVariables", None)
+            invocation.pop("workingDirectory", None)
+            invocation.pop("commandLine", None)
+            invocation.pop("arguments", None)
+            invocation.pop("message", None)
+            invocation.pop("toolExecutionNotifications", None)
+            if report.engine_errors and not report.scan_failed:
+                invocation["toolExecutionNotifications"] = [
+                    {
+                        "level": "warning",
+                        "message": {
+                            "text": (
+                                "Coverage degraded: "
+                                f"{len(report.engine_errors)} file parse error(s)"
+                            )
+                        },
+                    }
+                ]
+        driver = run.get("tool", {}).get("driver", {})
+        properties = driver.setdefault("properties", {})
+        properties["craEvidenceCoverageDegraded"] = bool(
+            report.engine_errors and not report.scan_failed
+        )
+        properties["craEvidenceParserCoverageAssurance"] = (
+            report.parser_coverage_assurance
+        )
+        properties["craEvidenceLanguageCounts"] = report.language_counts
+        properties["advisory"] = _code_advisory_block()
+        if report.pack_version:
+            properties["craEvidencePackVersion"] = report.pack_version
+        if report.default_rule_count is not None:
+            properties["craEvidenceRuleTiers"] = {
+                "defaultEnabled": report.default_rule_count,
+                "experimentalEnabled": report.experimental_rule_count or 0,
+                "experimentalAvailable": report.available_experimental_rule_count or 0,
+            }
+            properties["craEvidenceRuleLanguageCounts"] = report.rule_language_counts
+        driver_rules = (
+            run.get("tool", {}).get("driver", {}).get("rules") or []
+        )
+        static_messages = {
+            rule.get("id"): (
+                (rule.get("fullDescription") or {}).get("text")
+                or (rule.get("shortDescription") or {}).get("text")
+                or "Security finding"
+            )
+            for rule in driver_rules
+            if rule.get("id")
+        }
+        for result in run.get("results") or []:
+            result["message"] = {
+                "text": static_messages.get(result.get("ruleId"), "Security finding")
+            }
+            result.pop("logicalLocations", None)
+            result.pop("graphs", None)
+            result.pop("stacks", None)
+            result.pop("attachments", None)
+            result.pop("webRequest", None)
+            result.pop("webResponse", None)
+            result.pop("hostedViewerUri", None)
+            result.pop("workItemUris", None)
+            result.pop("relatedLocations", None)
+            result.pop("fixes", None)
+            scrub_locations(result)
+            scrub_flow_messages(result.get("codeFlows") or [])
+    return document
 
 
 def _do_upload(ctx: click.Context, config, product, version_number, report: SASTReport) -> None:
@@ -360,7 +915,7 @@ def _do_upload(ctx: click.Context, config, product, version_number, report: SAST
         click.echo(f"Error: {e}", err=True)
         sys.exit(e.exit_code)
 
-    sarif_text = _render_sarif(report)
+    sarif_text = json.dumps(_sanitized_sarif(report), indent=2)
     sarif_bytes = sarif_text.encode("utf-8")
 
     if len(sarif_bytes) > _UPLOAD_SIZE_LIMIT:

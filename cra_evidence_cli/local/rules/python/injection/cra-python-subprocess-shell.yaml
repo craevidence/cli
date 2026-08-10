@@ -6,6 +6,7 @@ rules:
       list and omit shell=True unless the shell is strictly required.
     severity: WARNING
     metadata:
+      tier: default
       cwe:
         - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
       owasp:

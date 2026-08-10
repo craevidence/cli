@@ -8,14 +8,15 @@ rules:
     severity: WARNING
     languages: [python]
     metadata:
+      tier: default
       cwe:
-        - "CWE-16: Configuration"
+        - "CWE-346: Origin Validation Error"
       owasp:
         - "A05:2021 - Security Misconfiguration"
       references:
         - https://docs.djangoproject.com/en/5.1/ref/settings/
         - https://docs.djangoproject.com/en/5.1/topics/security/
-        - https://cwe.mitre.org/data/definitions/16.html
+        - https://cwe.mitre.org/data/definitions/346.html
       category: security
       technology:
         - python

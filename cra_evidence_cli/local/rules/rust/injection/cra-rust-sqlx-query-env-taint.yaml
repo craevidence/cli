@@ -1,0 +1,35 @@
+rules:
+  - id: cra-rust-sqlx-query-env-taint
+    message: >
+      Process input reaches SQLx as query text. Use a constant query with bind
+      parameters or a checked query macro instead of constructing SQL text.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://docs.rs/sqlx/latest/sqlx/fn.query.html
+      category: security
+      technology: [rust, sqlx]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: The remediation changes to a constant query and bind parameters or a checked query macro.
+      license: MIT
+      author: CRA Evidence
+    languages: [rust]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: std::env::args().nth(...)
+          - pattern: std::env::var(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: sqlx::query($QUERY)
+              - pattern: query($QUERY)
+              - pattern: sqlx::query_scalar($QUERY)
+              - pattern: query_scalar($QUERY)
+          - focus-metavariable: $QUERY

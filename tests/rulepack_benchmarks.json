@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "engine_version": "1.26.0",
+  "benchmarks": [
+    {
+      "name": "owasp-benchmark-java",
+      "benchmark_type": "owasp-csv",
+      "source_type": "git",
+      "directory": "owasp-java",
+      "repository": "https://github.com/OWASP-Benchmark/BenchmarkJava.git",
+      "commit": "007786f86b965a9ea8e4a7613baa5f90adbbd611",
+      "license_file": "LICENSE",
+      "expected_results": "expectedresults-1.2.csv",
+      "source_path": "src/main/java",
+      "full_denominator": {
+        "cases": 2740,
+        "vulnerable_cases": 1415,
+        "scored_cases": 1259,
+        "scored_vulnerable_cases": 660,
+        "excluded_cases": 1481,
+        "excluded_vulnerable_cases": 755,
+        "excluded_categories": {
+          "79": 246,
+          "90": 27,
+          "327": 130,
+          "330": 218,
+          "501": 83,
+          "614": 36,
+          "643": 15
+        }
+      },
+      "expected": {
+        "files_scanned": 2766,
+        "engine_errors": 0,
+        "metrics_by_cwe": {
+          "22": {
+            "tp": 21,
+            "fp": 7,
+            "fn": 112,
+            "tn": 128
+          },
+          "78": {
+            "tp": 5,
+            "fp": 0,
+            "fn": 121,
+            "tn": 125
+          },
+          "89": {
+            "tp": 57,
+            "fp": 17,
+            "fn": 215,
+            "tn": 215
+          },
+          "328": {
+            "tp": 89,
+            "fp": 0,
+            "fn": 40,
+            "tn": 107
+          }
+        },
+        "metrics_by_rule": {
+          "cra-java-file-request-taint": {
+            "22": {
+              "tp": 21,
+              "fp": 7,
+              "fn": 112,
+              "tn": 128
+            }
+          },
+          "cra-java-runtime-exec-request": {
+            "78": {
+              "tp": 5,
+              "fp": 0,
+              "fn": 121,
+              "tn": 125
+            }
+          },
+          "cra-java-sql-request-taint": {
+            "89": {
+              "tp": 57,
+              "fp": 17,
+              "fn": 215,
+              "tn": 215
+            }
+          },
+          "cra-java-weak-message-digest": {
+            "328": {
+              "tp": 89,
+              "fp": 0,
+              "fn": 40,
+              "tn": 107
+            }
+          }
+        }
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "Applicable rules have 24 false positives and detect 172 of 660 expected vulnerable cases."
+    },
+    {
+      "name": "nist-juliet-java-1.3",
+      "benchmark_type": "juliet-xml",
+      "source_type": "archive",
+      "directory": "juliet-java",
+      "archive_url": "https://samate.nist.gov/SARD/downloads/test-suites/2017-10-01-juliet-test-suite-for-java-v1-3.zip",
+      "archive_file": "juliet-java-1.3.zip",
+      "archive_bytes": 76798417,
+      "archive_sha256": "d985f4177c2bcd7b03455a05c1c8f2e755f55c9eb250accd052f05f877347e60",
+      "archive_entries": 48243,
+      "repository": "https://samate.nist.gov/SARD/test-suites/111",
+      "license_url": "https://creativecommons.org/publicdomain/zero/1.0/legalcode.txt",
+      "license_file": "CC0-1.0.txt",
+      "license_bytes": 7048,
+      "license_sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+      "manifest_repair": {
+        "source": "Java/manifest.xml",
+        "source_sha256": "e0227dee176a75d56aee13482bea309dc78fdfc707762bb7ce42336e7ef6045b",
+        "remove_lines": [
+          50084,
+          66737
+        ],
+        "expected_testcases": 28881,
+        "destination": "Java/manifest.repaired.xml",
+        "destination_sha256": "801870c3d59a6f021b0c7190a52a51d9703af1bbac8d3b66971f19367a3eb4f8"
+      },
+      "source_root": "Java",
+      "source_paths": [
+        "src/testcases/CWE78_OS_Command_Injection",
+        "src/testcases/CWE89_SQL_Injection",
+        "src/testcases/CWE328_Reversible_One_Way_Hash"
+      ],
+      "manifest_file": "manifest.repaired.xml",
+      "rule_cwes": {
+        "cra-java-runtime-exec-request": 78,
+        "cra-java-sql-request-taint": 89,
+        "cra-java-weak-message-digest": 328
+      },
+      "expected": {
+        "files_scanned": 4461,
+        "engine_errors": 0,
+        "metrics_by_rule": {
+          "cra-java-runtime-exec-request": {
+            "cwe": 78,
+            "cases_total": 444,
+            "cases_detected": 42,
+            "cases_missed": 402,
+            "files_with_findings": 42,
+            "finding_count": 42,
+            "findings_at_manifest_flaws": 40,
+            "findings_outside_manifest_flaws": 2
+          },
+          "cra-java-sql-request-taint": {
+            "cwe": 89,
+            "cases_total": 2220,
+            "cases_detected": 210,
+            "cases_missed": 2010,
+            "files_with_findings": 210,
+            "finding_count": 210,
+            "findings_at_manifest_flaws": 152,
+            "findings_outside_manifest_flaws": 58
+          },
+          "cra-java-weak-message-digest": {
+            "cwe": 328,
+            "cases_total": 51,
+            "cases_detected": 51,
+            "cases_missed": 0,
+            "files_with_findings": 51,
+            "finding_count": 51,
+            "findings_at_manifest_flaws": 51,
+            "findings_outside_manifest_flaws": 0
+          }
+        }
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "Command and SQL recall remain low. Juliet files mix good and bad methods, so this corpus supplies case recall and location corroboration, not TN or standalone precision."
+    },
+    {
+      "name": "gosec-testutils-go",
+      "benchmark_type": "gosec-samples",
+      "source_type": "git",
+      "directory": "gosec",
+      "repository": "https://github.com/securego/gosec.git",
+      "commit": "2eb4727ebc7504944ddbcdd2f7157db492026c3f",
+      "license_file": "LICENSE.txt",
+      "sample_files": {
+        "G109": "testutils/g109_samples.go",
+        "G115": "testutils/g115_samples.go",
+        "G401": "testutils/g401_samples.go",
+        "G402": "testutils/g402_samples.go",
+        "G501": "testutils/g501_samples.go",
+        "G505": "testutils/g505_samples.go"
+      },
+      "expected": {
+        "cases_total": 178,
+        "by_rule": {
+          "G109": {
+            "cases": 6,
+            "vulnerable": 2,
+            "detected": 1,
+            "fp_on_safe": 0
+          },
+          "G115": {
+            "cases": 143,
+            "vulnerable": 32,
+            "detected": 0,
+            "fp_on_safe": 0
+          },
+          "G401": {
+            "cases": 2,
+            "vulnerable": 2,
+            "detected": 2,
+            "fp_on_safe": 0
+          },
+          "G402": {
+            "cases": 24,
+            "vulnerable": 10,
+            "detected": 2,
+            "fp_on_safe": 0
+          },
+          "G501": {
+            "cases": 2,
+            "vulnerable": 2,
+            "detected": 2,
+            "fp_on_safe": 0
+          },
+          "G505": {
+            "cases": 1,
+            "vulnerable": 1,
+            "detected": 1,
+            "fp_on_safe": 0
+          }
+        }
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "Detection outside the rules' published scope is expected: G115 is general integer conversion while the rule covers parse-then-downcast, and G402 covers cipher suites and TLS versions the rule does not claim. The corpus supplies precision evidence and in-scope recall, not whole-rule recall.",
+      "rules_subdir": "go"
+    }
+  ]
+}

@@ -2,6 +2,16 @@ from flask import request, render_template_string
 import flask
 
 
+def requested_template():
+    return request.args.get("template")
+
+
+def ssti_across_helper():
+    template = requested_template()
+    # ruleid: cra-python-flask-render-template-string-ssti
+    return render_template_string(template)
+
+
 def ssti_from_args():
     name = request.args.get("name")
     template = "<h1>Hello " + name + "</h1>"
@@ -20,6 +30,11 @@ def ssti_from_cookies_qualified():
     tpl = "<style>body{color:" + theme + "}</style>"
     # ruleid: cra-python-flask-render-template-string-ssti
     return flask.render_template_string(tpl)
+
+
+def ssti_fully_qualified():
+    # ruleid: cra-python-flask-render-template-string-ssti
+    return flask.render_template_string(flask.request.args.get("template"))
 
 
 def safe_context_variable():

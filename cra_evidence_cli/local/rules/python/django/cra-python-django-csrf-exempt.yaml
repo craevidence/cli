@@ -9,6 +9,7 @@ rules:
     severity: WARNING
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-352: Cross-Site Request Forgery (CSRF)"
       owasp:

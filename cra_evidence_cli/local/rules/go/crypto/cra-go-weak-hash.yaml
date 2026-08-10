@@ -1,11 +1,13 @@
 rules:
   - id: cra-go-weak-hash
     message: >
-      MD5 or SHA-1 is used. Both are considered cryptographically broken and
-      must not be used for security purposes such as signatures, MACs, or
-      password hashing. Use SHA-256 or stronger (crypto/sha256, crypto/sha512).
+      MD5 or SHA-1 is used. Review whether the digest protects a security
+      property. These algorithms are unsuitable for signatures, MACs, password
+      hashing, or collision resistance, but non-security checksums may be
+      intentional. Use SHA-256 or stronger for security-sensitive hashing.
     severity: WARNING
     metadata:
+      tier: experimental
       cwe:
         - "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
       owasp:

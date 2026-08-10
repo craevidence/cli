@@ -1,0 +1,107 @@
+rules:
+  - id: cra-java-weak-message-digest
+    message: >
+      MD2, MD5, and SHA-1 do not meet modern security expectations. If this
+      digest protects integrity or authenticity, use SHA-256 or stronger; use
+      a password-specific KDF for passwords.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-328: Use of Weak Hash"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/328.html
+        - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/security/MessageDigest.html
+      category: security
+      technology: [java, cryptography]
+      confidence: VERY HIGH
+      scope: >
+        Detects MessageDigest.getInstance calls that select MD2, MD5, or
+        SHA-1. Recognized spellings are MD2, MD5, SHA1, SHA-1, the SHA alias
+        (which the JDK resolves to SHA-1), and the three object identifiers
+        1.2.840.113549.2.2, 1.2.840.113549.2.5, and 1.3.14.3.2.26, each with
+        or without the OID. prefix; matching is case-insensitive, as Java
+        algorithm lookup is. The algorithm may be written as a string literal
+        at the call, or held in a static final String constant declared in the
+        same class, record, enum, or interface, either initialized inline or
+        assigned in a static initializer block. The simple name MessageDigest
+        is accepted only in files that import java.security.MessageDigest,
+        java.security.*, or the method statically; a fully qualified
+        java.security.MessageDigest.getInstance call needs no import.
+      limitations: >
+        Does not resolve constants declared in another type, constants
+        referenced through a qualifier such as Config.ALG, concatenated
+        strings, non-final or reassignable fields, or values read from
+        configuration at runtime, and cannot tell whether a digest has
+        security significance. Provider-specific aliases and object
+        identifiers beyond the spellings listed in the scope are not
+        recognized. The receiver is matched by name plus the import guard
+        rather than by resolved type, so a non-JDK class named MessageDigest
+        with a getInstance(String) method would still be reported in a file
+        that imports java.security.*.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: MessageDigest.getInstance($ALGORITHM)
+                  - pattern: MessageDigest.getInstance($ALGORITHM, ...)
+                  - pattern: java.security.MessageDigest.getInstance($ALGORITHM)
+                  - pattern: java.security.MessageDigest.getInstance($ALGORITHM, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern: MessageDigest.getInstance($CONSTANT)
+                  - pattern: MessageDigest.getInstance($CONSTANT, ...)
+                  - pattern: java.security.MessageDigest.getInstance($CONSTANT)
+                  - pattern: java.security.MessageDigest.getInstance($CONSTANT, ...)
+              - pattern-either:
+                  - pattern-inside: |
+                      class $TYPE {
+                        ...
+                        static final String $CONSTANT = $ALGORITHM;
+                        ...
+                      }
+                  - pattern-inside: |
+                      record $TYPE(...) {
+                        ...
+                        static final String $CONSTANT = $ALGORITHM;
+                        ...
+                      }
+                  - pattern-inside: |
+                      interface $TYPE {
+                        ...
+                        String $CONSTANT = $ALGORITHM;
+                        ...
+                      }
+                  - pattern-inside: |
+                      class $TYPE {
+                        ...
+                        static final String $CONSTANT;
+                        ...
+                        static { ... $CONSTANT = $ALGORITHM; ... }
+                        ...
+                      }
+                  - pattern-inside: |
+                      record $TYPE(...) {
+                        ...
+                        static final String $CONSTANT;
+                        ...
+                        static { ... $CONSTANT = $ALGORITHM; ... }
+                        ...
+                      }
+      - pattern-either:
+          - pattern-inside: |
+              import java.security.MessageDigest;
+              ...
+          - pattern-inside: |
+              import java.security.*;
+              ...
+          - pattern-inside: |
+              import static java.security.MessageDigest.getInstance;
+              ...
+          - pattern-inside: java.security.MessageDigest.getInstance(...)
+      - metavariable-regex:
+          metavariable: $ALGORITHM
+          regex: '^("(?i:MD2|MD5|SHA-?1|SHA|(?:OID\.)?1\.3\.14\.3\.2\.26|(?:OID\.)?1\.2\.840\.113549\.2\.[25])")$'

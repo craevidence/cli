@@ -1,0 +1,64 @@
+rules:
+  - id: cra-csharp-httpclient-request-taint
+    message: >
+      HTTP request data controls an outbound HTTP destination. Resolve
+      destinations from an allowlist and block private, loopback, link-local,
+      and metadata addresses after DNS resolution.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      owasp: ["A10:2021 - Server-Side Request Forgery (SSRF)"]
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclient
+      category: security
+      technology: [csharp, dotnet, aspnet, http]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Safe destination validation requires an allowlist, DNS resolution, and checked control flow.
+      license: MIT
+      author: CRA Evidence
+    languages: [csharp]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQUEST.Query[$KEY]
+          - pattern: $REQUEST.Form[$KEY]
+          - pattern: $REQUEST.Headers[$KEY]
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromQuery] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromBody] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromRoute] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: $CLIENT.GetAsync($URL)
+              - focus-metavariable: $URL
+          - patterns:
+              - pattern: $CLIENT.GetStringAsync($URL)
+              - focus-metavariable: $URL
+          - patterns:
+              - pattern: $CLIENT.SendAsync(new HttpRequestMessage(..., $URL), ...)
+              - focus-metavariable: $URL
+          - patterns:
+              - pattern: WebRequest.Create($URL)
+              - focus-metavariable: $URL
+          - patterns:
+              - pattern: System.Net.WebRequest.Create($URL)
+              - focus-metavariable: $URL

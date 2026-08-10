@@ -332,14 +332,17 @@ cra-evidence-upload:
 #   CRA_CHECK_IMAGE:   container image to scan instead of a directory
 #   CRA_CHECK_FAIL_ON: critical | high | medium | known-exploited (default none)
 #   CRA_CHECK_SARIF:   SARIF output path (default craevidence.sarif)
+#   CRA_CODE_CHECK_INCLUDE_EXPERIMENTAL: true | false (default false)
 .cra-evidence-check:
   image: python:3.12-slim
   variables:
+    CRA_CHECK_COMMAND: 'check'
     CRA_CHECK_PATH: '.'
     CRA_CHECK_SBOM: ''
     CRA_CHECK_IMAGE: ''
     CRA_CHECK_FAIL_ON: 'none'
     CRA_CHECK_SARIF: 'craevidence.sarif'
+    CRA_CODE_CHECK_INCLUDE_EXPERIMENTAL: 'false'
   script:
     - |
       set -eu
@@ -363,14 +366,35 @@ cra-evidence-upload:
       GRYPE_DB_CACHE_DIR="/tmp/craevidence/grype-db"
       mkdir -p "${GRYPE_DB_CACHE_DIR}"
       export GRYPE_DB_CACHE_DIR
-      set -- check
-      if [ -n "${CRA_CHECK_SBOM}" ]; then
-        set -- "$@" --sbom "${CRA_CHECK_SBOM}"
-      elif [ -n "${CRA_CHECK_IMAGE}" ]; then
-        set -- "$@" --image "${CRA_CHECK_IMAGE}"
-      else
-        set -- "$@" "${CRA_CHECK_PATH:-.}"
-      fi
+      case "${CRA_CHECK_COMMAND}" in
+        check)
+          case "${CRA_CHECK_FAIL_ON}" in
+            critical|high|medium|known-exploited|none) ;;
+            *) echo "ERROR: invalid CRA_CHECK_FAIL_ON for check"; exit 1 ;;
+          esac
+          set -- check
+          if [ -n "${CRA_CHECK_SBOM}" ]; then
+            set -- "$@" --sbom "${CRA_CHECK_SBOM}"
+          elif [ -n "${CRA_CHECK_IMAGE}" ]; then
+            set -- "$@" --image "${CRA_CHECK_IMAGE}"
+          else
+            set -- "$@" "${CRA_CHECK_PATH:-.}"
+          fi
+          ;;
+        code-check)
+          case "${CRA_CHECK_FAIL_ON}" in
+            error|warning|note|none) ;;
+            *) echo "ERROR: invalid CRA_CHECK_FAIL_ON for code-check"; exit 1 ;;
+          esac
+          set -- code-check "${CRA_CHECK_PATH:-.}"
+          case "${CRA_CODE_CHECK_INCLUDE_EXPERIMENTAL}" in
+            true) set -- "$@" --include-experimental ;;
+            false) ;;
+            *) echo "ERROR: CRA_CODE_CHECK_INCLUDE_EXPERIMENTAL must be true or false"; exit 1 ;;
+          esac
+          ;;
+        *) echo "ERROR: unsupported CRA_CHECK_COMMAND '${CRA_CHECK_COMMAND}'"; exit 1 ;;
+      esac
       if [ -n "${CRA_CHECK_SARIF}" ]; then
         set -- "$@" --output-file "${CRA_CHECK_SARIF}"
       fi
@@ -384,3 +408,12 @@ cra-evidence-upload:
       - "${CRA_CHECK_SARIF}"
   rules:
     - when: always
+
+# Source code SAST variant. The platform wheel contains the verified Opengrep
+# engine, so the job does not install or download a scanner at runtime.
+.cra-evidence-code-check:
+  extends: .cra-evidence-check
+  variables:
+    CRA_CHECK_COMMAND: 'code-check'
+    CRA_CHECK_FAIL_ON: 'warning'
+    CRA_CODE_CHECK_INCLUDE_EXPERIMENTAL: 'false'

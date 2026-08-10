@@ -10,6 +10,7 @@ rules:
     severity: ERROR
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-79: Improper Neutralization of Input During Web Page Generation (Cross-site Scripting)"
       owasp:
@@ -40,10 +41,15 @@ rules:
       - pattern: request.form[...]
       - pattern: request.values[...]
       - pattern: request.cookies[...]
+      - pattern: flask.request.args
+      - pattern: flask.request.form
+      - pattern: flask.request.values
+      - pattern: flask.request.json
+      - pattern: flask.request.data
+      - pattern: flask.request.cookies
     pattern-sanitizers:
       - pattern: markupsafe.escape(...)
-      - pattern: escape(...)
-      - pattern: Markup.escape(...)
+      - pattern: markupsafe.Markup.escape(...)
     pattern-sinks:
       - patterns:
           - pattern-either:

@@ -1,0 +1,52 @@
+rules:
+  - id: cra-php-command-superglobal
+    message: >
+      HTTP request data is passed directly to an operating system command.
+      Avoid shell execution and validate against a strict allowlist.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://www.php.net/manual/en/function.exec.php
+      category: security
+      technology: [php]
+      confidence: VERY HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Safe command construction requires an allowlisted executable and separately validated arguments.
+      license: MIT
+      author: CRA Evidence
+    languages: [php]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: exec($COMMAND, ...)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: system($COMMAND, ...)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: shell_exec($COMMAND)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: passthru($COMMAND, ...)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: popen($COMMAND, ...)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: proc_open($COMMAND, ...)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: '`$COMMAND`'
+              - focus-metavariable: $COMMAND

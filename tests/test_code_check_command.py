@@ -9,7 +9,13 @@ import pytest
 from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
-from cra_evidence_cli.commands.code_check import _SAST_EXIT_CODE, _UPLOAD_SIZE_LIMIT, code_check
+from cra_evidence_cli.commands.code_check import (
+    _SAST_DEGRADED_EXIT_CODE,
+    _SAST_EXIT_CODE,
+    _UPLOAD_SIZE_LIMIT,
+    _sanitized_sarif,
+    code_check,
+)
 from cra_evidence_cli.config import CRAEvidenceConfig
 from cra_evidence_cli.exceptions import CRAEvidenceError
 from cra_evidence_cli.local.sast_scanner import (
@@ -85,23 +91,33 @@ def _failed_report() -> SASTReport:
     )
 
 
+def _degraded_report() -> SASTReport:
+    report = _report_with_findings("error")
+    report.files_scanned = 2
+    report.engine_errors = [
+        {"level": "warn", "type": ["PartialParsing", []], "path": "broken.py"}
+    ]
+    return report
+
+
 # --- binary-missing path ---
 
 
-def test_binary_missing_prints_hint_and_exits_zero(runner, tmp_path):
+def test_binary_missing_prints_hint_and_exits_nonzero(runner, tmp_path):
     with patch(_OPENGREP_PATCH, return_value=None):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
     combined = result.output + (result.stderr or "")
     assert OPENGREP_INSTALL_HINT in combined
-    assert "opengrep not found" in combined
+    assert "Scan failed" in combined
 
 
-def test_binary_missing_no_scan_failure_text(runner, tmp_path):
+def test_binary_missing_is_not_reported_as_clean(runner, tmp_path):
     with patch(_OPENGREP_PATCH, return_value=None):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
-    assert result.exit_code == 0
-    assert "Scan failed" not in result.output
+    assert result.exit_code == 1
+    assert "Scan failed" in result.output
+    assert "No findings matched" not in result.output
 
 
 def test_binary_missing_with_fail_on_does_not_pass_gate(runner, tmp_path):
@@ -111,7 +127,18 @@ def test_binary_missing_with_fail_on_does_not_pass_gate(runner, tmp_path):
             code_check, [str(tmp_path), "--fail-on", "error"], obj=_make_obj("text")
         )
     assert result.exit_code != 0
-    assert "cannot evaluate the --fail-on gate" in (result.output + (result.stderr or ""))
+    assert "Scan failed" in (result.output + (result.stderr or ""))
+
+
+def test_binary_missing_sarif_is_valid_failed_invocation(runner, tmp_path):
+    with patch(_OPENGREP_PATCH, return_value=None):
+        result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("sarif"))
+
+    document = json.loads(result.output)
+    invocation = document["runs"][0]["invocations"][0]
+    assert result.exit_code == 1
+    assert invocation["executionSuccessful"] is False
+    assert invocation["toolExecutionNotifications"][0]["level"] == "error"
 
 
 # --- engine nonzero exit renders scan-failed, not clean ---
@@ -123,10 +150,26 @@ def test_scan_failed_shows_failure_reason(runner, tmp_path):
         patch(_RUN_SCAN_PATCH, return_value=_failed_report()),
     ):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 1, result.output
     assert "Scan failed" in result.output
     assert "engine exited 2" in result.output
     assert "No findings matched" not in result.output
+
+
+def test_scan_failure_preserves_findings_from_completed_analysis(runner, tmp_path):
+    report = _report_with_findings("error")
+    report.scan_failed = True
+    report.failure_reason = "Opengrep reported 1 non-recoverable scan error(s)"
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
+
+    assert result.exit_code == 1
+    assert "Scan failed" in result.output
+    assert "Findings from completed analysis" in result.output
+    assert "cra-python-sql-injection" in result.output
 
 
 def test_scan_failed_json_sets_scan_failed_true(runner, tmp_path):
@@ -135,10 +178,104 @@ def test_scan_failed_json_sets_scan_failed_true(runner, tmp_path):
         patch(_RUN_SCAN_PATCH, return_value=_failed_report()),
     ):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("json"))
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     data = json.loads(result.output)
     assert data["scan_failed"] is True
     assert data["findings"] == []
+
+
+def test_degraded_scan_renders_findings_and_exits_with_distinct_gate_code(runner, tmp_path):
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=_degraded_report()),
+    ):
+        advisory = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
+
+    assert advisory.exit_code == 0, advisory.output
+    assert "Coverage degraded" in advisory.output
+    assert "cra-python-sql-injection" in advisory.output
+    assert "No findings rendered" not in advisory.output
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=_degraded_report()),
+    ):
+        gated = runner.invoke(
+            code_check,
+            [str(tmp_path), "--fail-on", "error"],
+            obj=_make_obj("text"),
+        )
+    assert gated.exit_code == _SAST_DEGRADED_EXIT_CODE
+
+
+def test_degraded_scan_without_findings_cannot_pass_explicit_gate(runner, tmp_path):
+    report = _clean_report()
+    report.files_scanned = 1
+    report.engine_errors = [
+        {"type": "PythonSyntaxError", "path": "legacy.py", "line": 1}
+    ]
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        gated = runner.invoke(
+            code_check,
+            [str(tmp_path), "--fail-on", "error"],
+            obj=_make_obj("text"),
+        )
+
+    assert gated.exit_code == _SAST_DEGRADED_EXIT_CODE
+    assert "Coverage degraded" in gated.output
+
+
+def test_degraded_json_and_sarif_report_success_with_warning(runner, tmp_path):
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=_degraded_report()),
+    ):
+        json_result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("json"))
+    payload = json.loads(json_result.output)
+    assert json_result.exit_code == 0
+    assert payload["scan_failed"] is False
+    assert payload["coverage_degraded"] is True
+    assert payload["finding_count"] == 1
+
+    sarif_report = _degraded_report()
+    sarif_report.sarif_raw = {
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {"driver": {"name": "Opengrep"}},
+                "results": [],
+                "invocations": [
+                    {
+                        "executionSuccessful": True,
+                        "toolExecutionNotifications": [
+                            {
+                                "level": "warning",
+                                "message": {"text": "Coverage degraded"},
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=sarif_report),
+    ):
+        sarif_result = runner.invoke(
+            code_check, [str(tmp_path)], obj=_make_obj("sarif")
+        )
+    document = json.loads(sarif_result.output)
+    assert sarif_result.exit_code == 0
+    assert document["runs"][0]["invocations"][0]["executionSuccessful"] is True
+    assert (
+        document["runs"][0]["tool"]["driver"]["properties"]
+        ["craEvidenceCoverageDegraded"]
+        is True
+    )
 
 
 # --- advisory exit 0 with findings ---
@@ -152,6 +289,174 @@ def test_advisory_exit_zero_with_findings(runner, tmp_path):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
     assert result.exit_code == 0, result.output
     assert "cra-python-sql-injection" in result.output
+
+
+def test_bundled_experimental_rules_are_opt_in(runner, tmp_path):
+    (tmp_path / "Example.java").write_text("class Example {}\n", encoding="utf-8")
+    default_report = _clean_report()
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=default_report) as run_scan_mock,
+    ):
+        default_result = runner.invoke(
+            code_check, [str(tmp_path)], obj=_make_obj("json")
+        )
+    default_payload = json.loads(default_result.output)
+    excluded = run_scan_mock.call_args.kwargs["exclude_rules"]
+    assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
+        "Opengrep scanned zero files"
+    )
+    assert len(excluded) == 50
+    assert default_payload["rule_count"] == 43
+    assert default_payload["rule_tiers"] == {
+        "default_enabled": 43,
+        "experimental_enabled": 0,
+        "experimental_available": 50,
+    }
+    assert default_payload["rule_language_counts"] == {"python": 43}
+
+    experimental_report = _clean_report()
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=experimental_report) as run_scan_mock,
+    ):
+        experimental_result = runner.invoke(
+            code_check,
+            [str(tmp_path), "--include-experimental"],
+            obj=_make_obj("json"),
+        )
+    experimental_payload = json.loads(experimental_result.output)
+    assert run_scan_mock.call_args.kwargs["exclude_rules"] == ()
+    assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
+        "Opengrep scanned zero files"
+    )
+    assert experimental_payload["rule_count"] == 93
+    assert experimental_payload["rule_tiers"]["experimental_enabled"] == 50
+
+
+def test_zero_file_message_does_not_suggest_experimental_for_unrelated_files(
+    runner, tmp_path
+):
+    (tmp_path / "README.txt").write_text("documentation only\n", encoding="utf-8")
+    failed = _failed_report()
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=failed) as run_scan_mock,
+    ):
+        runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
+
+    assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
+        "Opengrep scanned zero files"
+    )
+
+
+def test_zero_file_message_suggests_experimental_when_java_is_present(
+    runner, tmp_path
+):
+    (tmp_path / "Example.java").write_text("class Example {}\n", encoding="utf-8")
+    failed = _failed_report()
+    failed.failure_reason = "Opengrep scanned zero files"
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=failed),
+    ):
+        result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
+
+    assert "Experimental rules for Go" in result.output
+    assert "Java" in result.output
+    assert "--include-experimental" in result.output
+
+
+def test_polyglot_default_gate_fails_when_java_is_not_analysed(runner, tmp_path):
+    python_file = tmp_path / "app.py"
+    java_file = tmp_path / "Vuln.java"
+    python_file.write_text("print('clean')\n", encoding="utf-8")
+    java_file.write_text("class Vuln {}\n", encoding="utf-8")
+    report = _clean_report()
+    report.files_scanned = 1
+    report.scanned_paths = (str(python_file),)
+    report.language_counts = {"Python": 1}
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [str(tmp_path), "--fail-on", "error"],
+            obj=_make_obj("json"),
+        )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == _SAST_DEGRADED_EXIT_CODE
+    assert payload["coverage_degraded"] is True
+    assert payload["unanalysed_file_count"] == 1
+    assert payload["unanalysed_language_counts"] == {"Java": 1}
+    assert payload["unanalysed_files"] == [
+        {
+            "path": "Vuln.java",
+            "language": "Java",
+            "reason": "no_enabled_rules",
+        }
+    ]
+
+
+def test_experimental_gate_reports_mts_and_cts_engine_omissions(runner, tmp_path):
+    selected = tmp_path / "selected.ts"
+    missed_mts = tmp_path / "missed.mts"
+    missed_cts = tmp_path / "missed.cts"
+    for source in (selected, missed_mts, missed_cts):
+        source.write_text("eval(input);\n", encoding="utf-8")
+    report = _clean_report()
+    report.files_scanned = 1
+    report.scanned_paths = (str(selected),)
+    report.language_counts = {"TypeScript": 1}
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [str(tmp_path), "--include-experimental", "--fail-on", "error"],
+            obj=_make_obj("json"),
+        )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == _SAST_DEGRADED_EXIT_CODE
+    assert payload["unanalysed_language_counts"] == {"TypeScript": 2}
+    assert {item["reason"] for item in payload["unanalysed_files"]} == {
+        "engine_not_selected"
+    }
+    assert {item["path"] for item in payload["unanalysed_files"]} == {
+        "missed.mts",
+        "missed.cts",
+    }
+
+
+def test_explicit_exclude_is_not_reported_as_degraded_coverage(runner, tmp_path):
+    python_file = tmp_path / "app.py"
+    java_file = tmp_path / "ignored.java"
+    python_file.write_text("print('clean')\n", encoding="utf-8")
+    java_file.write_text("class Ignored {}\n", encoding="utf-8")
+    report = _clean_report()
+    report.files_scanned = 1
+    report.scanned_paths = (str(python_file),)
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [str(tmp_path), "--exclude", "*.java", "--fail-on", "error"],
+            obj=_make_obj("json"),
+        )
+
+    payload = json.loads(result.output)
+    assert result.exit_code == 0
+    assert payload["coverage_degraded"] is False
+    assert payload["unanalysed_file_count"] == 0
 
 
 # --- exit 27 with --fail-on matching a finding severity ---
@@ -189,16 +494,16 @@ def test_fail_on_exits_nonzero_when_scan_failed(runner, tmp_path):
             code_check, [str(tmp_path), "--fail-on", "note"], obj=_make_obj("text")
         )
     assert result.exit_code == 1
-    assert "refusing to pass" in (result.output + (result.stderr or ""))
+    assert "Scan failed" in (result.output + (result.stderr or ""))
 
 
-def test_no_fail_on_stays_advisory_when_scan_failed(runner, tmp_path):
+def test_no_fail_on_still_fails_when_scan_failed(runner, tmp_path):
     with (
         patch(_OPENGREP_PATCH, return_value=_BINARY),
         patch(_RUN_SCAN_PATCH, return_value=_failed_report()),
     ):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Scan failed" in result.output
 
 
@@ -293,15 +598,15 @@ def test_upload_refused_when_sarif_over_10mb(runner, tmp_path):
 def test_sast_alias_is_registered(runner, tmp_path):
     with patch(_OPENGREP_PATCH, return_value=None):
         result = runner.invoke(cli, ["sast", str(tmp_path)])
-    assert result.exit_code == 0
-    assert "opengrep not found" in (result.output + (result.stderr or ""))
+    assert result.exit_code == 1
+    assert OPENGREP_INSTALL_HINT in (result.output + (result.stderr or ""))
 
 
 def test_sast_alias_is_same_command_as_code_check(runner, tmp_path):
     with patch(_OPENGREP_PATCH, return_value=None):
         r1 = runner.invoke(cli, ["code-check", str(tmp_path)])
         r2 = runner.invoke(cli, ["sast", str(tmp_path)])
-    assert r1.exit_code == r2.exit_code == 0
+    assert r1.exit_code == r2.exit_code == 1
 
 
 # --- no-key list includes both names ---
@@ -315,7 +620,7 @@ def test_no_key_list_includes_code_check(monkeypatch):
         patch(_OPENGREP_PATCH, return_value=None),
     ):
         result = r.invoke(cli, ["code-check", "."])
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "API key is required" not in (result.output + (result.stderr or ""))
 
 
@@ -327,7 +632,7 @@ def test_no_key_list_includes_sast(monkeypatch):
         patch(_OPENGREP_PATCH, return_value=None),
     ):
         result = r.invoke(cli, ["sast", "."])
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "API key is required" not in (result.output + (result.stderr or ""))
 
 
@@ -528,14 +833,23 @@ def test_output_json_shape_and_valid_parse(runner, tmp_path):
 
 
 def test_output_sarif_is_valid_json(runner, tmp_path):
+    report = _clean_report()
+    report.language_counts = {"Python": 2}
+    report.sarif_raw = {
+        "version": "2.1.0",
+        "runs": [{"tool": {"driver": {"name": "Opengrep"}}, "results": []}],
+    }
     with (
         patch(_OPENGREP_PATCH, return_value=_BINARY),
-        patch(_RUN_SCAN_PATCH, return_value=_clean_report()),
+        patch(_RUN_SCAN_PATCH, return_value=report),
     ):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("sarif"))
     assert result.exit_code == 0
     doc = json.loads(result.output)
     assert "version" in doc or "runs" in doc
+    properties = doc["runs"][0]["tool"]["driver"]["properties"]
+    assert properties["craEvidenceLanguageCounts"] == {"Python": 2}
+    assert "not an audit" in properties["advisory"]["code_check"]
 
 
 # ---------------------------------------------------------------------------
@@ -629,9 +943,160 @@ def test_upload_size_limit_constant_is_exactly_10mib():
     assert _UPLOAD_SIZE_LIMIT == 10 * 1024 * 1024
 
 
+def test_upload_sarif_removes_source_and_environment_but_keeps_taint_flow(tmp_path):
+    source = tmp_path / "src" / "app.py"
+    report = _clean_report()
+    report.scan_root = str(tmp_path / "src")
+    report.sarif_raw = {
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "rules": [
+                            {
+                                "id": "test-rule",
+                                "fullDescription": {"text": "Static rule guidance"},
+                            }
+                        ]
+                    }
+                },
+                "originalUriBaseIds": {"ROOT": {"uri": f"file://{tmp_path}/src/"}},
+                "invocations": [
+                    {
+                        "commandLine": f"opengrep {tmp_path}/src",
+                        "environmentVariables": {"TOKEN": "secret"},
+                    }
+                ],
+                "results": [
+                    {
+                        "ruleId": "test-rule",
+                        "message": {"text": "expanded SECRET_SOURCE expression"},
+                        "locations": [
+                            {
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": str(source)},
+                                    "region": {"snippet": {"text": "secret source"}},
+                                }
+                            }
+                        ],
+                        "codeFlows": [
+                            {
+                                "threadFlows": [
+                                    {
+                                        "locations": [
+                                            {
+                                                "message": {"text": "SECRET_FLOW expression"},
+                                                "location": {
+                                                    "physicalLocation": {
+                                                        "artifactLocation": {
+                                                            "uri": str(source)
+                                                        },
+                                                        "region": {
+                                                            "snippet": {
+                                                                "text": "nested source"
+                                                            }
+                                                        },
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ],
+                        "relatedLocations": [
+                            {
+                                "message": {"text": "RELATED_SECRET"},
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": str(source)},
+                                    "region": {"snippet": {"text": "related secret"}},
+                                },
+                            }
+                        ],
+                        "fixes": [
+                            {
+                                "description": {"text": "FIX_SECRET"},
+                                "artifactChanges": [
+                                    {
+                                        "artifactLocation": {"uri": str(source)},
+                                        "replacements": [
+                                            {
+                                                "insertedContent": {
+                                                    "text": "replacement secret"
+                                                }
+                                            }
+                                        ],
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    sanitized = _sanitized_sarif(report)
+    serialized = json.dumps(sanitized)
+
+    assert sanitized["runs"][0]["results"][0]["codeFlows"]
+    assert "app.py" in serialized
+    assert str(tmp_path) not in serialized
+    assert "secret source" not in serialized
+    assert "nested source" not in serialized
+    assert "SECRET_SOURCE" not in serialized
+    assert "SECRET_FLOW" not in serialized
+    assert "RELATED_SECRET" not in serialized
+    assert "FIX_SECRET" not in serialized
+    assert "replacement secret" not in serialized
+    assert "relatedLocations" not in serialized
+    assert "fixes" not in serialized
+    assert "Static rule guidance" in serialized
+    assert "TOKEN" not in serialized
+
+
+def test_upload_sarif_preserves_sanitized_degraded_coverage_status():
+    report = _degraded_report()
+    report.pack_version = "2.0.1"
+    report.default_rule_count = 51
+    report.experimental_rule_count = 0
+    report.available_experimental_rule_count = 12
+    report.rule_language_counts = {"python": 43}
+    report.sarif_raw = {
+        "version": "2.1.0",
+        "runs": [
+            {
+                "tool": {"driver": {"rules": []}},
+                "results": [],
+                "invocations": [
+                    {
+                        "executionSuccessful": True,
+                        "toolExecutionNotifications": [
+                            {"level": "warning", "message": {"text": "/secret/path"}}
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+
+    sanitized = _sanitized_sarif(report)
+    run = sanitized["runs"][0]
+    notification = run["invocations"][0]["toolExecutionNotifications"][0]
+    properties = run["tool"]["driver"]["properties"]
+    assert notification["message"]["text"] == (
+        "Coverage degraded: 1 file parse error(s)"
+    )
+    assert properties["craEvidenceCoverageDegraded"] is True
+    assert properties["craEvidencePackVersion"] == "2.0.1"
+    assert "/secret/path" not in json.dumps(sanitized)
+
+
 def test_upload_exactly_at_limit_is_allowed(runner, tmp_path):
     """A SARIF payload of exactly 10 MiB must not be refused (operator is >)."""
-    exact_bytes = b"x" * _UPLOAD_SIZE_LIMIT
+    overhead = len(json.dumps({"payload": ""}, indent=2).encode("utf-8"))
+    exact_doc = {"payload": "x" * (_UPLOAD_SIZE_LIMIT - overhead)}
 
     with (
         patch(_OPENGREP_PATCH, return_value=_BINARY),
@@ -642,8 +1107,8 @@ def test_upload_exactly_at_limit_is_allowed(runner, tmp_path):
             return_value=("prod", "1.0", None),
         ),
         patch(
-            "cra_evidence_cli.commands.code_check._render_sarif",
-            return_value=exact_bytes.decode("latin-1"),
+            "cra_evidence_cli.commands.code_check._sanitized_sarif",
+            return_value=exact_doc,
         ),
         patch("cra_evidence_cli.client.CRAEvidenceClient") as mock_client_cls,
     ):
@@ -665,7 +1130,8 @@ def test_upload_exactly_at_limit_is_allowed(runner, tmp_path):
 
 
 def test_upload_one_byte_over_limit_is_refused(runner, tmp_path):
-    over_bytes = b"x" * (_UPLOAD_SIZE_LIMIT + 1)
+    overhead = len(json.dumps({"payload": ""}, indent=2).encode("utf-8"))
+    over_doc = {"payload": "x" * (_UPLOAD_SIZE_LIMIT - overhead + 1)}
 
     with (
         patch(_OPENGREP_PATCH, return_value=_BINARY),
@@ -676,8 +1142,8 @@ def test_upload_one_byte_over_limit_is_refused(runner, tmp_path):
             return_value=("prod", "1.0", None),
         ),
         patch(
-            "cra_evidence_cli.commands.code_check._render_sarif",
-            return_value=over_bytes.decode("latin-1"),
+            "cra_evidence_cli.commands.code_check._sanitized_sarif",
+            return_value=over_doc,
         ),
         patch("cra_evidence_cli.client.CRAEvidenceClient") as mock_client_cls,
     ):
@@ -709,14 +1175,14 @@ def test_verbose_flag_includes_honest_note(runner, tmp_path):
     assert "not an audit" in result.output
 
 
-def test_no_verbose_flag_omits_honest_note(runner, tmp_path):
+def test_default_text_includes_honest_note(runner, tmp_path):
     with (
         patch(_OPENGREP_PATCH, return_value=_BINARY),
         patch(_RUN_SCAN_PATCH, return_value=_clean_report()),
     ):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
     assert result.exit_code == 0
-    assert "not an audit" not in result.output
+    assert "not an audit" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -782,9 +1248,11 @@ def test_exclude_rule_passed_through(runner, tmp_path):
             code_check,
             [str(tmp_path), "--exclude-rule", "cra-go-weak-hash"],
             obj=_make_obj("text"),
-        )
+    )
     assert result.exit_code == 0
-    assert run_scan_mock.call_args.kwargs["exclude_rules"] == ("cra-go-weak-hash",)
+    passed = run_scan_mock.call_args.kwargs["exclude_rules"]
+    assert passed[0] == "cra-go-weak-hash"
+    assert len(passed[1:]) == 50
 
 
 # --- upload must not silently succeed when the engine is absent ---

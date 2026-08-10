@@ -11,6 +11,7 @@ rules:
     severity: ERROR
     languages: [python]
     metadata:
+      tier: default
       cwe:
         - "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
       owasp:
@@ -24,6 +25,9 @@ rules:
         - python
         - flask
       confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: The remediation changes the template boundary or sink instead of sanitizing template source.
       license: MIT
       author: CRA Evidence
     pattern-sources:
@@ -34,6 +38,13 @@ rules:
       - pattern: request.data
       - pattern: request.cookies
       - pattern: request.headers
+      - pattern: flask.request.args
+      - pattern: flask.request.form
+      - pattern: flask.request.values
+      - pattern: flask.request.json
+      - pattern: flask.request.data
+      - pattern: flask.request.cookies
+      - pattern: flask.request.headers
     pattern-sinks:
       - patterns:
           - pattern-either:

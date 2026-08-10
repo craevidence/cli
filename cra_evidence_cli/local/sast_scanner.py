@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
+import ast
 import json
+import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
 OPENGREP_INSTALL_HINT = (
-    "Opengrep is not installed. Install it from https://github.com/opengrep/opengrep "
-    "or run: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | sh"
+    "Opengrep is unavailable. Use a supported craevidence platform wheel or container, "
+    "or install Opengrep from https://github.com/opengrep/opengrep/releases."
 )
+
+_BUNDLED_OPENGREP = Path(__file__).parent.parent / "_engine" / "opengrep"
 
 _DEFAULT_EXCLUDES = (
     "tests",
@@ -30,15 +35,56 @@ _CWE_TAG_RE = re.compile(r"^(CWE-\d+:.+)$")
 
 _LEVEL_ORDER = {"error": 3, "warning": 2, "note": 1}
 
+_RECOVERABLE_PARSE_ERROR_TYPES = frozenset(
+    {
+        "LexicalError",
+        "Lexical error",
+        "ParseError",
+        "Syntax error",
+        "OtherParseError",
+        "Other syntax error",
+        "AstBuilderError",
+        "AST builder error",
+        "PartialParsing",
+        "PythonSyntaxError",
+        "PythonSyntaxPreflightError",
+    }
+)
+
+_LANGUAGE_EXTENSIONS = {
+    ".py": "Python",
+    ".js": "JavaScript",
+    ".jsx": "JavaScript",
+    ".ts": "TypeScript",
+    ".tsx": "TypeScript",
+    ".go": "Go",
+    ".java": "Java",
+    ".c": "C",
+    ".h": "C/C++",
+    ".cc": "C++",
+    ".cpp": "C++",
+    ".cxx": "C++",
+    ".hpp": "C++",
+    ".rs": "Rust",
+    ".php": "PHP",
+    ".cs": "C#",
+}
+
 
 def opengrep_path() -> str | None:
-    """Return the path to the opengrep binary, or None if not installed."""
+    """Resolve an explicit, bundled, or PATH-provided Opengrep executable."""
+    configured = os.environ.get("CRA_EVIDENCE_OPENGREP")
+    if configured:
+        candidate = Path(configured).expanduser()
+        return str(candidate)
+    if _BUNDLED_OPENGREP.is_file() and os.access(_BUNDLED_OPENGREP, os.X_OK):
+        return str(_BUNDLED_OPENGREP)
     return shutil.which("opengrep")
 
 
-def get_version() -> str:
+def get_version(binary: str | None = None) -> str:
     """Return the opengrep version string, or 'unknown' on failure."""
-    binary = opengrep_path()
+    binary = binary or opengrep_path()
     if binary is None:
         return "unknown"
     try:
@@ -90,6 +136,19 @@ class SASTReport:
     failure_reason: str | None
     sarif_raw: dict | None
     pack_version: str | None = None
+    files_scanned: int = 0
+    files_skipped: int = 0
+    engine_errors: list[dict] = field(default_factory=list)
+    scan_root: str | None = None
+    language_counts: dict[str, int] = field(default_factory=dict)
+    default_rule_count: int | None = None
+    experimental_rule_count: int | None = None
+    available_experimental_rule_count: int | None = None
+    rule_language_counts: dict[str, int] = field(default_factory=dict)
+    parser_coverage_assurance: str = "limited"
+    scanned_paths: tuple[str, ...] = ()
+    skipped_paths: tuple[str, ...] = ()
+    unanalysed_files: list[dict] = field(default_factory=list)
 
     def findings_at_or_above(self, level: str) -> list[SASTFinding]:
         threshold = _LEVEL_ORDER.get(level.lower(), 1)
@@ -103,6 +162,66 @@ def _parse_cwe_tags(tags: list[str]) -> list[str]:
         if m:
             result.append(m.group(1))
     return result
+
+
+def _count_languages(paths: list[str]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for scanned in paths:
+        language = _LANGUAGE_EXTENSIONS.get(Path(scanned).suffix.lower(), "Other")
+        counts[language] = counts.get(language, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _python_syntax_errors(paths: list[str]) -> list[dict]:
+    grammar = f"CPython {sys.version_info.major}.{sys.version_info.minor}"
+    errors: list[dict] = []
+    for raw_path in paths:
+        candidate = Path(raw_path)
+        if candidate.suffix.lower() != ".py" or not candidate.is_file():
+            continue
+        try:
+            source = candidate.read_text(encoding="utf-8-sig")
+            ast.parse(source, filename=str(candidate))
+        except (SyntaxError, UnicodeError) as exc:
+            errors.append(
+                {
+                    "type": "PythonSyntaxError",
+                    "path": str(candidate),
+                    "line": getattr(exc, "lineno", None),
+                    "message": (
+                        f"Python standard-library parsing with {grammar} failed; "
+                        "Opengrep may have selected this file without producing a "
+                        "usable Python AST"
+                    ),
+                }
+            )
+        except (RecursionError, MemoryError, OSError) as exc:
+            errors.append(
+                {
+                    "type": "PythonSyntaxPreflightError",
+                    "path": str(candidate),
+                    "line": None,
+                    "message": (
+                        f"Python syntax preflight with {grammar} could not complete: "
+                        f"{type(exc).__name__}"
+                    ),
+                }
+            )
+    return errors
+
+
+def _parser_assurance(scanned_paths: list[str]) -> str:
+    grammar = f"CPython {sys.version_info.major}.{sys.version_info.minor}"
+    if any(Path(path).suffix.lower() == ".py" for path in scanned_paths):
+        return (
+            "limited; selected Python files receive an independent "
+            f"{grammar} syntax preflight, while engine selection still does not "
+            "prove a usable Opengrep AST"
+        )
+    return (
+        "limited; engine selection does not prove a usable AST and no independent "
+        "syntax preflight ran for the selected languages"
+    )
 
 
 def _count_rules(sarif: dict) -> int:
@@ -169,16 +288,65 @@ def _parse_sarif(sarif: dict) -> list[SASTFinding]:
     return findings
 
 
+def _mark_sarif_failure(sarif: dict, reason: str) -> None:
+    runs = sarif.get("runs") or []
+    if not runs:
+        return
+    invocations = runs[0].setdefault("invocations", [])
+    if not invocations:
+        invocations.append({})
+    invocation = invocations[0]
+    invocation["executionSuccessful"] = False
+    notifications = invocation.setdefault("toolExecutionNotifications", [])
+    notifications.append({"level": "error", "message": {"text": reason}})
+
+
+def _engine_error_type(error: dict) -> str:
+    error_type = error.get("type")
+    if isinstance(error_type, list) and error_type:
+        error_type = error_type[0]
+    return error_type if isinstance(error_type, str) else ""
+
+
+def _is_recoverable_parse_error(error: dict) -> bool:
+    return _engine_error_type(error) in _RECOVERABLE_PARSE_ERROR_TYPES
+
+
+def _mark_sarif_degraded(sarif: dict, error_count: int) -> None:
+    runs = sarif.get("runs") or []
+    if not runs:
+        return
+    invocations = runs[0].setdefault("invocations", [])
+    if not invocations:
+        invocations.append({"executionSuccessful": True})
+    invocation = invocations[0]
+    invocation["executionSuccessful"] = True
+    notifications = invocation.setdefault("toolExecutionNotifications", [])
+    notifications.append(
+        {
+            "level": "warning",
+            "message": {
+                "text": (
+                    f"Coverage degraded: Opengrep reported {error_count} "
+                    "recoverable parse error(s)"
+                )
+            },
+        }
+    )
+
+
 def run_scan(
     path: Path,
     rules: Path,
     timeout: int = 300,
+    rule_timeout: int = 30,
     excludes: tuple[str, ...] | None = None,
     exclude_rules: tuple[str, ...] = (),
+    zero_files_reason: str = "Opengrep scanned zero files",
 ) -> SASTReport:
     """Run an Opengrep scan and return a SASTReport."""
     binary = opengrep_path()
-    engine_version = get_version()
+    engine_version = get_version(binary)
     rules_path = str(rules)
 
     if binary is None:
@@ -192,8 +360,10 @@ def run_scan(
             sarif_raw=None,
         )
 
-    effective_excludes = excludes if excludes is not None else _DEFAULT_EXCLUDES
+    effective_excludes = (*_DEFAULT_EXCLUDES, *(excludes or ()))
 
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
+        json_out = tmp.name
     with tempfile.NamedTemporaryFile(suffix=".sarif.json", delete=False) as tmp:
         sarif_out = tmp.name
 
@@ -203,13 +373,15 @@ def run_scan(
         "-f",
         str(rules),
         "--no-rewrite-rule-ids",
+        f"--json-output={json_out}",
         f"--sarif-output={sarif_out}",
         "--quiet",
         "--disable-version-check",
         # Track taint across functions within a file, not only inside one
-        # function. Verified against Opengrep 1.25.0.
+        # function. Verified against Opengrep 1.26.0.
         "--taint-intrafile",
-        f"--timeout={timeout}",
+        f"--timeout={rule_timeout}",
+        "--timeout-threshold=3",
     ]
     for exc in effective_excludes:
         cmd += ["--exclude", exc]
@@ -217,6 +389,7 @@ def run_scan(
         cmd += ["--exclude-rule", rule_id]
     cmd.append(str(path))
 
+    json_path = Path(json_out)
     sarif_path = Path(sarif_out)
     try:
         try:
@@ -288,16 +461,63 @@ def run_scan(
             )
     finally:
         sarif_path.unlink(missing_ok=True)
+        json_text = json_path.read_text(encoding="utf-8") if json_path.exists() else ""
+        json_path.unlink(missing_ok=True)
+
+    try:
+        scan_data = json.loads(json_text)
+    except (json.JSONDecodeError, TypeError):
+        return SASTReport(
+            engine_version=engine_version,
+            rules_path=rules_path,
+            rule_count=0,
+            findings=[],
+            scan_failed=True,
+            failure_reason="JSON scan summary could not be read",
+            sarif_raw=None,
+        )
+
+    paths = scan_data.get("paths") or {}
+    scanned_paths = paths.get("scanned") or []
+    skipped_paths = paths.get("skipped") or []
+    engine_errors = list(scan_data.get("errors") or [])
+    engine_errors.extend(_python_syntax_errors(scanned_paths))
 
     findings = _parse_sarif(sarif)
     rule_count = _count_rules(sarif)
+    recoverable_parse_errors = [
+        error for error in engine_errors if _is_recoverable_parse_error(error)
+    ]
+    fatal_engine_errors = [
+        error for error in engine_errors if not _is_recoverable_parse_error(error)
+    ]
+    if not scanned_paths:
+        failure_reason = zero_files_reason
+    elif fatal_engine_errors:
+        failure_reason = (
+            f"Opengrep reported {len(fatal_engine_errors)} non-recoverable scan error(s)"
+        )
+    else:
+        failure_reason = None
+    if failure_reason:
+        _mark_sarif_failure(sarif, failure_reason)
+    elif recoverable_parse_errors:
+        _mark_sarif_degraded(sarif, len(recoverable_parse_errors))
 
     return SASTReport(
         engine_version=engine_version,
         rules_path=rules_path,
         rule_count=rule_count,
         findings=findings,
-        scan_failed=False,
-        failure_reason=None,
+        scan_failed=failure_reason is not None,
+        failure_reason=failure_reason,
         sarif_raw=sarif,
+        files_scanned=len(scanned_paths),
+        files_skipped=len(skipped_paths),
+        engine_errors=engine_errors,
+        scan_root=str(path.resolve()),
+        language_counts=_count_languages(scanned_paths),
+        parser_coverage_assurance=_parser_assurance(scanned_paths),
+        scanned_paths=tuple(str(value) for value in scanned_paths),
+        skipped_paths=tuple(str(value) for value in skipped_paths),
     )

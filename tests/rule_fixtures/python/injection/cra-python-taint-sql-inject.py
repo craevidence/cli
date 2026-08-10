@@ -1,11 +1,23 @@
 import sqlite3
 
+import flask
 from flask import request
 
 
 def get_cursor():
     conn = sqlite3.connect(":memory:")
     return conn.cursor()
+
+
+def requested_user_id():
+    return request.args.get("id")
+
+
+def bad_sql_across_helper(cur):
+    user_id = requested_user_id()
+    query = "SELECT * FROM users WHERE id = '" + user_id + "'"
+    # ruleid: cra-python-taint-sql-inject
+    cur.execute(query)
 
 
 # Bad: request.args tainted -> execute (sink, query arg)
@@ -40,13 +52,20 @@ def bad_sql_from_cookie(cur):
     cur.execute(q)
 
 
-# Safe: sanitizer int() applied to tainted value before embedding in query
-def ok_sql_sanitized_int(cur):
+# Bad: qualified flask.request source -> execute (sink)
+def bad_sql_from_qualified_request(cur):
+    uid = flask.request.args.get("id")
+    query = "SELECT * FROM users WHERE id = '" + uid + "'"
+    # ruleid: cra-python-taint-sql-inject
+    cur.execute(query)
+
+
+# Unsafe: a local callable named int is not the Python numeric conversion.
+def bad_sql_shadowed_int(cur, int):
     raw = request.args.get("page")
-    # int() is a declared sanitizer -- taint cleared
     page = int(raw)
     q = "SELECT * FROM items LIMIT 10 OFFSET " + str(page)
-    # ok: cra-python-taint-sql-inject
+    # ruleid: cra-python-taint-sql-inject
     cur.execute(q)
 
 

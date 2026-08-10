@@ -1,0 +1,73 @@
+rules:
+  - id: cra-rust-file-env-taint
+    message: >
+      Process input reaches a filesystem path. Resolve the value beneath a
+      fixed base directory, canonicalize it, and reject paths outside the base.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://doc.rust-lang.org/std/fs/fn.canonicalize.html
+      category: security
+      technology: [rust, filesystem]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: partially-modeled
+        reason: >
+          One containment shape is suppressed:
+          std::fs::canonicalize(...).unwrap() bound to both the base and the
+          candidate, followed by an if !path.starts_with(&base) guard whose body
+          returns. Every other spelling reports, including the common
+          if let Ok(path) = candidate.canonicalize() form, a guard written with
+          match, a guard that returns a Result, and a base written as an inline
+          literal. Correct containment written any other way is reported, so a
+          finding here is a prompt to check the containment rather than proof
+          that it is missing. A broader shape was modeled and withdrawn: the
+          engine matches an if statement together with its else branch and
+          cannot tell a fixed base from an attacker supplied one, so the wider
+          sanitizer silenced real traversals through a vacuous "/" base and
+          through sinks placed in the else branch.
+      license: MIT
+      author: CRA Evidence
+    languages: [rust]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: std::env::args().nth(...)
+          - pattern: std::env::var(...)
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $PATH.starts_with(&$BASE)
+          - focus-metavariable: $PATH
+          - pattern-inside: |
+              let $BASE = std::fs::canonicalize(...).unwrap();
+              ...
+              let $PATH = std::fs::canonicalize(...).unwrap();
+              ...
+              if !$PATH.starts_with(&$BASE) {
+                  return;
+              }
+        by-side-effect: true
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: std::fs::read($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: std::fs::read_to_string($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: std::fs::File::open($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: tokio::fs::read($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: tokio::fs::read_to_string($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: tokio::fs::File::open($PATH)
+              - focus-metavariable: $PATH

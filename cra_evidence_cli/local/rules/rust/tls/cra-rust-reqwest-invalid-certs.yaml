@@ -1,0 +1,29 @@
+rules:
+  - id: cra-rust-reqwest-invalid-certs
+    message: >
+      Reqwest is configured to accept invalid TLS certificates. Remove this
+      setting and use a trusted certificate chain.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://docs.rs/reqwest/latest/reqwest/struct.ClientBuilder.html#method.danger_accept_invalid_certs
+      category: security
+      technology: [rust, reqwest]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [rust]
+    patterns:
+      - pattern-either:
+          - pattern: $CLIENT.danger_accept_invalid_certs(true)
+          - pattern: $CLIENT.tls_danger_accept_invalid_certs(true)
+          - pattern: $CLIENT.danger_accept_invalid_hostnames(true)
+          - pattern: $CLIENT.tls_danger_accept_invalid_hostnames(true)
+      - pattern-not-inside: |
+          mod tests {
+              ...
+          }

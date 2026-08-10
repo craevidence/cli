@@ -13,6 +13,11 @@ function badExecSyncConcat(dir) {
     cp.execSync("find " + dir);
 }
 
+function badExecTemplate(dir) {
+    // ruleid: cra-javascript-exec-injection
+    cp.exec(`find ${dir}`);
+}
+
 // Branch 3: require('child_process').exec inline
 function badInlineRequireExec(arg) {
     // ruleid: cra-javascript-exec-injection
@@ -23,6 +28,27 @@ function badInlineRequireExec(arg) {
 function badInlineRequireExecSync(arg) {
     // ruleid: cra-javascript-exec-injection
     require("child_process").execSync("ping " + arg);
+}
+
+function badDestructuredExec(arg) {
+    // ruleid: cra-javascript-exec-injection
+    exec("ping " + arg);
+}
+
+function badDestructuredExecSync(arg) {
+    // ruleid: cra-javascript-exec-injection
+    execSync("ping " + arg);
+}
+
+function okRegExpExec(value) {
+    const expression = /prefix/;
+    // ok: cra-javascript-exec-injection
+    return expression.exec("prefix " + value);
+}
+
+function okObjectExec(value, database) {
+    // ok: cra-javascript-exec-injection
+    return database.exec("SELECT " + value);
 }
 
 // Safe: execFile with argument array -- no shell interpolation
@@ -37,4 +63,33 @@ function okSpawn(dir) {
     const { spawn } = require("child_process");
     // ok: cra-javascript-exec-injection
     spawn("find", [dir, "-type", "f"]);
+}
+
+// Bad: the module is bound with var rather than const
+function badVarRequire(host) {
+    var cp = require("child_process");
+    // ruleid: cra-javascript-exec-injection
+    cp.exec("ping " + host);
+}
+
+// Bad: the module is bound with let
+function badLetRequire(host) {
+    let cp = require("child_process");
+    // ruleid: cra-javascript-exec-injection
+    cp.exec("ping " + host);
+}
+
+// Bad: the binding is one of several declarators in a single var statement
+function badMultiDeclaratorRequire(host) {
+    var cp = require("child_process"),
+        os = require("os");
+    // ruleid: cra-javascript-exec-injection
+    cp.exec("ping " + host + " " + os.hostname());
+}
+
+// Safe: var binding, argument array instead of a command string
+function okVarRequireExecFile(filename) {
+    var cp = require("child_process");
+    // ok: cra-javascript-exec-injection
+    cp.execFile("ls", [filename], (err, stdout) => { console.log(stdout); });
 }

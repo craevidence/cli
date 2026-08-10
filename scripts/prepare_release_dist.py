@@ -179,6 +179,7 @@ def build_distributions(
     version: str,
     release_src: str | os.PathLike[str],
     engine_dir: str | os.PathLike[str],
+    opengrep_dir: str | os.PathLike[str],
     out_dir: Path,
     runner=DEFAULT_RUNNER,
 ) -> None:
@@ -198,6 +199,8 @@ def build_distributions(
             str(release_src),
             "--engine-dir",
             str(engine_dir),
+            "--opengrep-dir",
+            str(opengrep_dir),
             "--out-dir",
             str(out_dir),
         ],
@@ -216,6 +219,7 @@ def acquire(
     dist_dir: str | os.PathLike[str],
     *,
     engine_dir: str | os.PathLike[str] | None = None,
+    opengrep_dir: str | os.PathLike[str] | None = None,
     opener=DEFAULT_OPENER,
     runner=DEFAULT_RUNNER,
     allow_build: bool = True,
@@ -264,12 +268,19 @@ def acquire(
                 "and building is not allowed without a trusted source anchor"
             )
             raise AcquisitionError(msg)
-        if engine_dir is None:
-            msg = "the promoted engine payload is required to build platform wheels"
+        if engine_dir is None or opengrep_dir is None:
+            msg = "the Grype and Opengrep payloads are required to build platform wheels"
             raise AcquisitionError(msg)
         with tempfile.TemporaryDirectory() as build_out:
             out = Path(build_out)
-            build_distributions(version, release_src, engine_dir, out, runner=runner)
+            build_distributions(
+                version,
+                release_src,
+                engine_dir,
+                opengrep_dir,
+                out,
+                runner=runner,
+            )
             for name in missing:
                 built = out / name
                 if not built.is_file():
@@ -329,6 +340,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Path to the promoted /engine payload used if a build is needed.",
     )
     parser.add_argument(
+        "--opengrep-dir",
+        required=True,
+        help="Path to the verified official Opengrep payload used if a build is needed.",
+    )
+    parser.add_argument(
         "--dist-dir",
         default="dist",
         help="Directory that receives the release distributions.",
@@ -354,6 +370,7 @@ def main(argv: list[str] | None = None) -> int:
             args.release_src,
             args.dist_dir,
             engine_dir=args.engine_dir,
+            opengrep_dir=args.opengrep_dir,
             allow_build=not args.no_build,
         )
     except AcquisitionError as error:

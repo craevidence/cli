@@ -2,13 +2,33 @@ rules:
   - id: cra-go-parseint-downcast
     message: >
       A value parsed as a 64-bit integer is downcast to int32 or uint32. If the
-      value can exceed the 32-bit range and is not bounds-checked before the
-      cast, it is silently truncated, which can cause integer overflow in
-      security-sensitive contexts such as array bounds, token validation, or
-      size checks. Parse with bitSize 32 to let strconv enforce the range, or
-      add an explicit bounds check before the cast.
+      value falls outside the range of the target type it is silently truncated,
+      which can cause integer overflow in security-sensitive contexts such as
+      array bounds, token validation, or size checks. strconv.ParseInt and
+      strconv.Atoi can return a negative value, and a negative value wraps to a
+      large positive number on conversion, so an upper bound on its own does not
+      make the cast safe for a signed parse: check both ends of the range. Parse
+      with a bitSize of 32 or less to let strconv enforce the range, or add an
+      explicit bounds check before the cast. The parse is matched when its bitSize
+      is 0 or a literal from 33 to 64, because bitSize 0 selects int, which is
+      64-bit on a 64-bit platform. This rule accepts a bounds check only in these
+      shapes: the parsed variable is the left operand of the comparison, the right
+      operand is a numeric literal or math.MaxInt32, math.MinInt32, or
+      math.MaxUint32, a signed parse states both ends with && (in range) or ||
+      (out of range), and the out-of-range branch either encloses the cast or
+      contains a return, a continue, os.Exit, log.Fatal, log.Fatalf, or
+      log.Fatalln that does not itself cast the parsed value. Checks written any
+      other way, including a named constant, a computed bound, a reversed
+      comparison, a helper predicate, or a rejection by break, goto, or panic, are
+      reported even when they are correct. The rule recognizes a bounds check by
+      its shape and position in the source, not by control flow: it does not
+      verify that the check runs before the cast on every path. A check nested
+      inside another conditional, inside a loop that may not execute, or inside a
+      closure suppresses the finding just as a check on the straight-line path
+      does, so a real truncation can be missed.
     severity: WARNING
     metadata:
+      tier: experimental
       cwe:
         - "CWE-190: Integer Overflow or Wraparound"
       owasp:
@@ -26,41 +46,399 @@ rules:
     languages: [go]
     patterns:
       - pattern-either:
-          - pattern: |
-              $X, ... = strconv.ParseInt(..., ..., 64)
-              ...
-              int32($X)
-          - pattern: |
-              $X, ... = strconv.ParseInt(..., ..., 64)
-              ...
-              uint32($X)
-          - pattern: |
-              $X, ... = strconv.ParseUint(..., ..., 64)
-              ...
-              int32($X)
-          - pattern: |
-              $X, ... = strconv.ParseUint(..., ..., 64)
-              ...
-              uint32($X)
-          - pattern: |
-              $X, $ERR = strconv.Atoi(...)
-              ...
-              int32($X)
-          - pattern: |
-              $X, $ERR = strconv.Atoi(...)
-              ...
-              uint32($X)
-      - pattern-not-inside: |
-          if <... math.MaxInt32 ...> { ... }
-      - pattern-not-inside: |
-          if <... math.MaxUint32 ...> { ... }
-      - pattern-not: |
-          $X, ... = $PARSE(...)
-          ...
-          if <... math.MaxInt32 ...> { ... }
-          ...
-      - pattern-not: |
-          $X, ... = $PARSE(...)
-          ...
-          if <... math.MaxUint32 ...> { ... }
-          ...
+          # --------------------------------------------------------------
+          # Unsigned parse to uint32. The parsed value is never negative, so
+          # an upper bound of at most 4294967295 is enough.
+          # --------------------------------------------------------------
+          - patterns:
+              - pattern: |
+                  $X, ... = strconv.ParseUint(..., ..., $BITS)
+                  ...
+                  uint32($X)
+              - metavariable-comparison:
+                  metavariable: $BITS
+                  comparison: $BITS == 0 or ($BITS > 32 and $BITS <= 64)
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          uint32($X)
+                          ...
+                        }
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern: $X < $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 4294967296
+                          - patterns:
+                              - pattern: $X <= $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 4294967295
+                          - pattern: $X < math.MaxUint32
+                          - pattern: $X <= math.MaxUint32
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          $S
+                        }
+                        ...
+                    - metavariable-pattern:
+                        metavariable: $S
+                        patterns:
+                          - pattern-either:
+                              - pattern: return ...
+                              - pattern: continue
+                              - pattern: os.Exit(...)
+                              - pattern: log.Fatal(...)
+                              - pattern: log.Fatalf(...)
+                              - pattern: log.Fatalln(...)
+                          - pattern-not: return uint32($X)
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern: $X > $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 4294967295
+                          - patterns:
+                              - pattern: $X >= $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 4294967296
+                          - pattern: $X > math.MaxUint32
+                          - pattern: $X >= math.MaxUint32
+          # --------------------------------------------------------------
+          # Unsigned parse to int32. Upper bound of at most 2147483647.
+          # --------------------------------------------------------------
+          - patterns:
+              - pattern: |
+                  $X, ... = strconv.ParseUint(..., ..., $BITS)
+                  ...
+                  int32($X)
+              - metavariable-comparison:
+                  metavariable: $BITS
+                  comparison: $BITS == 0 or ($BITS > 32 and $BITS <= 64)
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          int32($X)
+                          ...
+                        }
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern: $X < $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483648
+                          - patterns:
+                              - pattern: $X <= $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483647
+                          - pattern: $X < math.MaxInt32
+                          - pattern: $X <= math.MaxInt32
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          $S
+                        }
+                        ...
+                    - metavariable-pattern:
+                        metavariable: $S
+                        patterns:
+                          - pattern-either:
+                              - pattern: return ...
+                              - pattern: continue
+                              - pattern: os.Exit(...)
+                              - pattern: log.Fatal(...)
+                              - pattern: log.Fatalf(...)
+                              - pattern: log.Fatalln(...)
+                          - pattern-not: return int32($X)
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern: $X > $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483647
+                          - patterns:
+                              - pattern: $X >= $HI
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483648
+                          - pattern: $X > math.MaxInt32
+                          - pattern: $X >= math.MaxInt32
+          # --------------------------------------------------------------
+          # Signed parse to int32. Both ends of [-2147483648, 2147483647]
+          # have to be stated: a negative value passes any upper bound.
+          # --------------------------------------------------------------
+          - patterns:
+              - pattern-either:
+                  - patterns:
+                      - pattern: |
+                          $X, ... = strconv.ParseInt(..., ..., $BITS)
+                          ...
+                          int32($X)
+                      - metavariable-comparison:
+                          metavariable: $BITS
+                          comparison: $BITS == 0 or ($BITS > 32 and $BITS <= 64)
+                  - pattern: |
+                      $X, $ERR = strconv.Atoi(...)
+                      ...
+                      int32($X)
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          int32($X)
+                          ...
+                        }
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X >= $LO && $X <= $HI
+                                  - pattern: $X <= $HI && $X >= $LO
+                                  - pattern: $X > $LO && $X < $HI
+                                  - pattern: $X < $HI && $X > $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -2147483648
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483647
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X >= math.MinInt32 && $X <= $HI
+                                  - pattern: $X <= $HI && $X >= math.MinInt32
+                                  - pattern: $X > math.MinInt32 && $X < $HI
+                                  - pattern: $X < $HI && $X > math.MinInt32
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483647
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X >= $LO && $X <= math.MaxInt32
+                                  - pattern: $X <= math.MaxInt32 && $X >= $LO
+                                  - pattern: $X > $LO && $X < math.MaxInt32
+                                  - pattern: $X < math.MaxInt32 && $X > $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -2147483648
+                          - pattern: $X >= math.MinInt32 && $X <= math.MaxInt32
+                          - pattern: $X <= math.MaxInt32 && $X >= math.MinInt32
+                          - pattern: $X > math.MinInt32 && $X < math.MaxInt32
+                          - pattern: $X < math.MaxInt32 && $X > math.MinInt32
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          $S
+                        }
+                        ...
+                    - metavariable-pattern:
+                        metavariable: $S
+                        patterns:
+                          - pattern-either:
+                              - pattern: return ...
+                              - pattern: continue
+                              - pattern: os.Exit(...)
+                              - pattern: log.Fatal(...)
+                              - pattern: log.Fatalf(...)
+                              - pattern: log.Fatalln(...)
+                          - pattern-not: return int32($X)
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X < $LO || $X > $HI
+                                  - pattern: $X > $HI || $X < $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -2147483648
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483647
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X < math.MinInt32 || $X > $HI
+                                  - pattern: $X > $HI || $X < math.MinInt32
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483647
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X < $LO || $X > math.MaxInt32
+                                  - pattern: $X > math.MaxInt32 || $X < $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -2147483648
+                          - pattern: $X < math.MinInt32 || $X > math.MaxInt32
+                          - pattern: $X > math.MaxInt32 || $X < math.MinInt32
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X <= $LO || $X >= $HI
+                                  - pattern: $X >= $HI || $X <= $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -2147483649
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483648
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X <= math.MinInt32 || $X >= $HI
+                                  - pattern: $X >= $HI || $X <= math.MinInt32
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 2147483648
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X <= $LO || $X >= math.MaxInt32
+                                  - pattern: $X >= math.MaxInt32 || $X <= $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -2147483649
+                          - pattern: $X <= math.MinInt32 || $X >= math.MaxInt32
+                          - pattern: $X >= math.MaxInt32 || $X <= math.MinInt32
+          # --------------------------------------------------------------
+          # Signed parse to uint32. Both ends of [0, 4294967295] have to be
+          # stated: a negative value wraps to a large positive number.
+          # --------------------------------------------------------------
+          - patterns:
+              - pattern-either:
+                  - patterns:
+                      - pattern: |
+                          $X, ... = strconv.ParseInt(..., ..., $BITS)
+                          ...
+                          uint32($X)
+                      - metavariable-comparison:
+                          metavariable: $BITS
+                          comparison: $BITS == 0 or ($BITS > 32 and $BITS <= 64)
+                  - pattern: |
+                      $X, $ERR = strconv.Atoi(...)
+                      ...
+                      uint32($X)
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          uint32($X)
+                          ...
+                        }
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X >= $LO && $X <= $HI
+                                  - pattern: $X <= $HI && $X >= $LO
+                                  - pattern: $X > $LO && $X < $HI
+                                  - pattern: $X < $HI && $X > $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= 0
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 4294967295
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X >= $LO && $X <= math.MaxUint32
+                                  - pattern: $X <= math.MaxUint32 && $X >= $LO
+                                  - pattern: $X > $LO && $X < math.MaxUint32
+                                  - pattern: $X < math.MaxUint32 && $X > $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= 0
+              - pattern-not:
+                  patterns:
+                    - pattern: |
+                        $X, ... = $PARSE(...)
+                        ...
+                        if $COND {
+                          ...
+                          $S
+                        }
+                        ...
+                    - metavariable-pattern:
+                        metavariable: $S
+                        patterns:
+                          - pattern-either:
+                              - pattern: return ...
+                              - pattern: continue
+                              - pattern: os.Exit(...)
+                              - pattern: log.Fatal(...)
+                              - pattern: log.Fatalf(...)
+                              - pattern: log.Fatalln(...)
+                          - pattern-not: return uint32($X)
+                    - metavariable-pattern:
+                        metavariable: $COND
+                        pattern-either:
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X < $LO || $X > $HI
+                                  - pattern: $X > $HI || $X < $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= 0
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 4294967295
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X < $LO || $X > math.MaxUint32
+                                  - pattern: $X > math.MaxUint32 || $X < $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= 0
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X <= $LO || $X >= $HI
+                                  - pattern: $X >= $HI || $X <= $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -1
+                              - metavariable-comparison:
+                                  metavariable: $HI
+                                  comparison: $HI <= 4294967296
+                          - patterns:
+                              - pattern-either:
+                                  - pattern: $X <= $LO || $X >= math.MaxUint32
+                                  - pattern: $X >= math.MaxUint32 || $X <= $LO
+                              - metavariable-comparison:
+                                  metavariable: $LO
+                                  comparison: $LO >= -1

@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "engine_version": "1.26.0",
+  "projects": [
+    {
+      "name": "spring-petclinic",
+      "directory": "java",
+      "language": "java",
+      "repository": "https://github.com/spring-projects/spring-petclinic.git",
+      "commit": "88e37c15cf6fc8490b01bc3e8e2c800cec1ac272",
+      "license_file": "LICENSE.txt",
+      "scan_path": ".",
+      "tracked_source_files": 49,
+      "known_engine_exclusions": "Nineteen Java files under src/test are excluded by the engine; 30 production Java files are selected.",
+      "capability_overlap": "No declared rule source or sink was found. This run checks parser compatibility and obvious false positives, not precision or recall.",
+      "expected": {
+        "files_scanned": 30,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {}
+      },
+      "parse_coverage_complete": true
+    },
+    {
+      "name": "curl",
+      "directory": "c",
+      "language": "c",
+      "repository": "https://github.com/curl/curl.git",
+      "commit": "3f1c033afe008123680306663cc01279e831ac2d",
+      "license_file": "COPYING",
+      "scan_path": "lib",
+      "tracked_source_files": 386,
+      "known_engine_exclusions": "The declared lib scope contains 386 tracked C source and header files; all are selected, with 31 partial-parse reports.",
+      "capability_overlap": "The corpus contains cURL TLS option handling but no declared system sink. Zero findings do not measure the command, format, copy, or temporary-file rules.",
+      "expected": {
+        "files_scanned": 386,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {
+          "PartialParsing": 31
+        }
+      },
+      "parse_coverage_complete": false,
+      "coverage_blocker": "Pinned Opengrep reports partial parsing in 31 production source files."
+    },
+    {
+      "name": "fmt",
+      "directory": "cpp",
+      "language": "cpp",
+      "repository": "https://github.com/fmtlib/fmt.git",
+      "commit": "60ccad511fd680cb91d8b60a315759f71c67bef9",
+      "license_file": "LICENSE",
+      "scan_path": ".",
+      "tracked_source_files": 72,
+      "known_engine_exclusions": "Fifty-three C or C++ files under test are excluded by the engine; only 19 files under include and src are selected.",
+      "capability_overlap": "The selected library implementation has no command-line argv entry point or declared system sink. This is parser and false-positive evidence only.",
+      "expected": {
+        "files_scanned": 19,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {
+          "PartialParsing": 4
+        }
+      },
+      "parse_coverage_complete": false,
+      "coverage_blocker": "Pinned Opengrep reports partial parsing in four public headers."
+    },
+    {
+      "name": "axum",
+      "directory": "rust",
+      "language": "rust",
+      "repository": "https://github.com/tokio-rs/axum.git",
+      "commit": "c9a911b7999de50e9e5023942ca072e9725ae943",
+      "license_file": "LICENSE",
+      "scan_path": ".",
+      "tracked_source_files": 300,
+      "known_engine_exclusions": "One hundred twenty-eight Rust files under tests directories are excluded by the engine; 172 are selected.",
+      "capability_overlap": "No std::env taint source reaches a declared sink. Zero findings do not measure precision or recall.",
+      "expected": {
+        "files_scanned": 172,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {}
+      },
+      "parse_coverage_complete": true
+    },
+    {
+      "name": "symfony-demo",
+      "directory": "php",
+      "language": "php",
+      "repository": "https://github.com/symfony/demo.git",
+      "commit": "920d86dc809f837543cb519d3df5b364a2c36577",
+      "license_file": "LICENSE",
+      "scan_path": ".",
+      "tracked_source_files": 51,
+      "known_engine_exclusions": "The engine selects 41 PHP files and excludes test paths; its selected count differs from a suffix-only tracked-file count.",
+      "capability_overlap": "No supported HTTP superglobal reaches a declared sink. A __unserialize declaration is not an unserialize call. This is a null security signal.",
+      "expected": {
+        "files_scanned": 41,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {}
+      },
+      "parse_coverage_complete": true
+    },
+    {
+      "name": "dotnet-eshop",
+      "directory": "csharp",
+      "language": "csharp",
+      "repository": "https://github.com/dotnet/eShop.git",
+      "commit": "9b4f9434f46fdc5c1a6e9e936af2868340cdbc48",
+      "license_file": "LICENSE",
+      "scan_path": ".",
+      "tracked_source_files": 527,
+      "known_engine_exclusions": "Thirty-three C# files under tests are excluded by the engine; 494 are selected.",
+      "capability_overlap": "No BinaryFormatter, SqlCommand, Process.Start, weak hash, or symmetric JWT-key sink was found. Zero findings do not measure precision or recall.",
+      "expected": {
+        "files_scanned": 494,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {}
+      },
+      "parse_coverage_complete": true
+    },
+    {
+      "name": "flask",
+      "directory": "python",
+      "language": "python",
+      "repository": "https://github.com/pallets/flask.git",
+      "commit": "6a2f545bfd8ed31e19066a299296917e034aca58",
+      "license_file": "LICENSE.txt",
+      "scan_path": ".",
+      "tracked_source_files": 83,
+      "known_engine_exclusions": "Forty-eight Python files under tests are excluded by the engine; 35 package and example files are selected.",
+      "capability_overlap": "The framework implementation is not an application using Flask request sources. This run checks default Python rule parser compatibility and obvious false positives.",
+      "expected": {
+        "files_scanned": 35,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {}
+      },
+      "parse_coverage_complete": true
+    },
+    {
+      "name": "chi",
+      "directory": "go",
+      "language": "go",
+      "repository": "https://github.com/go-chi/chi.git",
+      "commit": "8b258c7bb28f97a5f2a856ff7ef962578fec9215",
+      "license_file": "LICENSE",
+      "scan_path": ".",
+      "tracked_source_files": 78,
+      "known_engine_exclusions": "The engine selects 54 Go files and omits test files from its target set.",
+      "capability_overlap": "The selected files exercise ordinary Go syntax but do not provide known-answer cases for the six experimental Go rules.",
+      "expected": {
+        "files_scanned": 54,
+        "findings_by_rule": {},
+        "engine_errors_by_kind": {}
+      },
+      "parse_coverage_complete": true
+    },
+    {
+      "name": "hono",
+      "directory": "typescript",
+      "language": "javascript",
+      "repository": "https://github.com/honojs/hono.git",
+      "commit": "7075369e1f6161e04a227eba37373469c09fc743",
+      "license_file": "LICENSE",
+      "scan_path": ".",
+      "tracked_source_files": 359,
+      "known_engine_exclusions": "The engine selects 356 JavaScript and TypeScript files and reports one partial parse in prepared-router.ts.",
+      "capability_overlap": "One internal eval call is reported by the broad experimental eval rule. It is a reviewed false-positive signal, not proof of exploitability.",
+      "expected": {
+        "files_scanned": 356,
+        "findings_by_rule": {"cra-javascript-eval": 1},
+        "engine_errors_by_kind": {"PartialParsing": 1}
+      },
+      "parse_coverage_complete": false,
+      "coverage_blocker": "Pinned Opengrep reports a partial parse in prepared-router.ts."
+    }
+  ]
+}

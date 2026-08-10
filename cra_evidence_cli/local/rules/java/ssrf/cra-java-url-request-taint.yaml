@@ -1,0 +1,45 @@
+rules:
+  - id: cra-java-url-request-taint
+    message: >
+      HTTP request data controls an outbound URL. Resolve destinations from a
+      strict allowlist and block private, loopback, link-local, and metadata
+      network addresses after DNS resolution.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      owasp: ["A10:2021 - Server-Side Request Forgery (SSRF)"]
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/net/URI.html
+      category: security
+      technology: [java, servlet, http]
+      confidence: HIGH
+      scope: >
+        Detects servlet parameter or header data reaching selected URL, URI,
+        and HTTP client APIs through flows supported within one file.
+      limitations: >
+        Does not model destination allowlists, DNS resolution, checked control
+        flow, or interfile request construction.
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Safe destination validation requires an allowlist, DNS resolution, and checked control flow.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getHeader(...)
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: new URL($VALUE)
+              - focus-metavariable: $VALUE
+          - patterns:
+              - pattern: URI.create($VALUE)
+              - focus-metavariable: $VALUE
+          - patterns:
+              - pattern: $CLIENT.send($REQUEST, ...)
+              - focus-metavariable: $REQUEST

@@ -163,6 +163,7 @@ def test_nothing_anywhere_builds_once_and_publishes_all(tmp_path):
         tmp_path / "src",
         dist,
         engine_dir=tmp_path / "engine",
+        opengrep_dir=tmp_path / "opengrep",
         opener=_make_opener({}),
         runner=runner,
     )
@@ -178,7 +179,7 @@ def test_build_requires_promoted_engine_payload(tmp_path):
 
     with pytest.raises(
         prd.AcquisitionError,
-        match="promoted engine payload is required",
+        match="Grype and Opengrep payloads are required",
     ):
         prd.acquire(
             VERSION,
@@ -238,6 +239,7 @@ def test_build_fills_wheel_without_overwriting_pypi_sdist(tmp_path):
         tmp_path / "src",
         dist,
         engine_dir=tmp_path / "engine",
+        opengrep_dir=tmp_path / "opengrep",
         opener=_make_opener({sdist: pypi_sdist}),
         runner=runner,
     )
@@ -302,7 +304,9 @@ def test_main_writes_github_output_lines(tmp_path, monkeypatch, capsys):
     def fake_download_url(url, dest, **_kwargs):
         dest.write_bytes(wheel_bytes[dest.name])
 
-    def fake_build(version, release_src, engine_dir, out_dir, runner=None):
+    def fake_build(
+        version, release_src, engine_dir, opengrep_dir, out_dir, runner=None
+    ):
         assert version == VERSION
         (out_dir / sdist).write_bytes(b"built-sdist-bytes")
 
@@ -323,6 +327,8 @@ def test_main_writes_github_output_lines(tmp_path, monkeypatch, capsys):
             str(tmp_path / "src"),
             "--engine-dir",
             str(tmp_path / "engine"),
+            "--opengrep-dir",
+            str(tmp_path / "opengrep"),
             "--dist-dir",
             str(tmp_path / "dist"),
         ],
@@ -355,6 +361,7 @@ def test_build_output_missing_wheel_is_fatal(tmp_path, monkeypatch, capsys):
             tmp_path / "src",
             tmp_path / "dist",
             engine_dir=tmp_path / "engine",
+            opengrep_dir=tmp_path / "opengrep",
             opener=_make_opener({}),
             runner=runner,
         )
@@ -365,7 +372,7 @@ def test_build_output_missing_wheel_is_fatal(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(
         prd,
         "build_distributions",
-        lambda version, release_src, engine_dir, out_dir, runner=None: (
+        lambda version, release_src, engine_dir, opengrep_dir, out_dir, runner=None: (
             out_dir / sdist
         ).write_bytes(b"s"),
     )
@@ -379,6 +386,8 @@ def test_build_output_missing_wheel_is_fatal(tmp_path, monkeypatch, capsys):
             str(tmp_path / "src"),
             "--engine-dir",
             str(tmp_path / "engine"),
+            "--opengrep-dir",
+            str(tmp_path / "opengrep"),
             "--dist-dir",
             str(tmp_path / "dist2"),
         ],

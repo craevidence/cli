@@ -1,6 +1,18 @@
+import os
 import subprocess
 
+import flask
 from flask import request
+
+
+def requested_command():
+    return request.args.get("cmd")
+
+
+def bad_run_across_helper():
+    command = requested_command()
+    # ruleid: cra-python-taint-subprocess-shell
+    subprocess.run(command, shell=True)
 
 
 # Bad: request.args tainted -> subprocess.run with shell=True (sink)
@@ -50,6 +62,30 @@ def bad_run_from_input():
     cmd = input("Enter command: ")
     # ruleid: cra-python-taint-subprocess-shell
     subprocess.run(cmd, shell=True)
+
+
+# Bad: qualified flask.request source -> shell sink
+def bad_run_from_qualified_request():
+    cmd = flask.request.args.get("cmd")
+    # ruleid: cra-python-taint-subprocess-shell
+    subprocess.run(cmd, shell=True)
+
+
+def bad_os_system():
+    cmd = request.args.get("cmd")
+    # ruleid: cra-python-taint-subprocess-shell
+    os.system(cmd)
+
+
+def bad_os_popen():
+    cmd = request.form.get("cmd")
+    # ruleid: cra-python-taint-subprocess-shell
+    os.popen(cmd)
+
+
+def ok_os_system_constant():
+    # ok: cra-python-taint-subprocess-shell
+    os.system("true")
 
 
 # Safe: list of arguments with shell=False -- no injection surface

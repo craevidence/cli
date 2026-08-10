@@ -1,11 +1,12 @@
 rules:
   - id: cra-javascript-eval
     message: >
-      eval() executes the string it receives as JavaScript. When the string
-      includes untrusted input this allows code injection. Avoid eval(); use
-      JSON.parse() for data, or structured alternatives for dynamic dispatch.
-    severity: ERROR
+      eval() executes the string it receives as JavaScript. Review whether the
+      value can contain untrusted input. Avoid eval(); use JSON.parse() for data,
+      or structured alternatives for dynamic dispatch.
+    severity: WARNING
     metadata:
+      tier: experimental
       cwe:
         - "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
       owasp:

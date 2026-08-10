@@ -402,17 +402,19 @@ back to `text`.
 
 Scan source code for potential security weaknesses using
 [Opengrep](https://github.com/opengrep/opengrep). **Local by default: no
-network, no API key, and code never leaves the machine unless you pass
-`--upload`** (which sends the scan results to your CRA Evidence account and
-needs an API key). Advisory by default (it exits 0 even when findings are
-reported); pass `--fail-on` to gate a CI job (exit code 27).
+network and no API key. Source code is not uploaded.** With `--upload`, the CLI
+sends sanitized finding metadata to your CRA Evidence account. Findings are
+advisory by default; pass `--fail-on` to gate a CI job (exit 27 for a finding,
+or 29 when parser coverage is degraded).
 
 ```
 craevidence [--output text|json|sarif] code-check [PATH]
   [--rules <rules-dir-or-file>]
   [--fail-on note|warning|error]
   [--timeout <seconds>]
+  [--rule-timeout <seconds>]
   [--exclude <pattern>]...
+  [--include-experimental]
   [--upload [--product <slug> --version <number>]]
   [-o <path>]
 ```
@@ -420,34 +422,55 @@ craevidence [--output text|json|sarif] code-check [PATH]
 `markdown` is not supported; passing `--output markdown` prints a notice to stderr and falls
 back to `text`.
 
-- Opengrep must be installed separately. If it is not found on `PATH`, the
-  command prints an install hint and exits 0 (advisory). It does not install
-  Opengrep automatically.
-- A bundled rule pack covers SQL injection (structural and intrafile taint),
+- Supported platform wheels and the CLI container include the pinned official
+  Opengrep executable. No scanner is downloaded when a scan starts. An
+  engine-free source install can use `CRA_EVIDENCE_OPENGREP` or an `opengrep`
+  executable on `PATH`.
+- The default bundled pack contains 43 focused Python rules covering SQL
+  injection (structural and intrafile taint),
   OS command injection (structural and intrafile taint), unsafe deserialization
-  (`pickle`, `yaml.load` without a Loader), code injection via `eval`/`exec`
-  (intrafile taint), weak cryptographic algorithms (MD5, SHA-1), disabled TLS
-  certificate verification, HMAC timing side-channels, HMAC shared-hash misuse,
-  integer downcast after 64-bit parse, and mismatched mutex lock/unlock pairs
-  for Python, JavaScript/TypeScript, and Go. Pass `--rules` to use your own
-  rules instead.
+  (`pickle` and unsafe `yaml.load` forms), code injection via `eval`/`exec`,
+  Flask, Django, SQLAlchemy, and JWT misuse. Taint rules also cover untrusted
+  input reaching `subprocess` shell mode, `os.system`, and `os.popen`.
+  Another 50 focused Go, JavaScript/TypeScript, Java, C, C++, Rust, PHP, and C#
+  rules are marked experimental. Their seeded fixtures and pinned
+  real-project results are reproducible, but known-answer coverage, parser
+  limitations, and false-positive evidence still block broad language claims.
+  Use `--include-experimental` to run them. The output states the exact enabled
+  rule count for every language; no group is presented as general SAST coverage.
+  Pass `--rules` to use your own rules instead.
+- The CLI always gives Opengrep an explicit local rules path and disables its
+  version check. It does not use Opengrep's `auto` configuration or download
+  registry rules. This keeps the default scan offline and avoids redistributing
+  third-party registry rules whose licence does not permit that use.
 - Default excludes: `tests`, `test`, `__tests__`, `vendor`, `node_modules`,
-  `.git`, `dist`, `build`. Pass one or more `--exclude` flags to override.
+  `.git`, `dist`, `build`. Additional `--exclude` flags are additive.
+- The displayed file count is Opengrep's target selection, not proof that every
+  visible source file produced a usable AST. Python whole-file syntax failures,
+  engine-reported parse failures, source languages with no enabled rules, and
+  visible source files omitted by the engine mark coverage degraded. Explicit
+  `--exclude` paths are not reported as missing coverage.
 - `--fail-on error` exits 27 when any `error`-level finding is found. `--fail-on
   warning` exits 27 on any `warning` or `error` finding. `--fail-on note` exits
   27 on any finding. Advisory (exit 0) by default. When `--fail-on` is set and
-  the scan itself fails (engine error or timeout), the command exits 1 instead
-  of passing the gate.
+  the scan itself fails or evaluates zero files, the command exits 1 with or
+  without `--fail-on`. A recoverable file parse error is degraded coverage:
+  findings from other evaluated code are still rendered, and an explicit
+  `--fail-on` policy exits 29 so a pipeline can distinguish the run from a clean
+  scan using the exit code alone. Engine errors and visible source files that
+  were not analyzed also produce exit 29 under an explicit `--fail-on` policy.
 - `--upload` uploads the SARIF result to CRA Evidence after a successful scan.
   Pass `--product` and `--version` (or rely on `.cra/evidence.yaml`). Upload is
   refused when the scan did not complete and when the SARIF output exceeds 10 MiB.
+  Source snippets, absolute workspace paths, invocation arguments, environment
+  variables, related locations, and automatic fixes are removed before upload.
+  Taint-flow locations remain without their source messages.
 - Findings are **potential weaknesses to review**, not a determination. A clean
   result does not prove the absence of vulnerabilities.
 - This command does not scan for secrets (use `secrets-check`) or
-  infrastructure-as-code misconfigurations (use `config-check`). Code is never
-  sent to CRA Evidence unless `--upload` is passed.
+  infrastructure-as-code misconfigurations (use `config-check`).
 
-Run it in CI without an account. Install Opengrep in a prior step:
+Run it in CI without an account or a separate scanner installation:
 
 ```yaml
 # GitHub Actions - no API key needed
@@ -456,20 +479,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Opengrep
-        run: curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | sh
-      - run: pipx install craevidence
-      - run: craevidence code-check . --fail-on error
+      - uses: craevidence/cli@v4
+        with:
+          command: code-check
+          path: .
+          fail-on: error
+          # include-experimental: true
 ```
 
 ```yaml
 # GitLab CI - no API key needed
 cra-code-check:
-  image: python:3.12-slim
-  script:
-    - curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | sh
-    - pip install craevidence
-    - craevidence code-check . --fail-on error
+  extends: .cra-evidence-code-check
+  variables:
+    CRA_CHECK_PATH: .
+    CRA_CHECK_FAIL_ON: error
+    # CRA_CODE_CHECK_INCLUDE_EXPERIMENTAL: 'true'
 ```
 
 ## `compliance-as-code template --offline`

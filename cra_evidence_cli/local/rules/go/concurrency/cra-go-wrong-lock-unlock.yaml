@@ -7,6 +7,7 @@ rules:
       Pair Lock() with Unlock() and RLock() with RUnlock().
     severity: ERROR
     metadata:
+      tier: experimental
       cwe:
         - "CWE-667: Improper Locking"
       owasp:
@@ -25,13 +26,17 @@ rules:
     pattern-either:
       - pattern: |
           $M.Lock()
+          ...
           defer $M.RUnlock()
       - pattern: |
           $M.RLock()
+          ...
           defer $M.Unlock()
       - pattern: |
           $M.Lock()
+          ...
           defer $M.Lock()
       - pattern: |
           $M.RLock()
+          ...
           defer $M.RLock()

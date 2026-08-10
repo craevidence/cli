@@ -4,8 +4,9 @@
 # Critical severity, which would otherwise fail the
 # "--fail-on high --only-fixed" gate. Each waiver is reviewed, scoped to the
 # exact package version observed in the shipped image, and records its removal
-# trigger. Fixed findings below the High threshold are deliberately not
-# suppressed: they stay visible in the gate output and do not fail the gate.
+# trigger. Scanner versions can disagree about sub-threshold findings, so
+# scripts/check-image-gate.sh runs a second pinned comparison inventory after
+# the release-blocking scan. Neither scanner is described as a complete view.
 # Findings without a published fix are inventoried in grype-watchlist.yaml in
 # this directory; when one of those gains a fix, the gate surfaces it and it
 # gets reviewed here instead of staying suppressed.
@@ -18,6 +19,11 @@
 # and dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656018123b3eaf4f33f71ae902b7,
 # with CRA Evidence Grype engine craevidence-v0.116.1-p3. The exact gate
 # reported no fixed High or Critical vulnerabilities, so there are no waivers.
+# The comparison scan with Grype 0.111.0 reports GO-2026-5158 at Medium for
+# go.opentelemetry.io/otel 1.43.0 in the shipped engine, while Grype 0.116.1
+# does not report that record against the same image and database. It remains
+# visible in the comparison inventory and must be resolved by rebuilding the
+# engine with the fixed dependency, not by adding an ignore entry here.
 # Re-evaluate at every release.
 
 ignore: []

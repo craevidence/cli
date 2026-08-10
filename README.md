@@ -86,7 +86,7 @@ These commands do not need `CRA_EVIDENCE_API_KEY`:
 | `egress-check` | Inventory external interfaces and data-egress indicators. |
 | `secrets-check` | Scan the working tree for candidate hard-coded secrets. |
 | `config-check` | Audit Dockerfile, Terraform, and Kubernetes files for insecure defaults. |
-| `code-check` | Scan source code for potential security weaknesses using Opengrep (requires separate install). |
+| `code-check` | On supported platforms, scan source code offline with the bundled, verified Opengrep engine and explicit CRA Evidence rules. |
 | `draft` | Scaffold VEX, security.txt, advisory, risk-assessment, and threat-model drafts for review. |
 | `compliance-as-code template --offline` | Create starter YAML from local input without an API key. |
 | `assessment` | Scaffold an Annex I applicability matrix and gate CI on structured gaps. |
@@ -137,8 +137,12 @@ craevidence create-version --product my-product --version 1.0.0
 craevidence code-check . --product my-product --version 1.0.0 --upload
 ```
 
-`code-check` runs locally and uploads SARIF findings, not source code. Neither
-command proves compliance.
+`code-check` runs locally and uploads sanitized SARIF finding metadata, not
+source code. Its 43 default rules cover focused Python patterns. Another 50
+focused Go, JavaScript/TypeScript, Java, C, C++, Rust, PHP, and C# rules
+require `--include-experimental`; the command reports exact per-language rule
+counts. Experimental groups have not passed the evidence needed to claim broad
+language coverage. Neither command proves compliance.
 
 The default API URL is:
 
@@ -200,6 +204,7 @@ private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.
 | 26 | Annex I Part I(2) requirement is marked not-applicable without a justification. |
 | 27 | Code-check findings at or above the configured --fail-on level. |
 | 28 | Risk assessment review is still pending for the version (`ra status --fail-on unreviewed`, or `ra review --non-interactive` with unresolved review items). |
+| 29 | Code-check parser coverage is degraded while an explicit --fail-on gate is enabled. This takes precedence over exit 27 because the result is incomplete. |
 
 Exit 0 != compliance. Local output is a snapshot for review and CI policy, not
 a legal conclusion.

@@ -1,0 +1,22 @@
+{
+  "project": "opengrep/opengrep",
+  "version": "1.26.0",
+  "tag": "v1.26.0",
+  "commit": "1bef4ea4ff3264754132eec823b5b1d8cde3e4ee",
+  "certificate_identity": "https://github.com/opengrep/opengrep/.github/workflows/rolling-release.yml@refs/heads/main",
+  "certificate_issuer": "https://token.actions.githubusercontent.com",
+  "source_archive": {
+    "repository": "https://github.com/opengrep/opengrep.git",
+    "commit": "1bef4ea4ff3264754132eec823b5b1d8cde3e4ee",
+    "signature_verified": false,
+    "verification": "exact-commit-recursive-submodules-deterministic-archive"
+  },
+  "assets": {
+    "opengrep_manylinux_x86": "40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26",
+    "opengrep_manylinux_aarch64": "3042a3b1aa98fa93407b9d66a45ab1f179b5b367e76965f56afdbd2c038fb1fa",
+    "opengrep_musllinux_x86": "18aeca114221e2816ec26e1a731f1a2583408c8e4578cd868cd2d47c12fd29f8",
+    "opengrep_musllinux_aarch64": "d4e20ac57b6f9bb32c2b0ffc0501b8c6acb92ecee60f11f1cd72db9b11647857",
+    "opengrep_osx_x86": "36c00a2b6eeb45796275e69cb8f74ef27c42724a1b3c98f6c8d861bad7a8529d",
+    "opengrep_osx_arm64": "513ff8491f7254c9a672cf8421136a537eb53b2a8af748568bd697acdc59eefe"
+  }
+}

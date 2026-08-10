@@ -1,0 +1,78 @@
+rules:
+  - id: cra-csharp-file-request-taint
+    message: >
+      HTTP request data reaches a filesystem path. Resolve the value beneath a
+      fixed base directory, canonicalize it, and reject paths outside the base.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.io.path.getfullpath
+      category: security
+      technology: [csharp, dotnet, aspnet, filesystem]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: modeled
+        reason: Canonicalized paths are suppressed only after an explicit base-directory containment guard.
+      license: MIT
+      author: CRA Evidence
+    languages: [csharp]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQUEST.Query[$KEY]
+          - pattern: $REQUEST.Form[$KEY]
+          - pattern: $REQUEST.Headers[$KEY]
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromQuery] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromBody] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromRoute] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $PATH.StartsWith($BASE + Path.DirectorySeparatorChar)
+          - focus-metavariable: $PATH
+          - pattern-inside: |
+              if (!$PATH.StartsWith($BASE + Path.DirectorySeparatorChar)) {
+                return ...;
+              }
+        by-side-effect: true
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: File.ReadAllText($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: File.ReadAllBytes($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: File.OpenRead($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: File.Delete($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: File.Open($PATH, ...)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: File.WriteAllText($PATH, ...)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: File.WriteAllBytes($PATH, ...)
+              - focus-metavariable: $PATH

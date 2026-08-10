@@ -1,0 +1,32 @@
+rules:
+  - id: cra-cpp-system-argv
+    message: >
+      A command-line argument is executed by the system shell. Use an exec
+      function with a fixed executable and a validated argument vector.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=88046682
+      category: security
+      technology: [cpp]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [cpp]
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              int main(int $ARGC, char *$ARGV[], ...) {
+                ...
+              }
+          - pattern-inside: |
+              int main(int $ARGC, char **$ARGV, ...) {
+                ...
+              }
+      - pattern-either:
+          - pattern: system($ARGV[$INDEX])
+          - pattern: std::system($ARGV[$INDEX])

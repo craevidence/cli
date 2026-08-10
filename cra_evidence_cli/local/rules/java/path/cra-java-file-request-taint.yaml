@@ -1,0 +1,60 @@
+rules:
+  - id: cra-java-file-request-taint
+    message: >
+      HTTP request data reaches a filesystem path. Resolve the value beneath a
+      fixed base directory, normalize it, and reject paths that escape the base.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      references:
+        - https://cwe.mitre.org/data/definitions/22.html
+        - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/Path.html
+      category: security
+      technology: [java, servlet, filesystem]
+      confidence: HIGH
+      scope: >
+        Detects servlet parameter or header data reaching selected java.io and
+        java.nio filesystem path APIs through flows supported within one file.
+      limitations: >
+        Safe containment requires normalization plus checked control flow,
+        which this path-insensitive rule does not model.
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Safe containment requires normalization plus a checked control-flow branch, not one sanitizer call.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getHeader(...)
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: new File($VALUE)
+                  - pattern: new java.io.File($VALUE)
+              - focus-metavariable: $VALUE
+          - patterns:
+              - pattern-either:
+                  - pattern: new File($BASE, $VALUE)
+                  - pattern: new java.io.File($BASE, $VALUE)
+              - focus-metavariable: $VALUE
+          - patterns:
+              - pattern-either:
+                  - pattern: Paths.get($VALUE, ...)
+                  - pattern: java.nio.file.Paths.get($VALUE, ...)
+              - focus-metavariable: $VALUE
+          - patterns:
+              - pattern-either:
+                  - pattern: Path.of($VALUE, ...)
+                  - pattern: java.nio.file.Path.of($VALUE, ...)
+              - focus-metavariable: $VALUE
+          - patterns:
+              - pattern-either:
+                  - pattern: Files.readAllBytes($VALUE)
+                  - pattern: java.nio.file.Files.readAllBytes($VALUE)
+              - focus-metavariable: $VALUE

@@ -1,0 +1,30 @@
+rules:
+  - id: cra-csharp-binaryformatter-deserialize
+    message: >
+      BinaryFormatter deserialization is unsafe and cannot be made secure.
+      Replace it with a serializer that enforces an explicit data contract.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
+      category: security
+      technology: [csharp, dotnet]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [csharp]
+    pattern-either:
+      - pattern: new BinaryFormatter(...).Deserialize(...)
+      - patterns:
+          - pattern: $FORMATTER.Deserialize(...)
+          - pattern-either:
+              - pattern-inside: |
+                  BinaryFormatter $FORMATTER = new BinaryFormatter(...);
+                  ...
+              - pattern-inside: |
+                  var $FORMATTER = new BinaryFormatter(...);
+                  ...

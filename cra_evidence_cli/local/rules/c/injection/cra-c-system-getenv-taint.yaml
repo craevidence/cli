@@ -1,0 +1,29 @@
+rules:
+  - id: cra-c-system-getenv-taint
+    message: >
+      An environment variable reaches the system shell. Use an exec function
+      with a fixed executable and a validated argument vector.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://wiki.sei.cmu.edu/confluence/display/c/ENV33-C.+Do+not+call+system()
+      category: security
+      technology: [c, posix]
+      confidence: VERY HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: The remediation replaces the shell sink with a fixed executable and validated argument vector.
+      license: MIT
+      author: CRA Evidence
+    languages: [c]
+    mode: taint
+    pattern-sources:
+      - pattern: getenv(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: system($COMMAND)
+          - focus-metavariable: $COMMAND

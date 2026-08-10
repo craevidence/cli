@@ -1,0 +1,662 @@
+#!/usr/bin/env python3
+"""Score applicable CRA Evidence rules against pinned known-answer benchmarks."""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import hashlib
+import json
+import re
+import shutil
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+from pathlib import Path
+
+import yaml
+
+try:
+    from scripts.rulepack_engine import verify_engine
+except ModuleNotFoundError:  # Direct execution: python scripts/score_rulepack_benchmarks.py
+    from rulepack_engine import verify_engine
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_MANIFEST = REPO_ROOT / "tests" / "rulepack_benchmarks.json"
+DEFAULT_RULES = REPO_ROOT / "cra_evidence_cli" / "local" / "rules"
+TEST_ID_RE = re.compile(r"(BenchmarkTest\d+)")
+CWE_RE = re.compile(r"^CWE-(\d+)")
+
+
+class BenchmarkGateError(RuntimeError):
+    pass
+
+
+def _git_head(checkout: Path) -> str:
+    git = shutil.which("git")
+    if git is None:
+        message = "git is required to verify benchmark revisions"
+        raise BenchmarkGateError(message)
+    result = subprocess.run(  # noqa: S603
+        [git, "-C", str(checkout), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        message = f"cannot read Git commit for {checkout}: {result.stderr.strip()}"
+        raise BenchmarkGateError(message)
+    return result.stdout.strip()
+
+
+def _rule_cwes(rules: Path) -> dict[str, set[int]]:
+    mapping: dict[str, set[int]] = {}
+    for rule_file in sorted(rules.rglob("*.yaml")):
+        document = yaml.safe_load(rule_file.read_text(encoding="utf-8"))
+        rule = document["rules"][0]
+        values: set[int] = set()
+        for entry in rule["metadata"]["cwe"]:
+            match = CWE_RE.match(str(entry))
+            if match:
+                values.add(int(match.group(1)))
+        mapping[str(rule["id"])] = values
+    return mapping
+
+
+def _expected_cases(path: Path) -> dict[str, tuple[int, bool]]:
+    cases: dict[str, tuple[int, bool]] = {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        rows = csv.reader(line for line in handle if not line.startswith("#"))
+        for row in rows:
+            if len(row) != 4:
+                message = f"invalid expected-results row: {row}"
+                raise BenchmarkGateError(message)
+            cases[row[0]] = (int(row[3]), row[2].lower() == "true")
+    if not cases:
+        message = f"benchmark contains no expected cases: {path}"
+        raise BenchmarkGateError(message)
+    return cases
+
+
+def _scan(binary: Path, rules: Path, source: Path | list[Path]) -> dict:
+    sources = [source] if isinstance(source, Path) else source
+    command = [
+        str(binary),
+        "scan",
+        "-f",
+        str(rules),
+        "--no-rewrite-rule-ids",
+        "--taint-intrafile",
+        "--disable-version-check",
+        "--timeout=20",
+        "--timeout-threshold=3",
+        "--quiet",
+        "--json",
+        *(str(item) for item in sources),
+    ]
+    result = subprocess.run(  # noqa: S603
+        command,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    if result.returncode != 0:
+        message = (
+            f"Opengrep exited {result.returncode}: "
+            f"{result.stderr.strip()[:600]}"
+        )
+        raise BenchmarkGateError(message)
+    try:
+        return json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        message = "Opengrep benchmark output was not valid JSON"
+        raise BenchmarkGateError(message) from exc
+
+
+def _normalized_findings(document: dict) -> list[tuple[str, str, int, int]]:
+    findings: list[tuple[str, str, int, int]] = []
+    for result in document.get("results") or []:
+        match = TEST_ID_RE.search(str(result.get("path") or ""))
+        if not match:
+            message = (
+                "benchmark finding path has no BenchmarkTest identifier: "
+                f"{result.get('path')}"
+            )
+            raise BenchmarkGateError(message)
+        start = result.get("start") or {}
+        findings.append(
+            (
+                str(result.get("check_id") or ""),
+                match.group(1),
+                int(start.get("line") or 0),
+                int(start.get("col") or 0),
+            )
+        )
+    return sorted(findings)
+
+
+def _score(
+    document: dict,
+    cases: dict[str, tuple[int, bool]],
+    rule_cwes: dict[str, set[int]],
+) -> dict:
+    scanned = document.get("paths", {}).get("scanned") or []
+    if not scanned:
+        message = "benchmark scan evaluated zero files"
+        raise BenchmarkGateError(message)
+    applicable_cwes = sorted(
+        {cwe for values in rule_cwes.values() for cwe in values}
+        & {cwe for cwe, _ in cases.values()}
+    )
+    if not applicable_cwes:
+        message = "benchmark has no CWE intersection with the selected rules"
+        raise BenchmarkGateError(message)
+    detected: dict[int, set[str]] = {cwe: set() for cwe in applicable_cwes}
+    detected_by_rule: dict[str, dict[int, set[str]]] = {
+        rule_id: {cwe: set() for cwe in cwes if cwe in applicable_cwes}
+        for rule_id, cwes in rule_cwes.items()
+        if cwes & set(applicable_cwes)
+    }
+    for rule_id, test_id, _, _ in _normalized_findings(document):
+        if test_id not in cases:
+            message = f"finding references unknown benchmark case: {test_id}"
+            raise BenchmarkGateError(message)
+        expected_cwe, _ = cases[test_id]
+        finding_cwes = rule_cwes.get(rule_id, set())
+        if expected_cwe not in finding_cwes:
+            message = (
+                f"{rule_id} fired on {test_id} (CWE-{expected_cwe}) without a "
+                "matching rule CWE; the result cannot be scored safely"
+            )
+            raise BenchmarkGateError(message)
+        for cwe in finding_cwes:
+            if cwe == expected_cwe and cwe in detected:
+                detected[cwe].add(test_id)
+                detected_by_rule[rule_id][cwe].add(test_id)
+
+    metrics: dict[str, dict[str, int]] = {}
+    for cwe in applicable_cwes:
+        relevant = {
+            test_id: vulnerable
+            for test_id, (case_cwe, vulnerable) in cases.items()
+            if case_cwe == cwe
+        }
+        hits = detected[cwe]
+        metrics[str(cwe)] = {
+            "tp": sum(test_id in hits and value for test_id, value in relevant.items()),
+            "fp": sum(test_id in hits and not value for test_id, value in relevant.items()),
+            "fn": sum(test_id not in hits and value for test_id, value in relevant.items()),
+            "tn": sum(test_id not in hits and not value for test_id, value in relevant.items()),
+        }
+    metrics_by_rule: dict[str, dict[str, dict[str, int]]] = {}
+    for rule_id, cwe_hits in sorted(detected_by_rule.items()):
+        metrics_by_rule[rule_id] = {}
+        for cwe, hits in sorted(cwe_hits.items()):
+            relevant = {
+                test_id: vulnerable
+                for test_id, (case_cwe, vulnerable) in cases.items()
+                if case_cwe == cwe
+            }
+            metrics_by_rule[rule_id][str(cwe)] = {
+                "tp": sum(
+                    test_id in hits and value for test_id, value in relevant.items()
+                ),
+                "fp": sum(
+                    test_id in hits and not value for test_id, value in relevant.items()
+                ),
+                "fn": sum(
+                    test_id not in hits and value for test_id, value in relevant.items()
+                ),
+                "tn": sum(
+                    test_id not in hits and not value
+                    for test_id, value in relevant.items()
+                ),
+            }
+    return {
+        "files_scanned": len(scanned),
+        "engine_errors": len(document.get("errors") or []),
+        "metrics_by_cwe": metrics,
+        "metrics_by_rule": metrics_by_rule,
+    }
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _exact_findings(document: dict, root: Path) -> list[tuple[str, str, int, int]]:
+    findings: list[tuple[str, str, int, int]] = []
+    resolved_root = root.resolve()
+    for result in document.get("results") or []:
+        path = Path(str(result.get("path") or "")).resolve()
+        try:
+            relative = path.relative_to(resolved_root).as_posix()
+        except ValueError as exc:
+            message = f"benchmark finding path escapes corpus: {path}"
+            raise BenchmarkGateError(message) from exc
+        start = result.get("start") or {}
+        findings.append(
+            (
+                str(result.get("check_id") or ""),
+                relative,
+                int(start.get("line") or 0),
+                int(start.get("col") or 0),
+            )
+        )
+    return sorted(findings)
+
+
+def _juliet_ground_truth(
+    manifest: Path, rule_cwes: dict[str, int]
+) -> tuple[dict[str, int], dict[int, set[int]], dict[str, set[int]]]:
+    try:
+        content = manifest.read_text(encoding="utf-8")
+    except (OSError, ET.ParseError) as exc:
+        message = f"cannot parse Juliet manifest: {manifest}"
+        raise BenchmarkGateError(message) from exc
+    if "<!DOCTYPE" in content or "<!ENTITY" in content:
+        message = f"Juliet manifest contains a forbidden XML declaration: {manifest}"
+        raise BenchmarkGateError(message)
+    try:
+        root = ET.fromstring(content)  # noqa: S314 - declarations rejected above
+    except ET.ParseError as exc:
+        message = f"cannot parse Juliet manifest: {manifest}"
+        raise BenchmarkGateError(message) from exc
+    case_by_file: dict[str, int] = {}
+    cases_by_cwe: dict[int, set[int]] = {
+        cwe: set() for cwe in set(rule_cwes.values())
+    }
+    flaws_by_file: dict[str, set[int]] = {}
+    for case_number, testcase in enumerate(root.findall("testcase")):
+        for file_node in testcase.findall("file"):
+            path = str(file_node.get("path") or "")
+            if not path.endswith(".java"):
+                continue
+            if path in case_by_file:
+                message = f"duplicate Juliet Java filename in manifest: {path}"
+                raise BenchmarkGateError(message)
+            case_by_file[path] = case_number
+            for cwe in cases_by_cwe:
+                if path.startswith(f"CWE{cwe}_"):
+                    cases_by_cwe[cwe].add(case_number)
+            flaws_by_file[path] = {
+                int(flaw.get("line") or 0) for flaw in file_node.findall("flaw")
+            }
+    for cwe, cases in cases_by_cwe.items():
+        if not cases:
+            message = f"Juliet manifest has no testcases for CWE-{cwe}"
+            raise BenchmarkGateError(message)
+    return case_by_file, cases_by_cwe, flaws_by_file
+
+
+def _score_juliet(
+    document: dict,
+    manifest: Path,
+    rule_cwes: dict[str, int],
+) -> dict:
+    scanned = document.get("paths", {}).get("scanned") or []
+    if not scanned:
+        message = "benchmark scan evaluated zero files"
+        raise BenchmarkGateError(message)
+    case_by_file, cases_by_cwe, flaws_by_file = _juliet_ground_truth(
+        manifest, rule_cwes
+    )
+    cases_detected: dict[str, set[int]] = {rule_id: set() for rule_id in rule_cwes}
+    files_detected: dict[str, set[str]] = {rule_id: set() for rule_id in rule_cwes}
+    finding_counts = dict.fromkeys(rule_cwes, 0)
+    at_flaw_counts = dict.fromkeys(rule_cwes, 0)
+    outside_flaw_counts = dict.fromkeys(rule_cwes, 0)
+    for result in document.get("results") or []:
+        rule_id = str(result.get("check_id") or "")
+        if rule_id not in rule_cwes:
+            message = f"unexpected rule in Juliet result: {rule_id}"
+            raise BenchmarkGateError(message)
+        filename = Path(str(result.get("path") or "")).name
+        if filename not in case_by_file:
+            message = f"Juliet finding references unknown file: {filename}"
+            raise BenchmarkGateError(message)
+        cwe = rule_cwes[rule_id]
+        if not filename.startswith(f"CWE{cwe}_"):
+            message = f"{rule_id} fired outside its declared CWE: {filename}"
+            raise BenchmarkGateError(message)
+        line = int((result.get("start") or {}).get("line") or 0)
+        cases_detected[rule_id].add(case_by_file[filename])
+        files_detected[rule_id].add(filename)
+        finding_counts[rule_id] += 1
+        if line in flaws_by_file.get(filename, set()):
+            at_flaw_counts[rule_id] += 1
+        else:
+            outside_flaw_counts[rule_id] += 1
+    metrics_by_rule: dict[str, dict[str, int]] = {}
+    for rule_id, cwe in sorted(rule_cwes.items()):
+        total = len(cases_by_cwe[cwe])
+        detected = len(cases_detected[rule_id])
+        metrics_by_rule[rule_id] = {
+            "cwe": cwe,
+            "cases_total": total,
+            "cases_detected": detected,
+            "cases_missed": total - detected,
+            "files_with_findings": len(files_detected[rule_id]),
+            "finding_count": finding_counts[rule_id],
+            "findings_at_manifest_flaws": at_flaw_counts[rule_id],
+            "findings_outside_manifest_flaws": outside_flaw_counts[rule_id],
+        }
+    return {
+        "files_scanned": len(scanned),
+        "engine_errors": len(document.get("errors") or []),
+        "metrics_by_rule": metrics_by_rule,
+    }
+
+
+GOSEC_SAMPLE_RE = re.compile(r"\{\[\]string\{(.*?)\},\s*(\d+),", re.S)
+GOSEC_CODE_RE = re.compile(r"`(.*?)`", re.S)
+
+
+def _gosec_cases(sample_file: Path) -> list[tuple[list[str], int]]:
+    """Extract (sources, expected_issue_count) pairs from a gosec sample file.
+
+    gosec stores its labelled samples as Go source: each CodeSample carries the
+    program text in raw string literals and the number of issues the sample is
+    expected to produce.
+    """
+    text = sample_file.read_text(encoding="utf-8")
+    cases = []
+    for block, expected in GOSEC_SAMPLE_RE.findall(text):
+        sources = GOSEC_CODE_RE.findall(block)
+        if sources:
+            cases.append((sources, int(expected)))
+    return cases
+
+
+def _score_gosec(
+    binary: Path,
+    rules: Path,
+    checkout: Path,
+    sample_files: dict[str, str],
+    workdir: Path,
+) -> dict:
+    """Score our rules against gosec's labelled samples, per gosec rule id."""
+    actual: dict[str, dict[str, int]] = {}
+    total_cases = 0
+    for gosec_rule, relative in sorted(sample_files.items()):
+        cases = _gosec_cases(checkout / relative)
+        detected = 0
+        vulnerable = 0
+        fp_on_safe = 0
+        for index, (sources, expected) in enumerate(cases):
+            case_dir = workdir / gosec_rule / f"case{index:03d}"
+            case_dir.mkdir(parents=True, exist_ok=True)
+            for position, source in enumerate(sources):
+                (case_dir / f"f{position}.go").write_text(source, encoding="utf-8")
+            document = _scan(binary, rules, case_dir)
+            found = len(document.get("results") or [])
+            if expected > 0:
+                vulnerable += 1
+                if found:
+                    detected += 1
+            elif found:
+                fp_on_safe += 1
+        total_cases += len(cases)
+        actual[gosec_rule] = {
+            "cases": len(cases),
+            "vulnerable": vulnerable,
+            "detected": detected,
+            "fp_on_safe": fp_on_safe,
+        }
+    return {"cases_total": total_cases, "by_rule": actual}
+
+
+def _ratio(numerator: int, denominator: int) -> str:
+    if denominator == 0:
+        return "n/a"
+    return f"{numerator / denominator:.1%}"
+
+
+def _denominator(cases: dict[str, tuple[int, bool]], applicable: set[int]) -> dict:
+    scored = {key: value for key, value in cases.items() if value[0] in applicable}
+    excluded = {key: value for key, value in cases.items() if value[0] not in applicable}
+    excluded_categories = {
+        str(cwe): sum(case_cwe == cwe and vulnerable for case_cwe, vulnerable in excluded.values())
+        for cwe in sorted({case_cwe for case_cwe, _ in excluded.values()})
+    }
+    return {
+        "cases": len(cases),
+        "vulnerable_cases": sum(vulnerable for _, vulnerable in cases.values()),
+        "scored_cases": len(scored),
+        "scored_vulnerable_cases": sum(vulnerable for _, vulnerable in scored.values()),
+        "excluded_cases": len(excluded),
+        "excluded_vulnerable_cases": sum(
+            vulnerable for _, vulnerable in excluded.values()
+        ),
+        "excluded_categories": excluded_categories,
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--benchmark-root", type=Path, required=True)
+    parser.add_argument("--opengrep", type=Path, default=Path("opengrep"))
+    parser.add_argument("--rules", type=Path, default=DEFAULT_RULES / "java")
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument(
+        "--benchmark",
+        action="append",
+        default=[],
+        help="Run only the named benchmark. Repeatable.",
+    )
+    parser.add_argument("--require-promotion-ready", action="store_true")
+    args = parser.parse_args()
+
+    engine_version = verify_engine(args.opengrep)
+
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    benchmarks = manifest["benchmarks"]
+    if args.benchmark:
+        requested = set(args.benchmark)
+        known = {str(benchmark["name"]) for benchmark in benchmarks}
+        unknown = requested - known
+        if unknown:
+            message = f"unknown benchmark name(s): {sorted(unknown)}"
+            raise BenchmarkGateError(message)
+        benchmarks = [
+            benchmark for benchmark in benchmarks if benchmark["name"] in requested
+        ]
+    failures: list[str] = []
+    for benchmark in benchmarks:
+        checkout = args.benchmark_root / str(benchmark["directory"])
+        if not checkout.is_dir():
+            failures.append(f"{benchmark['name']}: checkout is missing: {checkout}")
+            continue
+        if not (checkout / benchmark["license_file"]).is_file():
+            failures.append(f"{benchmark['name']}: licence file is missing")
+            continue
+        source_type = benchmark.get("source_type", "git")
+        if source_type == "git":
+            actual_commit = _git_head(checkout)
+            if actual_commit != benchmark["commit"]:
+                failures.append(
+                    f"{benchmark['name']}: expected commit {benchmark['commit']}, "
+                    f"found {actual_commit}"
+                )
+                continue
+        elif source_type == "archive":
+            archive = checkout / str(benchmark["archive_file"])
+            if (
+                not archive.is_file()
+                or archive.stat().st_size != benchmark["archive_bytes"]
+                or _sha256(archive) != benchmark["archive_sha256"]
+            ):
+                failures.append(f"{benchmark['name']}: archive identity mismatch")
+                continue
+            repair = benchmark["manifest_repair"]
+            source_manifest = checkout / str(repair["source"])
+            repaired_manifest = checkout / str(repair["destination"])
+            if (
+                not source_manifest.is_file()
+                or _sha256(source_manifest) != repair["source_sha256"]
+                or not repaired_manifest.is_file()
+                or _sha256(repaired_manifest) != repair["destination_sha256"]
+            ):
+                failures.append(f"{benchmark['name']}: manifest identity mismatch")
+                continue
+        else:
+            failures.append(
+                f"{benchmark['name']}: unsupported source type {source_type}"
+            )
+            continue
+
+        benchmark_type = benchmark["benchmark_type"]
+        if benchmark_type == "owasp-csv":
+            source = checkout / benchmark["source_path"]
+            cases = _expected_cases(checkout / benchmark["expected_results"])
+            rule_cwes = _rule_cwes(args.rules)
+            selected_cwes = sorted(
+                {cwe for values in rule_cwes.values() for cwe in values}
+            )
+            benchmark_cwes = sorted({cwe for cwe, _ in cases.values()})
+            applicable_cwes = sorted(set(selected_cwes) & set(benchmark_cwes))
+            excluded_cwes = sorted(set(benchmark_cwes) - set(applicable_cwes))
+            actual_denominator = _denominator(cases, set(applicable_cwes))
+            if actual_denominator != benchmark["full_denominator"]:
+                failures.append(
+                    f"{benchmark['name']}: denominator changed from "
+                    f"{benchmark['full_denominator']} to {actual_denominator}"
+                )
+            print(f"  applicable CWEs: {applicable_cwes}")
+            print(f"  excluded benchmark CWEs: {excluded_cwes}")
+            first_document = _scan(args.opengrep, args.rules, source)
+            second_document = _scan(args.opengrep, args.rules, source)
+            if _normalized_findings(first_document) != _normalized_findings(
+                second_document
+            ):
+                failures.append(f"{benchmark['name']}: repeated findings differ")
+            actual = _score(first_document, cases, rule_cwes)
+        elif benchmark_type == "juliet-xml":
+            source_root = checkout / str(benchmark["source_root"])
+            sources = [source_root / path for path in benchmark["source_paths"]]
+            if not all(path.is_dir() for path in sources):
+                failures.append(f"{benchmark['name']}: source path is missing")
+                continue
+            rule_cwes = {
+                str(rule_id): int(cwe)
+                for rule_id, cwe in benchmark["rule_cwes"].items()
+            }
+            actual_rule_cwes = _rule_cwes(args.rules)
+            invalid_rules = {
+                rule_id: cwe
+                for rule_id, cwe in rule_cwes.items()
+                if cwe not in actual_rule_cwes.get(rule_id, set())
+            }
+            if invalid_rules:
+                failures.append(
+                    f"{benchmark['name']}: rule CWE mapping changed: {invalid_rules}"
+                )
+                continue
+            first_document = _scan(args.opengrep, args.rules, sources)
+            second_document = _scan(args.opengrep, args.rules, sources)
+            if _exact_findings(first_document, source_root) != _exact_findings(
+                second_document, source_root
+            ):
+                failures.append(f"{benchmark['name']}: repeated findings differ")
+            actual = _score_juliet(
+                first_document,
+                source_root / str(benchmark["manifest_file"]),
+                rule_cwes,
+            )
+        elif benchmark_type == "gosec-samples":
+            # Each benchmark states the rule subtree it is scored against. The
+            # --rules default targets the Java corpora, so a Go benchmark that
+            # relied on it would silently score zero.
+            benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
+            if not benchmark_rules.is_dir():
+                failures.append(
+                    f"{benchmark['name']}: rules subtree missing: {benchmark_rules}"
+                )
+                continue
+            sample_files = {
+                str(rule_id): str(relative)
+                for rule_id, relative in benchmark["sample_files"].items()
+            }
+            missing = [
+                relative
+                for relative in sample_files.values()
+                if not (checkout / relative).is_file()
+            ]
+            if missing:
+                failures.append(f"{benchmark['name']}: sample file missing: {missing}")
+                continue
+            with tempfile.TemporaryDirectory() as first_dir:
+                actual = _score_gosec(
+                    args.opengrep,
+                    benchmark_rules,
+                    checkout,
+                    sample_files,
+                    Path(first_dir),
+                )
+            with tempfile.TemporaryDirectory() as second_dir:
+                repeat = _score_gosec(
+                    args.opengrep,
+                    benchmark_rules,
+                    checkout,
+                    sample_files,
+                    Path(second_dir),
+                )
+            if actual != repeat:
+                failures.append(f"{benchmark['name']}: repeated scoring differs")
+        else:
+            failures.append(
+                f"{benchmark['name']}: unsupported benchmark type {benchmark_type}"
+            )
+            continue
+
+        if actual != benchmark["expected"]:
+            failures.append(
+                f"{benchmark['name']}: expected {benchmark['expected']}, found {actual}"
+            )
+        if args.require_promotion_ready and not benchmark["promotion_ready"]:
+            failures.append(
+                f"{benchmark['name']}: "
+                f"{benchmark.get('promotion_blocker', 'not ready')}"
+            )
+        if benchmark_type == "gosec-samples":
+            print(f"{benchmark['name']}: {actual['cases_total']} cases")
+            for gosec_rule, values in sorted(actual["by_rule"].items()):
+                print(
+                    f"  {gosec_rule}: cases={values['cases']} "
+                    f"vulnerable={values['vulnerable']} "
+                    f"detected={values['detected']} "
+                    f"fp_on_safe={values['fp_on_safe']}"
+                )
+            continue
+        print(f"{benchmark['name']}: {actual['files_scanned']} files")
+        if benchmark_type == "owasp-csv":
+            for cwe, values in actual["metrics_by_cwe"].items():
+                precision = _ratio(values["tp"], values["tp"] + values["fp"])
+                recall = _ratio(values["tp"], values["tp"] + values["fn"])
+                print(
+                    f"  CWE-{cwe}: TP={values['tp']} FP={values['fp']} "
+                    f"FN={values['fn']} TN={values['tn']} "
+                    f"precision={precision} recall={recall}"
+                )
+        else:
+            for rule_id, values in actual["metrics_by_rule"].items():
+                recall = _ratio(values["cases_detected"], values["cases_total"])
+                print(
+                    f"  {rule_id}: cases={values['cases_detected']}/"
+                    f"{values['cases_total']} recall={recall}, "
+                    f"findings={values['finding_count']}, "
+                    f"manifest-locations={values['findings_at_manifest_flaws']}"
+                )
+
+    if failures:
+        raise BenchmarkGateError("benchmark gate failed:\n" + "\n".join(failures))
+    print(f"benchmark result matches reviewed baseline with Opengrep {engine_version}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

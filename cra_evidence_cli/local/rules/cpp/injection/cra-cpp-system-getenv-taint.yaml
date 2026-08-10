@@ -1,0 +1,33 @@
+rules:
+  - id: cra-cpp-system-getenv-taint
+    message: >
+      An environment variable reaches the system shell. Launch a fixed
+      executable directly and pass validated arguments without a shell.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=88046682
+      category: security
+      technology: [cpp, posix]
+      confidence: VERY HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: The remediation replaces the shell sink with a fixed executable and validated argument vector.
+      license: MIT
+      author: CRA Evidence
+    languages: [cpp]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: getenv(...)
+          - pattern: std::getenv(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: system($COMMAND)
+              - pattern: std::system($COMMAND)
+          - focus-metavariable: $COMMAND

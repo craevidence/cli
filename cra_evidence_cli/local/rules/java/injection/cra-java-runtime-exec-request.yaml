@@ -1,0 +1,38 @@
+rules:
+  - id: cra-java-runtime-exec-request
+    message: >
+      HTTP request data reaches an operating system command. Pass a fixed
+      executable and validated arguments without invoking a command shell.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://owasp.org/Top10/A03_2021-Injection/
+      category: security
+      technology: [java, servlet]
+      confidence: HIGH
+      scope: >
+        Detects servlet parameter, header, or query-string data reaching
+        Runtime.exec or ProcessBuilder through flows supported within one file.
+      limitations: >
+        Does not provide interfile analysis and can miss field-mediated or
+        otherwise unsupported intrafile flows.
+      sanitizer_analysis:
+        status: not-modeled
+        reason: The remediation replaces the command sink with a fixed executable and validated arguments.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getQueryString()
+    pattern-sinks:
+      - pattern-either:
+          - pattern: Runtime.getRuntime().exec($CMD, ...)
+          - pattern: new ProcessBuilder($CMD)

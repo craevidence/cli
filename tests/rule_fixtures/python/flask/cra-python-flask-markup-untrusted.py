@@ -1,5 +1,17 @@
+import flask
+import markupsafe
 from flask import request
-from markupsafe import Markup, escape
+from markupsafe import Markup
+
+
+def requested_bio():
+    return request.form.get("bio")
+
+
+def render_bio_across_helper():
+    bio = requested_bio()
+    # ruleid: cra-python-flask-markup-untrusted
+    return Markup("<div>" + bio + "</div>")
 
 
 def render_bio_concat():
@@ -26,10 +38,31 @@ def render_values_subscript():
     return Markup("<p>" + val + "</p>")
 
 
+def render_fully_qualified():
+    # ruleid: cra-python-flask-markup-untrusted
+    return flask.Markup(flask.request.args.get("bio"))
+
+
 def render_bio_escaped():
     bio = request.form.get("bio")
     # ok: cra-python-flask-markup-untrusted
-    return Markup("<div>%s</div>") % escape(bio)
+    return Markup("<div>" + markupsafe.escape(bio) + "</div>")
+
+
+def render_bio_markup_escape():
+    bio = request.form.get("bio")
+    escaped = markupsafe.Markup.escape(bio)
+    # ok: cra-python-flask-markup-untrusted
+    return Markup("<div>" + escaped + "</div>")
+
+
+def render_shadowed_escape():
+    def escape(value):
+        return value
+
+    bio = request.form.get("bio")
+    # ruleid: cra-python-flask-markup-untrusted
+    return Markup("<div>" + escape(bio) + "</div>")
 
 
 def render_constant():

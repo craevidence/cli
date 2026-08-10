@@ -7,6 +7,7 @@ rules:
       array instead.
     severity: ERROR
     metadata:
+      tier: experimental
       cwe:
         - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
       owasp:
@@ -22,7 +23,132 @@ rules:
       author: CRA Evidence
     languages: [javascript, typescript]
     pattern-either:
-      - pattern: $CP.exec($A + $B, ...)
-      - pattern: $CP.execSync($A + $B, ...)
+      - patterns:
+          - pattern-either:
+              - pattern: $CP.exec($A + $B, ...)
+              - pattern: $CP.execSync($A + $B, ...)
+              - pattern: $CP.exec(`...${$VALUE}...`, ...)
+              - pattern: $CP.execSync(`...${$VALUE}...`, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  const $CP = require("child_process");
+                  ...
+              - pattern-inside: |
+                  var $CP = require("child_process");
+                  ...
+              - pattern-inside: |
+                  let $CP = require("child_process");
+                  ...
+              - pattern-inside: |
+                  const $CP = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  var $CP = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  let $CP = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  import $CP from "child_process";
+                  ...
+              - pattern-inside: |
+                  import $CP from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "child_process";
+                  ...
+              - pattern-inside: |
+                  import * as $CP from "node:child_process";
+                  ...
       - pattern: require('child_process').exec($A + $B, ...)
       - pattern: require('child_process').execSync($A + $B, ...)
+      - pattern: require('child_process').exec(`...${$VALUE}...`, ...)
+      - pattern: require('child_process').execSync(`...${$VALUE}...`, ...)
+      - pattern: require('node:child_process').exec($A + $B, ...)
+      - pattern: require('node:child_process').execSync($A + $B, ...)
+      - pattern: require('node:child_process').exec(`...${$VALUE}...`, ...)
+      - pattern: require('node:child_process').execSync(`...${$VALUE}...`, ...)
+      - patterns:
+          - pattern-either:
+              - pattern: exec($A + $B, ...)
+              - pattern: execSync($A + $B, ...)
+              - pattern: exec(`...${$VALUE}...`, ...)
+              - pattern: execSync(`...${$VALUE}...`, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  const { exec, execSync } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  var { exec, execSync } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  let { exec, execSync } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  const { exec, execSync } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  var { exec, execSync } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  let { exec, execSync } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  import { exec, execSync } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { exec, execSync } from "node:child_process";
+                  ...
+      - patterns:
+          - pattern-either:
+              - pattern: $EXEC($A + $B, ...)
+              - pattern: $EXEC(`...${$VALUE}...`, ...)
+          - pattern-either:
+              - pattern-inside: |
+                  const { exec: $EXEC } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  var { exec: $EXEC } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  let { exec: $EXEC } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  const { exec: $EXEC } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  var { exec: $EXEC } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  let { exec: $EXEC } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  const { execSync: $EXEC } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  var { execSync: $EXEC } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  let { execSync: $EXEC } = require("child_process");
+                  ...
+              - pattern-inside: |
+                  const { execSync: $EXEC } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  var { execSync: $EXEC } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  let { execSync: $EXEC } = require("node:child_process");
+                  ...
+              - pattern-inside: |
+                  import { exec as $EXEC } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { exec as $EXEC } from "node:child_process";
+                  ...
+              - pattern-inside: |
+                  import { execSync as $EXEC } from "child_process";
+                  ...
+              - pattern-inside: |
+                  import { execSync as $EXEC } from "node:child_process";
+                  ...

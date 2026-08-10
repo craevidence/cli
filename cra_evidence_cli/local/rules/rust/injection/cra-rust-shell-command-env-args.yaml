@@ -1,0 +1,49 @@
+rules:
+  - id: cra-rust-shell-command-env-args
+    message: >
+      A process argument reaches a command shell. Invoke the intended executable
+      directly and pass validated values as separate arguments.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://doc.rust-lang.org/std/process/struct.Command.html
+      category: security
+      technology: [rust]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: The remediation replaces the shell sink with a fixed executable and separate validated arguments.
+      license: MIT
+      author: CRA Evidence
+    languages: [rust]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: std::env::args().nth(...)
+          - pattern: std::env::var(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: std::process::Command::new($SHELL).arg("-c").arg($CMD)
+              - pattern: Command::new($SHELL).arg("-c").arg($CMD)
+              - pattern: std::process::Command::new($SHELL).args(["-c", $CMD])
+              - pattern: Command::new($SHELL).args(["-c", $CMD])
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '^("sh"|"bash"|"/bin/sh"|"/bin/bash")$'
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern: $COMMAND.arg($CMD)
+          - pattern-inside: |
+              let mut $COMMAND = Command::new($SHELL);
+              ...
+              $COMMAND.arg("-c");
+              ...
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '^("sh"|"bash"|"/bin/sh"|"/bin/bash")$'
+          - focus-metavariable: $CMD

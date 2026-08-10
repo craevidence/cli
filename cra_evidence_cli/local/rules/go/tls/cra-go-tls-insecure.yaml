@@ -1,11 +1,18 @@
 rules:
   - id: cra-go-tls-insecure
     message: >
-      tls.Config sets InsecureSkipVerify to true. This disables TLS certificate
-      verification and allows a person-in-the-middle to intercept or modify
-      traffic without detection. Remove InsecureSkipVerify or set it to false.
+      InsecureSkipVerify is set to true, either in a tls.Config literal or by
+      assignment to the field on a tls.Config value or pointer. This disables TLS
+      certificate verification and allows a person-in-the-middle to intercept or
+      modify traffic without detection. Remove InsecureSkipVerify or set it to
+      false. The rule matches the literal true only; a value supplied through a
+      variable, a constant, or an expression is not resolved. The assignment form
+      also needs the receiver to carry a tls.Config type in the scanned file, so
+      a receiver typed only by a call result or by a declaration in another file
+      is not matched.
     severity: ERROR
     metadata:
+      tier: experimental
       cwe:
         - "CWE-295: Improper Certificate Validation"
       owasp:
@@ -20,4 +27,16 @@ rules:
       license: MIT
       author: CRA Evidence
     languages: [go]
-    pattern: "tls.Config{..., InsecureSkipVerify: true, ...}"
+    pattern-either:
+      - pattern: "tls.Config{..., InsecureSkipVerify: true, ...}"
+      # InsecureSkipVerify is not a name reserved to crypto/tls, so the bare
+      # assignment form is tied to a receiver whose type resolves to tls.Config.
+      # Matching the field name on its own reported any struct declaring a field
+      # of that name.
+      - patterns:
+          - pattern: "$CONF.InsecureSkipVerify = true"
+          - metavariable-type:
+              metavariable: $CONF
+              types:
+                - tls.Config
+                - "*tls.Config"

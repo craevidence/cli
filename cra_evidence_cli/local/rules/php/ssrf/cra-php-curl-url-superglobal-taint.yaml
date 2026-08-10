@@ -1,0 +1,38 @@
+rules:
+  - id: cra-php-curl-url-superglobal-taint
+    message: >
+      HTTP request data controls a cURL destination. Resolve destinations from
+      an allowlist and block private, loopback, link-local, and metadata network
+      addresses after DNS resolution.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      owasp: ["A10:2021 - Server-Side Request Forgery (SSRF)"]
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://www.php.net/manual/en/function.curl-setopt.php
+      category: security
+      technology: [php, curl, http]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Safe destination validation requires an allowlist, DNS resolution, and checked control flow.
+      license: MIT
+      author: CRA Evidence
+    languages: [php]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: curl_setopt($HANDLE, CURLOPT_URL, $URL)
+              - focus-metavariable: $URL
+          - patterns:
+              - pattern: curl_init($URL)
+              - focus-metavariable: $URL

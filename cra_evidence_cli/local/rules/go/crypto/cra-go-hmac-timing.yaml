@@ -6,6 +6,7 @@ rules:
       comparison time. Use hmac.Equal() instead.
     severity: ERROR
     metadata:
+      tier: experimental
       cwe:
         - "CWE-208: Observable Timing Discrepancy"
       owasp:

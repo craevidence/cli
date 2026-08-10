@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Platform wheels and the CLI container now include the official Opengrep
+  1.26.0 executable. Release builds verify fixed SHA-256 hashes and Sigstore
+  signatures bound to Opengrep's exact release workflow identity, package its
+  LGPL-2.1 license notice, and attach a deterministic build-source bundle from
+  the exact commit and pinned submodules. The non-build Semgrep rule-test
+  corpus is excluded and recorded in the bundle manifest.
+- The bundled rule pack now tests Go, JavaScript/TypeScript, Java, C, C++, Rust,
+  PHP, and C# alongside the default Python group. The pack contains 50
+  experimental rules across those eight groups, including focused injection, path, SSRF,
+  deserialization, TLS, cryptography, filesystem, and secret-key detections.
+  Each rule has positive and negative fixtures executed by the pinned Opengrep
+  engine gate and requires `--include-experimental`.
+- Reproducible evidence gates now scan pinned revisions of nine representative
+  projects twice and score applicable Java rules against the OWASP Benchmark
+  with raw TP, FP, FN, and TN counts. A second gate verifies the official NIST
+  Juliet Java 1.3 archive, retains its CC0 legal text, repairs only two pinned
+  malformed manifest lines, and records per-rule case recall and flaw-location
+  corroboration. The recorded evidence blocks promotion when parser errors,
+  false positives, or detection gaps remain.
+- Java rules now recognize qualified filesystem, message-digest, JDBC batch,
+  and JDBC overload APIs. The pinned OWASP Benchmark measures 172 of 660
+  applicable vulnerable cases and 24 false positives; Java remains experimental.
+  Each Java rule now declares its exact scope and engine limitations. Rules with
+  known safe-case findings or no independent precision measurement are warnings
+  instead of build-breaking errors.
+- The GitHub Action accepts `command: code-check`, and the GitLab component
+  provides `.cra-evidence-code-check` for a source-code CI gate without a
+  separate scanner installation.
+
+### Changed
+
+- `code-check` resolves `CRA_EVIDENCE_OPENGREP`, then the bundled executable,
+  then `PATH`. Custom excludes are additive, and `--rule-timeout` is separate
+  from the whole-scan timeout. Engine-free source installs no longer skip an
+  unavailable Opengrep engine with exit 0; install a supported platform wheel,
+  use the container, or provide the executable through the environment or PATH.
+- Text and JSON output now report scanned files, skipped files, language counts,
+  enabled rules by language, rule tiers, and engine errors. Recoverable parse
+  errors report degraded coverage while preserving real findings; missing
+  engines, timeouts, fatal engine errors, and zero-file scans exit 1.
+- Mixed-language scans now inventory visible source files and report files that
+  Opengrep did not select or whose language has no enabled rules. Explicitly
+  excluded paths remain excluded by user choice. Under `--fail-on`, engine
+  errors or unanalysed source files exit 29 instead of producing a green gate.
+- An explicit `--fail-on` policy exits 29 when recoverable parser errors degrade
+  coverage, even if no finding reaches the selected severity. Python preflight
+  accepts UTF-8 byte-order marks, contains parser resource failures, and names
+  the host CPython grammar in text, JSON, and SARIF.
+- `code-check` labels Opengrep's path count as engine target selection rather
+  than parser coverage. Python syntax collapse is reported as degraded
+  coverage, and text, JSON, and SARIF carry the same advisory limitations.
+- The batch rule gate now copies fixtures outside Opengrep's ignored `tests`
+  path, requires positive scan and finding counts, records exact locations,
+  asserts Opengrep 1.26.0, and rejects untriaged cross-rule safe-line findings.
+  Every taint rule also
+  has a same-file helper-to-sink fixture under the production intrafile flag.
+- Rule evidence now includes qualified-name, shadowed-sanitizer, `char **argv`,
+  API-overload, and safe near-miss variants across Python, Java, C, C++, Rust,
+  PHP, and C#. Rule-pack version 2.4.0 binds both rule bodies and fixture bytes.
+- Rule-specific tiers no longer force every rule in a language to move together.
+  Experimental rules remain opt-in until their own evidence supports promotion.
+  Sanitizer declarations now require nearby executable safe fixtures across the
+  whole pack, including Django `conditional_escape` and `nh3.clean` coverage.
+- Experimental coverage now includes whole-superglobal PHP flows, additional
+  Java API forms, import-resolved JavaScript command execution, `tempnam`, inline
+  C# deserialization, and tested control-flow guards for Rust and C# paths.
+- Evidence gates verify the resolved Opengrep executable against the official
+  release SHA-256, reject empty benchmark inputs, validate every CWE identifier
+  against MITRE CWE 4.20, and bind annotation exceptions to nearby canonical
+  fixture lines.
+- Release validation enforces the manylinux glibc floor, separate musl assets,
+  an 80 MiB wheel release limit, upstream copyright notices, and a native
+  dependency inventory. Executable signatures and the independently hashed
+  source archive are recorded as separate provenance facts.
+- Container builds fail when the Opengrep native-dependency inventory is empty.
+  Release workflows bind and attach the matching source archive before pushing
+  an immutable image.
+- `code-check --upload` removes source snippets, absolute workspace paths,
+  command arguments, and environment variables from SARIF while retaining
+  finding and taint-flow locations. Related locations and automatic fixes are
+  removed because they can carry source text.
+- PyPI publishing uses one supported Trusted Publishing action invocation for
+  all missing distributions in a release or resume run.
+- Go and JavaScript/TypeScript rules are experimental by default. The JavaScript
+  `eval` review rule is warning-level, and the Go descriptions state the
+  syntactic limits that prevent security-intent claims.
+
 ## [4.2.0] - 2026-08-08
 
 ### Changed

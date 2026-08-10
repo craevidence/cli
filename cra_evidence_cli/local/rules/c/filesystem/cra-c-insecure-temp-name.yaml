@@ -1,0 +1,24 @@
+rules:
+  - id: cra-c-insecure-temp-name
+    message: >
+      tmpnam, tempnam, or mktemp creates a predictable filename without
+      securely opening it. Use mkstemp or an equivalent atomic create operation.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-377: Insecure Temporary File"]
+      owasp: ["A01:2021 - Broken Access Control"]
+      references:
+        - https://cwe.mitre.org/data/definitions/377.html
+        - https://man7.org/linux/man-pages/man3/tmpnam.3.html
+        - https://wiki.sei.cmu.edu/confluence/display/c/FIO21-C.+Do+not+create+temporary+files+in+shared+directories
+      category: security
+      technology: [c, posix]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [c]
+    pattern-either:
+      - pattern: tmpnam(...)
+      - pattern: tempnam(...)
+      - pattern: mktemp(...)

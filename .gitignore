@@ -12,3 +12,5 @@ build/
 .ruff_cache/
 workspace/
 sbom.cdx.json
+cra_evidence_cli/_engine/grype
+cra_evidence_cli/_engine/opengrep

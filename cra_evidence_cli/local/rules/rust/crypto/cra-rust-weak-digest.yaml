@@ -1,0 +1,25 @@
+rules:
+  - id: cra-rust-weak-digest
+    message: >
+      MD5 and SHA-1 are collision-prone message digests. Use SHA-256 or a
+      stronger digest for integrity, and a password-specific KDF for passwords.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-328: Use of Weak Hash"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/328.html
+        - https://docs.rs/sha1/latest/sha1/
+      category: security
+      technology: [rust, cryptography]
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [rust]
+    pattern-either:
+      - pattern: md5::compute(...)
+      - pattern: sha1::Sha1::new()
+      - pattern: Sha1::new()
+      - pattern: md5::Md5::new()
+      - pattern: Md5::new()

@@ -1,0 +1,84 @@
+rules:
+  - id: cra-csharp-process-request-taint
+    message: >
+      HTTP request data reaches a command interpreter. Launch a fixed executable
+      directly and pass validated values through ArgumentList without a shell.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.processstartinfo.argumentlist
+      category: security
+      technology: [csharp, dotnet, aspnet]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: modeled
+        reason: A fixed executable with ArgumentList is modeled as a non-shell process invocation.
+      license: MIT
+      author: CRA Evidence
+    languages: [csharp]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQUEST.Query[$KEY]
+          - pattern: $REQUEST.Form[$KEY]
+          - pattern: $REQUEST.Headers[$KEY]
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromQuery] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromBody] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+          - patterns:
+              - pattern-inside: |
+                  $RET $METHOD(..., [FromRoute] $TYPE $PARAM, ...) {
+                    ...
+                  }
+              - focus-metavariable: $PARAM
+    pattern-sanitizers:
+      - patterns:
+          - pattern: new ProcessStartInfo { FileName = $EXECUTABLE, ArgumentList = { ... } }
+          - metavariable-regex:
+              metavariable: $EXECUTABLE
+              regex: '(?i)^"(?!cmd(?:\.exe)?"$|powershell(?:\.exe)?"$|pwsh"$|/bin/sh"$|/bin/bash"$|sh"$|bash"$)[^"]+"$'
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: Process.Start($SHELL, $ARGUMENTS)
+              - metavariable-regex:
+                  metavariable: $SHELL
+                  regex: '^("(?i:cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh|/bin/sh|/bin/bash|sh|bash)")$'
+              - focus-metavariable: $ARGUMENTS
+          - patterns:
+              - pattern: new ProcessStartInfo($SHELL, $ARGUMENTS)
+              - metavariable-regex:
+                  metavariable: $SHELL
+                  regex: '^("(?i:cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh|/bin/sh|/bin/bash|sh|bash)")$'
+              - focus-metavariable: $ARGUMENTS
+          - patterns:
+              - pattern: Process.Start($COMMAND)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: new ProcessStartInfo($COMMAND)
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: new ProcessStartInfo(...) { FileName = $COMMAND, ... }
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: new ProcessStartInfo { FileName = $COMMAND, ... }
+              - focus-metavariable: $COMMAND
+          - patterns:
+              - pattern: new ProcessStartInfo(...) { Arguments = $ARGUMENTS, ... }
+              - focus-metavariable: $ARGUMENTS
+          - patterns:
+              - pattern: new ProcessStartInfo { ..., Arguments = $ARGUMENTS, ... }
+              - focus-metavariable: $ARGUMENTS

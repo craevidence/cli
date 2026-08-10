@@ -1,5 +1,6 @@
 """Tests for customer-facing CI wrapper metadata."""
 
+import json
 import re
 from pathlib import Path
 
@@ -20,10 +21,14 @@ def test_github_action_uses_cli_signing_path():
     assert action["inputs"]["signature-identity"]["required"] is False
     assert action["inputs"]["signature-issuer"]["required"] is False
     assert action["inputs"]["fail-untrusted"]["default"] == "false"
+    assert action["inputs"]["include-experimental"]["default"] == "false"
     assert "signature-trust-status" in action["outputs"]
     assert "response" in action["outputs"]
+    assert "code-check" in action["inputs"]["command"]["description"]
 
     assert "craevidence --output json" in action_text
+    assert "ARGS=(code-check" in action_text
+    assert "ARGS+=(--include-experimental)" in action_text
     assert "--sign" in action_text
     assert "--target-markets" in action_text
     assert "target-markets such as DE,FR,ES" in action_text
@@ -64,6 +69,7 @@ def test_gitlab_component_uses_cli_signing_path():
     assert ".cra-evidence-upload" in content
     assert "cra-evidence-upload" in content
     assert ".cra-evidence-check" in content
+    assert ".cra-evidence-code-check" in content
 
     inputs = spec["spec"]["inputs"]
     assert inputs["create-product"]["default"] is False
@@ -92,6 +98,17 @@ def test_gitlab_component_uses_cli_signing_path():
     assert signed_template["extends"] == ".cra-evidence-upload"
     assert signed_template["id_tokens"]["SIGSTORE_ID_TOKEN"]["aud"] == "sigstore"
     assert content["cra-evidence-upload"]["extends"] == ".cra-evidence-upload-signed"
+    assert content[".cra-evidence-code-check"]["extends"] == ".cra-evidence-check"
+    assert (
+        content[".cra-evidence-code-check"]["variables"]["CRA_CHECK_COMMAND"]
+        == "code-check"
+    )
+    assert (
+        content[".cra-evidence-code-check"]["variables"]
+        ["CRA_CODE_CHECK_INCLUDE_EXPERIMENTAL"]
+        == "false"
+    )
+    assert 'set -- "$@" --include-experimental' in component_text
 
     variables = content["cra-evidence-upload"]["variables"]
     assert variables["CRA_TARGET_MARKETS"] == "$[[ inputs.target-markets ]]"
@@ -154,22 +171,86 @@ def test_dockerfile_requires_the_engine_sbom_command():
     assert "grype sbom --help | grep -F -- '--offline'" in dockerfile_text
 
 
+def test_dockerfile_opengrep_pin_matches_committed_release_lock():
+    dockerfile_text = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    lock = json.loads(
+        (
+            REPO_ROOT
+            / "cra_evidence_cli"
+            / "_engine"
+            / "opengrep-release.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert f"ARG OPENGREP_VERSION={lock['version']}" in dockerfile_text
+    assert f"ARG OPENGREP_COMMIT={lock['commit']}" in dockerfile_text
+    assert lock["assets"]["opengrep_manylinux_x86"] in dockerfile_text
+    assert lock["assets"]["opengrep_manylinux_aarch64"] in dockerfile_text
+    assert "https://github.com/opengrep/opengrep" in dockerfile_text
+    assert 're.finditer(rb"(?:lib[A-Za-z0-9_+.-]+\\.' in dockerfile_text
+    assert 'assert libraries, f"no native dependencies found in {asset}"' in dockerfile_text
+
+
+def test_rulepack_workflow_verifies_the_committed_opengrep_lock():
+    workflow_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    lock = json.loads(
+        (
+            REPO_ROOT
+            / "cra_evidence_cli"
+            / "_engine"
+            / "opengrep-release.json"
+        ).read_text(encoding="utf-8")
+    )
+
+    assert lock["certificate_identity"] in workflow_text
+    assert lock["certificate_issuer"] in workflow_text
+    assert lock["assets"]["opengrep_manylinux_x86"] in workflow_text
+    assert lock["assets"]["opengrep_manylinux_aarch64"] in workflow_text
+
+
+def test_image_comparison_inventory_cannot_fail_on_finding_severity():
+    script = (REPO_ROOT / "scripts" / "check-image-gate.sh").read_text(
+        encoding="utf-8"
+    )
+    inventory = script.split(
+        'echo "check-image-gate: fixed-finding comparison inventory', maxsplit=1
+    )[1]
+
+    assert '"${inventory_grype_bin}" -o table --only-fixed "${image}"' in inventory
+    assert '"${inventory_grype_bin}" -o table --fail-on' not in inventory
+
+
 def test_release_packaging_reuses_the_promoted_engine_artifact():
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
         encoding="utf-8"
     )
     workflow = yaml.safe_load(workflow_text)
     build_steps = workflow["jobs"]["build-and-sbom"]["steps"]
+    image_steps = workflow["jobs"]["publish-images"]["steps"]
     publish_steps = workflow["jobs"]["publish-pypi"]["steps"]
     build_names = [step.get("name", "") for step in build_steps]
+    image_names = [step.get("name", "") for step in image_steps]
     publish_names = [step.get("name", "") for step in publish_steps]
 
     assert "Extract the promoted engine payload" in build_names
     assert "Build and verify all engine distributions" in build_names
     assert "Preserve the promoted engine payload for release packaging" in build_names
+    assert "Fetch and verify the pinned official Opengrep payload" in build_names
+    assert "Preserve the verified Opengrep payload for release packaging" in build_names
+    assert "Verify bundled licence material" in build_names
+    assert "Restore the verified Opengrep source payload" in image_names
+    assert "Bind the Opengrep source payload to the release source" in image_names
+    assert "Attach pinned Opengrep build source to the GitHub release" in image_names
+    assert image_names.index(
+        "Attach pinned Opengrep build source to the GitHub release"
+    ) < image_names.index("Build and push the canonical multi-arch image to GHCR")
     assert "Restore the promoted engine payload" in publish_names
+    assert "Restore the verified Opengrep payload" in publish_names
     assert "Bind the engine payload to the release source" in publish_names
     assert "Verify the complete release distribution set" in publish_names
+    assert "Attach pinned Opengrep build source to the GitHub release" not in publish_names
     assert not any(
         step.get("uses", "").startswith("aws-actions/configure-aws-credentials@")
         for step in publish_steps
@@ -179,10 +260,24 @@ def test_release_packaging_reuses_the_promoted_engine_artifact():
     assert workflow_text.count(digest) == 4
     assert '"${payload}/IMAGE_DIGEST"' in workflow_text
     assert "actual=$(cat engine/IMAGE_DIGEST)" in workflow_text
-    assert (
-        "python release-src/scripts/check_dist.py --dist-dir dist --engine-dir engine"
-        in workflow_text
+    assert "python release-src/scripts/check_dist.py" in workflow_text
+    assert "--opengrep-dir opengrep" in workflow_text
+
+
+def test_release_has_one_pypi_publisher_in_the_pypi_job():
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
+            encoding="utf-8"
+        )
     )
+    publishers: list[tuple[str, dict]] = []
+    for job_name, job in workflow["jobs"].items():
+        for step in job.get("steps", []):
+            if step.get("uses", "").startswith("pypa/gh-action-pypi-publish@"):
+                publishers.append((job_name, step))
+
+    assert len(publishers) == 1
+    assert publishers[0][0] == "publish-pypi"
 
 
 def test_all_engine_image_pins_use_the_dockerfile_digest():

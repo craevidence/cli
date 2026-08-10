@@ -1,0 +1,48 @@
+rules:
+  - id: cra-java-hostname-verifier-accept-all
+    message: >
+      This hostname verifier accepts every certificate hostname. Use the
+      platform hostname verifier so TLS peers are matched to the requested host.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-297: Improper Validation of Certificate with Host Mismatch"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/297.html
+        - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/javax/net/ssl/HostnameVerifier.html
+      category: security
+      technology: [java, tls]
+      confidence: VERY HIGH
+      scope: >
+        Detects supported inline and named HostnameVerifier implementations
+        whose verification result is the literal value true.
+      limitations: >
+        Does not evaluate helper-returned booleans, method references, or
+        verifier behavior distributed across methods or files.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    pattern-either:
+      - pattern: $CONNECTION.setHostnameVerifier(($HOST, $SESSION) -> true)
+      - pattern: $CLIENT.hostnameVerifier(($HOST, $SESSION) -> true)
+      - patterns:
+          - pattern: return true;
+          - pattern-inside: |
+              class $CLASS implements HostnameVerifier {
+                ...
+                public boolean verify(String $HOST, SSLSession $SESSION) {
+                  ...
+                }
+                ...
+              }
+      - patterns:
+          - pattern: return true;
+          - pattern-inside: |
+              class $CLASS implements javax.net.ssl.HostnameVerifier {
+                ...
+                public boolean verify(String $HOST, javax.net.ssl.SSLSession $SESSION) {
+                  ...
+                }
+                ...
+              }

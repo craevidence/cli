@@ -1,0 +1,43 @@
+rules:
+  - id: cra-java-objectinputstream-readobject
+    message: >
+      ObjectInputStream deserializes an object graph that can invoke code in
+      available classes. Avoid native Java serialization for untrusted data and
+      use a format with an explicit data contract.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-502: Deserialization of Untrusted Data"]
+      owasp: ["A08:2021 - Software and Data Integrity Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/502.html
+        - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/io/ObjectInputStream.html
+      category: security
+      technology: [java, serialization]
+      confidence: VERY HIGH
+      scope: >
+        Detects readObject calls on a locally constructed ObjectInputStream
+        without an earlier local setObjectInputFilter call.
+      limitations: >
+        Does not prove that the stream is untrusted and does not recognize
+        filters configured through helpers, factories, or other methods.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    patterns:
+      - pattern: $STREAM.readObject()
+      - pattern-not-inside: |
+          $RET $METHOD(...) {
+            ...
+            $STREAM.setObjectInputFilter(...);
+            ...
+            return $STREAM.readObject();
+            ...
+          }
+      - pattern-either:
+          - pattern-inside: |
+              ObjectInputStream $STREAM = new ObjectInputStream(...);
+              ...
+          - pattern-inside: |
+              var $STREAM = new ObjectInputStream(...);
+              ...

@@ -1,0 +1,39 @@
+rules:
+  - id: cra-php-echo-superglobal-taint
+    message: >
+      HTTP request data is written directly to an HTML response without
+      escaping. Escape for the output context with htmlspecialchars or a
+      framework auto-escaping template.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://www.php.net/manual/en/function.htmlspecialchars.php
+      category: security
+      technology: [php, html]
+      confidence: HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [php]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $_GET
+          - pattern: $_POST
+          - pattern: $_REQUEST
+          - pattern: $_COOKIE
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: htmlspecialchars(...)
+          - pattern: htmlentities(...)
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: echo $VALUE;
+              - focus-metavariable: $VALUE
+          - patterns:
+              - pattern: print $VALUE;
+              - focus-metavariable: $VALUE

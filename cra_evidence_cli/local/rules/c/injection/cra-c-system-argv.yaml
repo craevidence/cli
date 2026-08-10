@@ -1,0 +1,30 @@
+rules:
+  - id: cra-c-system-argv
+    message: >
+      A command-line argument is executed by the system shell. Use an exec
+      function with a fixed executable and a validated argument vector.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://wiki.sei.cmu.edu/confluence/display/c/ENV33-C.+Do+not+call+system()
+      category: security
+      technology: [c]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [c]
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              int main(int $ARGC, char *$ARGV[], ...) {
+                ...
+              }
+          - pattern-inside: |
+              int main(int $ARGC, char **$ARGV, ...) {
+                ...
+              }
+      - pattern: system($ARGV[$INDEX])

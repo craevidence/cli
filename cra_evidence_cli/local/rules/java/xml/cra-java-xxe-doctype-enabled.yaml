@@ -1,0 +1,44 @@
+rules:
+  - id: cra-java-xxe-doctype-enabled
+    message: >
+      This XML parser configuration permits document type declarations or
+      external entities. Disable DTD processing and external entity resolution
+      before parsing untrusted XML.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-611: Improper Restriction of XML External Entity Reference"]
+      owasp: ["A05:2021 - Security Misconfiguration"]
+      references:
+        - https://cwe.mitre.org/data/definitions/611.html
+        - https://docs.oracle.com/en/java/javase/21/docs/api/java.xml/javax/xml/parsers/DocumentBuilderFactory.html
+      category: security
+      technology: [java, xml]
+      confidence: VERY HIGH
+      scope: >
+        Detects selected unsafe XML feature values and a locally constructed
+        default DocumentBuilderFactory without a local DTD-disabling setting.
+      limitations: >
+        Does not model parser configuration performed through helpers or other
+        methods and does not cover every Java XML parser API.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    pattern-either:
+      - pattern: $FACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl", false)
+      - pattern: $FACTORY.setFeature("http://xml.org/sax/features/external-general-entities", true)
+      - pattern: $FACTORY.setFeature("http://xml.org/sax/features/external-parameter-entities", true)
+      - pattern: $FACTORY.setExpandEntityReferences(true)
+      - patterns:
+          - pattern: $FACTORY.newDocumentBuilder()
+          - pattern-inside: |
+              DocumentBuilderFactory $FACTORY = DocumentBuilderFactory.newInstance();
+              ...
+          - pattern-not-inside: |
+              $RET $METHOD(...) {
+                ...
+                $FACTORY.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+                ...
+                $FACTORY.newDocumentBuilder().parse(...);
+                ...
+              }

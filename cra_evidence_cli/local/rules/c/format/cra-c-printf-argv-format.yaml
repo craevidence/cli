@@ -1,0 +1,30 @@
+rules:
+  - id: cra-c-printf-argv-format
+    message: >
+      A command-line argument is used as a printf format string. Use a constant
+      format such as "%s" and pass untrusted text as a value argument.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-134: Use of Externally-Controlled Format String"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/134.html
+        - https://wiki.sei.cmu.edu/confluence/display/c/FIO30-C.+Exclude+user+input+from+format+strings
+      category: security
+      technology: [c]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [c]
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              int main(int $ARGC, char *$ARGV[], ...) {
+                ...
+              }
+          - pattern-inside: |
+              int main(int $ARGC, char **$ARGV, ...) {
+                ...
+              }
+      - pattern: printf($ARGV[$INDEX])

@@ -1,0 +1,32 @@
+rules:
+  - id: cra-cpp-strcpy-argv
+    message: >
+      A command-line argument is copied without a destination bound. Validate
+      the length and use an operation that cannot write beyond the destination.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-120: Buffer Copy without Checking Size of Input"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/120.html
+        - https://wiki.sei.cmu.edu/confluence/display/c/STR31-C.+Guarantee+that+storage+for+strings+has+sufficient+space+for+character+data+and+the+null+terminator
+      category: security
+      technology: [cpp]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [cpp]
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              int main(int $ARGC, char *$ARGV[], ...) {
+                ...
+              }
+          - pattern-inside: |
+              int main(int $ARGC, char **$ARGV, ...) {
+                ...
+              }
+      - pattern-either:
+          - pattern: strcpy($DEST, $ARGV[$INDEX])
+          - pattern: std::strcpy($DEST, $ARGV[$INDEX])

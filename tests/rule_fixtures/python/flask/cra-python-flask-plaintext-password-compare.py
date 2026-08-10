@@ -1,7 +1,21 @@
 import hmac
 
+import bcrypt
+import flask
 from flask import request
-from werkzeug.security import check_password_hash
+import werkzeug.security
+
+
+def submitted_password():
+    return request.form["password"]
+
+
+def login_across_helper(user):
+    submitted = submitted_password()
+    # ruleid: cra-python-flask-plaintext-password-compare
+    if submitted == user.password:
+        return "ok"
+    return "no", 401
 
 
 def login_subscript(user):
@@ -36,11 +50,31 @@ def login_json(user):
     return "no", 401
 
 
+def login_fully_qualified(user):
+    submitted = flask.request.form["password"]
+    # ruleid: cra-python-flask-plaintext-password-compare
+    if submitted == user.password:
+        return "ok"
+    return "no", 401
+
+
 def login_hashed(user):
     submitted = request.form["password"]
     # ok: cra-python-flask-plaintext-password-compare
-    if check_password_hash(user.password_hash, submitted):
+    if werkzeug.security.check_password_hash(user.password_hash, submitted):
         return "ok"
+    return "no", 401
+
+
+def login_shadowed_hash_helper(user):
+    def check_password_hash(stored, submitted):
+        return stored == submitted
+
+    submitted = request.form["password"]
+    candidate = check_password_hash(user.password_hash, submitted)
+    # ruleid: cra-python-flask-plaintext-password-compare
+    if submitted == user.password:
+        return candidate
     return "no", 401
 
 
@@ -48,6 +82,14 @@ def login_compare_digest(user):
     submitted = request.form["password"]
     # ok: cra-python-flask-plaintext-password-compare
     if hmac.compare_digest(submitted, user.password_hash):
+        return "ok"
+    return "no", 401
+
+
+def login_bcrypt(user):
+    submitted = request.form["password"]
+    # ok: cra-python-flask-plaintext-password-compare
+    if bcrypt.checkpw(submitted.encode(), user.password_hash):
         return "ok"
     return "no", 401
 

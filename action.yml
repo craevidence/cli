@@ -33,7 +33,7 @@ branding:
 inputs:
   # === Mode ===
   command:
-    description: 'What to run: "upload" (default, requires api-key) or "check" (no-key local security check; no CRA Evidence account or API key, and no data sent to CRA Evidence)'
+    description: 'What to run: "upload", "check" for dependencies, or "code-check" for source code. Both checks are local and need no account or API key.'
     required: false
     default: 'upload'
 
@@ -60,7 +60,7 @@ inputs:
 
   # === command=check (no-key) options ===
   path:
-    description: 'command=check: directory to scan. Defaults to the repo root.'
+    description: 'command=check or command=code-check: directory to scan. Defaults to the repo root.'
     required: false
     default: '.'
 
@@ -70,7 +70,7 @@ inputs:
     default: ''
 
   sarif-file:
-    description: 'command=check: path to write the SARIF report to (for GitHub code scanning).'
+    description: 'command=check or command=code-check: path to write the SARIF report.'
     required: false
     default: 'craevidence.sarif'
 
@@ -147,9 +147,14 @@ inputs:
     default: 'false'
 
   fail-on:
-    description: 'Fail if vulnerabilities meet the threshold. For command=upload (with scan=true): critical, high, medium, low, or none. For command=check: critical, high, medium, known-exploited, or none (low is not valid for check).'
+    description: 'Failure threshold. upload: critical, high, medium, low. check: critical, high, medium, known-exploited. code-check: error, warning, note. Use none to report without gating.'
     required: false
     default: 'none'
+
+  include-experimental:
+    description: 'command=code-check: enable early Go, JavaScript/TypeScript, Java, C, C++, Rust, PHP, and C# rules with limited coverage evidence.'
+    required: false
+    default: 'false'
 
   # === SBOM Signature Options ===
   sign:
@@ -243,6 +248,16 @@ runs:
         CLI_VERSION=$(grep '^version' "$GITHUB_ACTION_PATH/pyproject.toml" | head -1 | sed 's/.*"\(.*\)".*/\1/')
         python -m pip install --only-binary :all: "craevidence==${CLI_VERSION}"
 
+    - name: Validate command
+      shell: bash
+      env:
+        INPUT_COMMAND: ${{ inputs.command }}
+      run: |
+        case "${INPUT_COMMAND}" in
+          upload|check|code-check) ;;
+          *) echo "::error::Invalid command '${INPUT_COMMAND}'. Use upload, check, or code-check."; exit 1 ;;
+        esac
+
     - name: CRA Evidence local check (no account)
       if: ${{ inputs.command == 'check' }}
       shell: bash
@@ -292,9 +307,50 @@ runs:
         fi
         exit ${CHECK_EXIT}
 
+    - name: CRA Evidence source code check (no account)
+      if: ${{ inputs.command == 'code-check' }}
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+        INPUT_INCLUDE_EXPERIMENTAL: ${{ inputs.include-experimental }}
+      run: |
+        set -euo pipefail
+        case "${INPUT_FAIL_ON}" in
+          error|warning|note|none) ;;
+          *)
+            echo "::error::Invalid fail-on value '${INPUT_FAIL_ON}' for command=code-check. Valid values: error, warning, note, none"
+            exit 1
+            ;;
+        esac
+        ARGS=(code-check "${INPUT_PATH:-.}")
+        case "${INPUT_INCLUDE_EXPERIMENTAL}" in
+          true) ARGS+=(--include-experimental) ;;
+          false) ;;
+          *)
+            echo "::error::Invalid include-experimental value '${INPUT_INCLUDE_EXPERIMENTAL}'. Use true or false."
+            exit 1
+            ;;
+        esac
+        if [ -n "${INPUT_SARIF_FILE}" ]; then
+          ARGS+=(--output-file "${INPUT_SARIF_FILE}")
+        fi
+        if [ "${INPUT_FAIL_ON}" != "none" ]; then
+          ARGS+=(--fail-on "${INPUT_FAIL_ON}")
+        fi
+        set +e
+        craevidence --output sarif "${ARGS[@]}"
+        CHECK_EXIT=$?
+        set -e
+        if [ -n "${INPUT_SARIF_FILE}" ] && [ -f "${INPUT_SARIF_FILE}" ]; then
+          echo "SARIF written to ${INPUT_SARIF_FILE} (upload with github/codeql-action/upload-sarif)."
+        fi
+        exit ${CHECK_EXIT}
+
     - name: Upload artifact to CRA Evidence
       id: upload
-      if: ${{ inputs.command != 'check' }}
+      if: ${{ inputs.command == 'upload' }}
       shell: bash
       env:
         CRA_EVIDENCE_API_KEY: ${{ inputs.api-key }}

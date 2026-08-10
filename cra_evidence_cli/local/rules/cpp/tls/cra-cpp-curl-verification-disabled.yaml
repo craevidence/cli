@@ -1,0 +1,26 @@
+rules:
+  - id: cra-cpp-curl-verification-disabled
+    message: >
+      This cURL option disables TLS certificate or hostname verification.
+      Require peer verification and verify that the certificate matches the
+      requested hostname.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYPEER.html
+        - https://curl.se/libcurl/c/CURLOPT_SSL_VERIFYHOST.html
+      category: security
+      technology: [cpp, curl, tls]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+    languages: [cpp]
+    pattern-either:
+      - pattern: curl_easy_setopt($HANDLE, CURLOPT_SSL_VERIFYPEER, 0)
+      - pattern: curl_easy_setopt($HANDLE, CURLOPT_SSL_VERIFYPEER, 0L)
+      - pattern: curl_easy_setopt($HANDLE, CURLOPT_SSL_VERIFYHOST, 0)
+      - pattern: curl_easy_setopt($HANDLE, CURLOPT_SSL_VERIFYHOST, 0L)

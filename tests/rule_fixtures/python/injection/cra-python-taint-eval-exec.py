@@ -1,4 +1,15 @@
+import flask
 from flask import request
+
+
+def requested_expression():
+    return request.args.get("expr")
+
+
+def bad_eval_across_helper():
+    expression = requested_expression()
+    # ruleid: cra-python-taint-eval-exec
+    eval(expression)
 
 
 # Bad: request.args tainted -> eval (sink)
@@ -46,6 +57,13 @@ def bad_eval_from_cookie():
 # Bad: input() tainted -> eval (sink)
 def bad_eval_from_input():
     expr = input("Enter expression: ")
+    # ruleid: cra-python-taint-eval-exec
+    eval(expr)
+
+
+# Bad: qualified flask.request source -> eval (sink)
+def bad_eval_from_qualified_request():
+    expr = flask.request.args.get("expr")
     # ruleid: cra-python-taint-eval-exec
     eval(expr)
 

@@ -1,0 +1,39 @@
+rules:
+  - id: cra-rust-reqwest-env-taint
+    message: >
+      Process input controls an outbound HTTP destination. Resolve destinations
+      from an allowlist and block private, loopback, link-local, and metadata
+      addresses after DNS resolution.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-918: Server-Side Request Forgery (SSRF)"]
+      owasp: ["A10:2021 - Server-Side Request Forgery (SSRF)"]
+      references:
+        - https://cwe.mitre.org/data/definitions/918.html
+        - https://docs.rs/reqwest/latest/reqwest/fn.get.html
+      category: security
+      technology: [rust, reqwest, http]
+      confidence: HIGH
+      sanitizer_analysis:
+        status: not-modeled
+        reason: Safe destination validation requires an allowlist, DNS resolution, and checked control flow.
+      license: MIT
+      author: CRA Evidence
+    languages: [rust]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: std::env::args().nth(...)
+          - pattern: std::env::var(...)
+    pattern-sinks:
+      - pattern-either:
+          - patterns:
+              - pattern: reqwest::get($URL)
+              - focus-metavariable: $URL
+          - patterns:
+              - pattern: $CLIENT.get($URL)
+              - focus-metavariable: $URL
+          - patterns:
+              - pattern: $CLIENT.post($URL)
+              - focus-metavariable: $URL

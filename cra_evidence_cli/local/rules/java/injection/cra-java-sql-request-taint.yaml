@@ -1,0 +1,46 @@
+rules:
+  - id: cra-java-sql-request-taint
+    message: >
+      HTTP request data reaches a SQL statement as query text. Use a
+      PreparedStatement with placeholders and bind each untrusted value.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/89.html
+        - https://docs.oracle.com/en/java/javase/21/docs/api/java.sql/java/sql/PreparedStatement.html
+      category: security
+      technology: [java, servlet, jdbc]
+      confidence: HIGH
+      scope: >
+        Detects servlet parameter, header, or query-string data used as JDBC
+        query text through flows supported within one file.
+      limitations: >
+        Intrafile taint is path-insensitive, does not provide interfile
+        analysis, and can report constant-branch and container flows that are
+        safe at runtime.
+      license: MIT
+      author: CRA Evidence
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.getParameter(...)
+          - pattern: $REQ.getHeader(...)
+          - pattern: $REQ.getQueryString()
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: Integer.parseInt(...)
+          - pattern: Long.parseLong(...)
+          - pattern: UUID.fromString(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $STMT.execute($QUERY, ...)
+              - pattern: $STMT.executeQuery($QUERY, ...)
+              - pattern: $STMT.executeUpdate($QUERY, ...)
+              - pattern: $STMT.addBatch($QUERY)
+              - pattern: $CONNECTION.prepareStatement($QUERY, ...)
+          - focus-metavariable: $QUERY

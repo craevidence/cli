@@ -1,0 +1,5626 @@
+{
+  "files_scanned": 101,
+  "finding_count": 425,
+  "findings": [
+    {
+      "end": [
+        5,
+        57
+      ],
+      "path": "c/tls/cra-c-curl-verification-disabled.c",
+      "rule_id": "cra-c-curl-verification-disabled",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        57
+      ],
+      "path": "c/tls/cra-c-curl-verification-disabled.c",
+      "rule_id": "cra-c-curl-verification-disabled",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        17
+      ],
+      "path": "c/filesystem/cra-c-insecure-temp-name.c",
+      "rule_id": "cra-c-insecure-temp-name",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        12,
+        41
+      ],
+      "path": "c/filesystem/cra-c-insecure-temp-name.c",
+      "rule_id": "cra-c-insecure-temp-name",
+      "severity": "ERROR",
+      "start": [
+        12,
+        18
+      ]
+    },
+    {
+      "end": [
+        5,
+        20
+      ],
+      "path": "c/format/cra-c-printf-argv-format-char-pointer.c",
+      "rule_id": "cra-c-printf-argv-format",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        5,
+        20
+      ],
+      "path": "c/format/cra-c-printf-argv-format.c",
+      "rule_id": "cra-c-printf-argv-format",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        33
+      ],
+      "path": "c/memory/cra-c-strcpy-argv-char-pointer.c",
+      "rule_id": "cra-c-strcpy-argv",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        33
+      ],
+      "path": "c/memory/cra-c-strcpy-argv.c",
+      "rule_id": "cra-c-strcpy-argv",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        5,
+        20
+      ],
+      "path": "c/injection/cra-c-system-argv-char-pointer.c",
+      "rule_id": "cra-c-system-argv",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        6,
+        20
+      ],
+      "path": "c/injection/cra-c-system-argv.c",
+      "rule_id": "cra-c-system-argv",
+      "severity": "ERROR",
+      "start": [
+        6,
+        5
+      ]
+    },
+    {
+      "end": [
+        11,
+        19
+      ],
+      "path": "c/injection/cra-c-system-getenv-taint.c",
+      "rule_id": "cra-c-system-getenv-taint",
+      "severity": "ERROR",
+      "start": [
+        11,
+        12
+      ]
+    },
+    {
+      "end": [
+        17,
+        19
+      ],
+      "path": "c/injection/cra-c-system-getenv-taint.c",
+      "rule_id": "cra-c-system-getenv-taint",
+      "severity": "ERROR",
+      "start": [
+        17,
+        12
+      ]
+    },
+    {
+      "end": [
+        5,
+        57
+      ],
+      "path": "cpp/tls/cra-cpp-curl-verification-disabled.cpp",
+      "rule_id": "cra-cpp-curl-verification-disabled",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        57
+      ],
+      "path": "cpp/tls/cra-cpp-curl-verification-disabled.cpp",
+      "rule_id": "cra-cpp-curl-verification-disabled",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        22
+      ],
+      "path": "cpp/filesystem/cra-cpp-insecure-temp-name.cpp",
+      "rule_id": "cra-cpp-insecure-temp-name",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        12,
+        41
+      ],
+      "path": "cpp/filesystem/cra-cpp-insecure-temp-name.cpp",
+      "rule_id": "cra-cpp-insecure-temp-name",
+      "severity": "ERROR",
+      "start": [
+        12,
+        18
+      ]
+    },
+    {
+      "end": [
+        5,
+        20
+      ],
+      "path": "cpp/format/cra-cpp-printf-argv-format-char-pointer.cpp",
+      "rule_id": "cra-cpp-printf-argv-format",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        25
+      ],
+      "path": "cpp/format/cra-cpp-printf-argv-format-char-pointer.cpp",
+      "rule_id": "cra-cpp-printf-argv-format",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        5,
+        20
+      ],
+      "path": "cpp/format/cra-cpp-printf-argv-format.cpp",
+      "rule_id": "cra-cpp-printf-argv-format",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        25
+      ],
+      "path": "cpp/format/cra-cpp-printf-argv-format.cpp",
+      "rule_id": "cra-cpp-printf-argv-format",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        33
+      ],
+      "path": "cpp/memory/cra-cpp-strcpy-argv-char-pointer.cpp",
+      "rule_id": "cra-cpp-strcpy-argv",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        9,
+        38
+      ],
+      "path": "cpp/memory/cra-cpp-strcpy-argv-char-pointer.cpp",
+      "rule_id": "cra-cpp-strcpy-argv",
+      "severity": "ERROR",
+      "start": [
+        9,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        38
+      ],
+      "path": "cpp/memory/cra-cpp-strcpy-argv.cpp",
+      "rule_id": "cra-cpp-strcpy-argv",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        5,
+        20
+      ],
+      "path": "cpp/injection/cra-cpp-system-argv-char-pointer.cpp",
+      "rule_id": "cra-cpp-system-argv",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        25
+      ],
+      "path": "cpp/injection/cra-cpp-system-argv-char-pointer.cpp",
+      "rule_id": "cra-cpp-system-argv",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        5,
+        25
+      ],
+      "path": "cpp/injection/cra-cpp-system-argv.cpp",
+      "rule_id": "cra-cpp-system-argv",
+      "severity": "ERROR",
+      "start": [
+        5,
+        5
+      ]
+    },
+    {
+      "end": [
+        11,
+        24
+      ],
+      "path": "cpp/injection/cra-cpp-system-getenv-taint.cpp",
+      "rule_id": "cra-cpp-system-getenv-taint",
+      "severity": "ERROR",
+      "start": [
+        11,
+        17
+      ]
+    },
+    {
+      "end": [
+        17,
+        24
+      ],
+      "path": "cpp/injection/cra-cpp-system-getenv-taint.cpp",
+      "rule_id": "cra-cpp-system-getenv-taint",
+      "severity": "ERROR",
+      "start": [
+        17,
+        17
+      ]
+    },
+    {
+      "end": [
+        9,
+        44
+      ],
+      "path": "csharp/deserialization/cra-csharp-binaryformatter-deserialize.cs",
+      "rule_id": "cra-csharp-binaryformatter-deserialize",
+      "severity": "ERROR",
+      "start": [
+        9,
+        16
+      ]
+    },
+    {
+      "end": [
+        14,
+        56
+      ],
+      "path": "csharp/deserialization/cra-csharp-binaryformatter-deserialize.cs",
+      "rule_id": "cra-csharp-binaryformatter-deserialize",
+      "severity": "ERROR",
+      "start": [
+        14,
+        16
+      ]
+    },
+    {
+      "end": [
+        7,
+        99
+      ],
+      "path": "csharp/tls/cra-csharp-certificate-callback-accept-all.cs",
+      "rule_id": "cra-csharp-certificate-callback-accept-all",
+      "severity": "ERROR",
+      "start": [
+        7,
+        9
+      ]
+    },
+    {
+      "end": [
+        14,
+        123
+      ],
+      "path": "csharp/tls/cra-csharp-certificate-callback-accept-all.cs",
+      "rule_id": "cra-csharp-certificate-callback-accept-all",
+      "severity": "ERROR",
+      "start": [
+        14,
+        9
+      ]
+    },
+    {
+      "end": [
+        21,
+        111
+      ],
+      "path": "csharp/tls/cra-csharp-certificate-callback-accept-all.cs",
+      "rule_id": "cra-csharp-certificate-callback-accept-all",
+      "severity": "ERROR",
+      "start": [
+        21,
+        9
+      ]
+    },
+    {
+      "end": [
+        13,
+        37
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        13,
+        33
+      ]
+    },
+    {
+      "end": [
+        19,
+        38
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        19,
+        34
+      ]
+    },
+    {
+      "end": [
+        24,
+        37
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        24,
+        33
+      ]
+    },
+    {
+      "end": [
+        30,
+        31
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        30,
+        27
+      ]
+    },
+    {
+      "end": [
+        56,
+        47
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        56,
+        43
+      ]
+    },
+    {
+      "end": [
+        15,
+        50
+      ],
+      "path": "csharp/ssrf/cra-csharp-httpclient-request-taint.cs",
+      "rule_id": "cra-csharp-httpclient-request-taint",
+      "severity": "ERROR",
+      "start": [
+        15,
+        44
+      ]
+    },
+    {
+      "end": [
+        21,
+        44
+      ],
+      "path": "csharp/ssrf/cra-csharp-httpclient-request-taint.cs",
+      "rule_id": "cra-csharp-httpclient-request-taint",
+      "severity": "ERROR",
+      "start": [
+        21,
+        38
+      ]
+    },
+    {
+      "end": [
+        26,
+        40
+      ],
+      "path": "csharp/ssrf/cra-csharp-httpclient-request-taint.cs",
+      "rule_id": "cra-csharp-httpclient-request-taint",
+      "severity": "ERROR",
+      "start": [
+        26,
+        34
+      ]
+    },
+    {
+      "end": [
+        8,
+        86
+      ],
+      "path": "csharp/secrets/cra-csharp-jwt-hardcoded-secret.cs",
+      "rule_id": "cra-csharp-jwt-hardcoded-secret",
+      "severity": "ERROR",
+      "start": [
+        8,
+        16
+      ]
+    },
+    {
+      "end": [
+        13,
+        49
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        13,
+        34
+      ]
+    },
+    {
+      "end": [
+        19,
+        68
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        19,
+        53
+      ]
+    },
+    {
+      "end": [
+        24,
+        49
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        24,
+        34
+      ]
+    },
+    {
+      "end": [
+        30,
+        30
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        30,
+        23
+      ]
+    },
+    {
+      "end": [
+        36,
+        87
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        36,
+        78
+      ]
+    },
+    {
+      "end": [
+        64,
+        28
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        64,
+        23
+      ]
+    },
+    {
+      "end": [
+        15,
+        36
+      ],
+      "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
+      "rule_id": "cra-csharp-sql-request-taint",
+      "severity": "ERROR",
+      "start": [
+        15,
+        31
+      ]
+    },
+    {
+      "end": [
+        21,
+        36
+      ],
+      "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
+      "rule_id": "cra-csharp-sql-request-taint",
+      "severity": "ERROR",
+      "start": [
+        21,
+        31
+      ]
+    },
+    {
+      "end": [
+        27,
+        52
+      ],
+      "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
+      "rule_id": "cra-csharp-sql-request-taint",
+      "severity": "ERROR",
+      "start": [
+        27,
+        47
+      ]
+    },
+    {
+      "end": [
+        6,
+        28
+      ],
+      "path": "csharp/crypto/cra-csharp-weak-hash.cs",
+      "rule_id": "cra-csharp-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        6,
+        16
+      ]
+    },
+    {
+      "end": [
+        11,
+        29
+      ],
+      "path": "csharp/crypto/cra-csharp-weak-hash.cs",
+      "rule_id": "cra-csharp-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        11,
+        16
+      ]
+    },
+    {
+      "end": [
+        16,
+        57
+      ],
+      "path": "csharp/crypto/cra-csharp-weak-hash.cs",
+      "rule_id": "cra-csharp-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        16,
+        16
+      ]
+    },
+    {
+      "end": [
+        21,
+        43
+      ],
+      "path": "csharp/crypto/cra-csharp-weak-hash.cs",
+      "rule_id": "cra-csharp-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        21,
+        16
+      ]
+    },
+    {
+      "end": [
+        14,
+        26
+      ],
+      "path": "go/crypto/cra-go-hmac-reused-hash.go",
+      "rule_id": "cra-go-hmac-reused-hash",
+      "severity": "ERROR",
+      "start": [
+        12,
+        2
+      ]
+    },
+    {
+      "end": [
+        23,
+        53
+      ],
+      "path": "go/crypto/cra-go-hmac-reused-hash.go",
+      "rule_id": "cra-go-hmac-reused-hash",
+      "severity": "ERROR",
+      "start": [
+        22,
+        2
+      ]
+    },
+    {
+      "end": [
+        31,
+        55
+      ],
+      "path": "go/crypto/cra-go-hmac-reused-hash.go",
+      "rule_id": "cra-go-hmac-reused-hash",
+      "severity": "ERROR",
+      "start": [
+        31,
+        9
+      ]
+    },
+    {
+      "end": [
+        15,
+        33
+      ],
+      "path": "go/crypto/cra-go-hmac-timing.go",
+      "rule_id": "cra-go-hmac-timing",
+      "severity": "ERROR",
+      "start": [
+        12,
+        2
+      ]
+    },
+    {
+      "end": [
+        24,
+        33
+      ],
+      "path": "go/crypto/cra-go-hmac-timing.go",
+      "rule_id": "cra-go-hmac-timing",
+      "severity": "ERROR",
+      "start": [
+        21,
+        2
+      ]
+    },
+    {
+      "end": [
+        16,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        15,
+        2
+      ]
+    },
+    {
+      "end": [
+        23,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        22,
+        2
+      ]
+    },
+    {
+      "end": [
+        30,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        29,
+        2
+      ]
+    },
+    {
+      "end": [
+        37,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        36,
+        2
+      ]
+    },
+    {
+      "end": [
+        47,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        43,
+        2
+      ]
+    },
+    {
+      "end": [
+        57,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        53,
+        2
+      ]
+    },
+    {
+      "end": [
+        67,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        63,
+        2
+      ]
+    },
+    {
+      "end": [
+        78,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        73,
+        2
+      ]
+    },
+    {
+      "end": [
+        86,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        85,
+        3
+      ]
+    },
+    {
+      "end": [
+        98,
+        3
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        95,
+        2
+      ]
+    },
+    {
+      "end": [
+        110,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        106,
+        2
+      ]
+    },
+    {
+      "end": [
+        120,
+        3
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        117,
+        2
+      ]
+    },
+    {
+      "end": [
+        132,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        128,
+        2
+      ]
+    },
+    {
+      "end": [
+        139,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        138,
+        2
+      ]
+    },
+    {
+      "end": [
+        146,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        145,
+        2
+      ]
+    },
+    {
+      "end": [
+        153,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        152,
+        2
+      ]
+    },
+    {
+      "end": [
+        163,
+        3
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        160,
+        2
+      ]
+    },
+    {
+      "end": [
+        173,
+        3
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        170,
+        2
+      ]
+    },
+    {
+      "end": [
+        183,
+        3
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        180,
+        2
+      ]
+    },
+    {
+      "end": [
+        381,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        377,
+        2
+      ]
+    },
+    {
+      "end": [
+        395,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        391,
+        3
+      ]
+    },
+    {
+      "end": [
+        410,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        406,
+        2
+      ]
+    },
+    {
+      "end": [
+        423,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        419,
+        2
+      ]
+    },
+    {
+      "end": [
+        14,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        12,
+        21
+      ]
+    },
+    {
+      "end": [
+        22,
+        76
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        22,
+        10
+      ]
+    },
+    {
+      "end": [
+        29,
+        32
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        29,
+        2
+      ]
+    },
+    {
+      "end": [
+        37,
+        32
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        37,
+        2
+      ]
+    },
+    {
+      "end": [
+        12,
+        16
+      ],
+      "path": "go/crypto/cra-go-weak-hash.go",
+      "rule_id": "cra-go-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        12,
+        7
+      ]
+    },
+    {
+      "end": [
+        20,
+        22
+      ],
+      "path": "go/crypto/cra-go-weak-hash.go",
+      "rule_id": "cra-go-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        20,
+        9
+      ]
+    },
+    {
+      "end": [
+        26,
+        17
+      ],
+      "path": "go/crypto/cra-go-weak-hash.go",
+      "rule_id": "cra-go-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        26,
+        7
+      ]
+    },
+    {
+      "end": [
+        34,
+        23
+      ],
+      "path": "go/crypto/cra-go-weak-hash.go",
+      "rule_id": "cra-go-weak-hash",
+      "severity": "WARNING",
+      "start": [
+        34,
+        9
+      ]
+    },
+    {
+      "end": [
+        9,
+        20
+      ],
+      "path": "go/concurrency/cra-go-wrong-lock-unlock.go",
+      "rule_id": "cra-go-wrong-lock-unlock",
+      "severity": "ERROR",
+      "start": [
+        8,
+        2
+      ]
+    },
+    {
+      "end": [
+        16,
+        19
+      ],
+      "path": "go/concurrency/cra-go-wrong-lock-unlock.go",
+      "rule_id": "cra-go-wrong-lock-unlock",
+      "severity": "ERROR",
+      "start": [
+        15,
+        2
+      ]
+    },
+    {
+      "end": [
+        23,
+        17
+      ],
+      "path": "go/concurrency/cra-go-wrong-lock-unlock.go",
+      "rule_id": "cra-go-wrong-lock-unlock",
+      "severity": "ERROR",
+      "start": [
+        22,
+        2
+      ]
+    },
+    {
+      "end": [
+        31,
+        18
+      ],
+      "path": "go/concurrency/cra-go-wrong-lock-unlock.go",
+      "rule_id": "cra-go-wrong-lock-unlock",
+      "severity": "ERROR",
+      "start": [
+        30,
+        2
+      ]
+    },
+    {
+      "end": [
+        38,
+        20
+      ],
+      "path": "go/concurrency/cra-go-wrong-lock-unlock.go",
+      "rule_id": "cra-go-wrong-lock-unlock",
+      "severity": "ERROR",
+      "start": [
+        36,
+        2
+      ]
+    },
+    {
+      "end": [
+        14,
+        29
+      ],
+      "path": "java/path/cra-java-file-request-taint.java",
+      "rule_id": "cra-java-file-request-taint",
+      "severity": "WARNING",
+      "start": [
+        14,
+        25
+      ]
+    },
+    {
+      "end": [
+        20,
+        30
+      ],
+      "path": "java/path/cra-java-file-request-taint.java",
+      "rule_id": "cra-java-file-request-taint",
+      "severity": "WARNING",
+      "start": [
+        20,
+        26
+      ]
+    },
+    {
+      "end": [
+        26,
+        37
+      ],
+      "path": "java/path/cra-java-file-request-taint.java",
+      "rule_id": "cra-java-file-request-taint",
+      "severity": "WARNING",
+      "start": [
+        26,
+        33
+      ]
+    },
+    {
+      "end": [
+        32,
+        57
+      ],
+      "path": "java/path/cra-java-file-request-taint.java",
+      "rule_id": "cra-java-file-request-taint",
+      "severity": "WARNING",
+      "start": [
+        32,
+        53
+      ]
+    },
+    {
+      "end": [
+        38,
+        44
+      ],
+      "path": "java/path/cra-java-file-request-taint.java",
+      "rule_id": "cra-java-file-request-taint",
+      "severity": "WARNING",
+      "start": [
+        38,
+        40
+      ]
+    },
+    {
+      "end": [
+        8,
+        20
+      ],
+      "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
+      "rule_id": "cra-java-hostname-verifier-accept-all",
+      "severity": "WARNING",
+      "start": [
+        8,
+        9
+      ]
+    },
+    {
+      "end": [
+        15,
+        64
+      ],
+      "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
+      "rule_id": "cra-java-hostname-verifier-accept-all",
+      "severity": "WARNING",
+      "start": [
+        15,
+        9
+      ]
+    },
+    {
+      "end": [
+        9,
+        35
+      ],
+      "path": "java/deserialization/cra-java-objectinputstream-readobject.java",
+      "rule_id": "cra-java-objectinputstream-readobject",
+      "severity": "WARNING",
+      "start": [
+        9,
+        16
+      ]
+    },
+    {
+      "end": [
+        30,
+        43
+      ],
+      "path": "java/deserialization/cra-java-objectinputstream-readobject.java",
+      "rule_id": "cra-java-objectinputstream-readobject",
+      "severity": "WARNING",
+      "start": [
+        30,
+        24
+      ]
+    },
+    {
+      "end": [
+        12,
+        43
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        12,
+        9
+      ]
+    },
+    {
+      "end": [
+        18,
+        43
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        18,
+        9
+      ]
+    },
+    {
+      "end": [
+        16,
+        37
+      ],
+      "path": "java/injection/cra-java-sql-request-taint.java",
+      "rule_id": "cra-java-sql-request-taint",
+      "severity": "WARNING",
+      "start": [
+        16,
+        32
+      ]
+    },
+    {
+      "end": [
+        22,
+        32
+      ],
+      "path": "java/injection/cra-java-sql-request-taint.java",
+      "rule_id": "cra-java-sql-request-taint",
+      "severity": "WARNING",
+      "start": [
+        22,
+        27
+      ]
+    },
+    {
+      "end": [
+        28,
+        42
+      ],
+      "path": "java/injection/cra-java-sql-request-taint.java",
+      "rule_id": "cra-java-sql-request-taint",
+      "severity": "WARNING",
+      "start": [
+        28,
+        37
+      ]
+    },
+    {
+      "end": [
+        34,
+        33
+      ],
+      "path": "java/injection/cra-java-sql-request-taint.java",
+      "rule_id": "cra-java-sql-request-taint",
+      "severity": "WARNING",
+      "start": [
+        34,
+        28
+      ]
+    },
+    {
+      "end": [
+        13,
+        30
+      ],
+      "path": "java/ssrf/cra-java-url-request-taint.java",
+      "rule_id": "cra-java-url-request-taint",
+      "severity": "WARNING",
+      "start": [
+        13,
+        24
+      ]
+    },
+    {
+      "end": [
+        19,
+        33
+      ],
+      "path": "java/ssrf/cra-java-url-request-taint.java",
+      "rule_id": "cra-java-url-request-taint",
+      "severity": "WARNING",
+      "start": [
+        19,
+        27
+      ]
+    },
+    {
+      "end": [
+        18,
+        48
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        18,
+        16
+      ]
+    },
+    {
+      "end": [
+        23,
+        50
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        23,
+        16
+      ]
+    },
+    {
+      "end": [
+        28,
+        64
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        28,
+        16
+      ]
+    },
+    {
+      "end": [
+        33,
+        69
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        33,
+        16
+      ]
+    },
+    {
+      "end": [
+        38,
+        35
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        38,
+        16
+      ]
+    },
+    {
+      "end": [
+        43,
+        56
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        43,
+        16
+      ]
+    },
+    {
+      "end": [
+        49,
+        48
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        49,
+        16
+      ]
+    },
+    {
+      "end": [
+        54,
+        48
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        54,
+        16
+      ]
+    },
+    {
+      "end": [
+        59,
+        55
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        59,
+        16
+      ]
+    },
+    {
+      "end": [
+        65,
+        58
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        65,
+        16
+      ]
+    },
+    {
+      "end": [
+        70,
+        63
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        70,
+        16
+      ]
+    },
+    {
+      "end": [
+        75,
+        63
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        75,
+        16
+      ]
+    },
+    {
+      "end": [
+        80,
+        67
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        80,
+        16
+      ]
+    },
+    {
+      "end": [
+        85,
+        53
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        85,
+        16
+      ]
+    },
+    {
+      "end": [
+        90,
+        54
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        90,
+        16
+      ]
+    },
+    {
+      "end": [
+        199,
+        56
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        199,
+        16
+      ]
+    },
+    {
+      "end": [
+        210,
+        56
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        210,
+        16
+      ]
+    },
+    {
+      "end": [
+        220,
+        56
+      ],
+      "path": "java/crypto/cra-java-weak-message-digest.java",
+      "rule_id": "cra-java-weak-message-digest",
+      "severity": "WARNING",
+      "start": [
+        220,
+        16
+      ]
+    },
+    {
+      "end": [
+        8,
+        37
+      ],
+      "path": "java/xml/cra-java-xxe-doctype-enabled.java",
+      "rule_id": "cra-java-xxe-doctype-enabled",
+      "severity": "WARNING",
+      "start": [
+        8,
+        9
+      ]
+    },
+    {
+      "end": [
+        13,
+        90
+      ],
+      "path": "java/xml/cra-java-xxe-doctype-enabled.java",
+      "rule_id": "cra-java-xxe-doctype-enabled",
+      "severity": "WARNING",
+      "start": [
+        13,
+        9
+      ]
+    },
+    {
+      "end": [
+        15,
+        48
+      ],
+      "path": "java/xml/cra-java-xxe-doctype-enabled.java",
+      "rule_id": "cra-java-xxe-doctype-enabled",
+      "severity": "WARNING",
+      "start": [
+        15,
+        9
+      ]
+    },
+    {
+      "end": [
+        38,
+        37
+      ],
+      "path": "java/xml/cra-java-xxe-doctype-enabled.java",
+      "rule_id": "cra-java-xxe-doctype-enabled",
+      "severity": "WARNING",
+      "start": [
+        38,
+        9
+      ]
+    },
+    {
+      "end": [
+        4,
+        20
+      ],
+      "path": "javascript/injection/cra-javascript-eval.js",
+      "rule_id": "cra-javascript-eval",
+      "severity": "WARNING",
+      "start": [
+        4,
+        5
+      ]
+    },
+    {
+      "end": [
+        10,
+        38
+      ],
+      "path": "javascript/injection/cra-javascript-eval.js",
+      "rule_id": "cra-javascript-eval",
+      "severity": "WARNING",
+      "start": [
+        10,
+        5
+      ]
+    },
+    {
+      "end": [
+        3,
+        27
+      ],
+      "path": "javascript/injection/cra-javascript-eval.ts",
+      "rule_id": "cra-javascript-eval",
+      "severity": "WARNING",
+      "start": [
+        3,
+        12
+      ]
+    },
+    {
+      "end": [
+        7,
+        73
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        13,
+        31
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        13,
+        5
+      ]
+    },
+    {
+      "end": [
+        18,
+        27
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        18,
+        5
+      ]
+    },
+    {
+      "end": [
+        24,
+        49
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        24,
+        5
+      ]
+    },
+    {
+      "end": [
+        30,
+        53
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        30,
+        5
+      ]
+    },
+    {
+      "end": [
+        35,
+        24
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        35,
+        5
+      ]
+    },
+    {
+      "end": [
+        40,
+        28
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        40,
+        5
+      ]
+    },
+    {
+      "end": [
+        72,
+        28
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        72,
+        5
+      ]
+    },
+    {
+      "end": [
+        79,
+        28
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        79,
+        5
+      ]
+    },
+    {
+      "end": [
+        87,
+        50
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.js",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        87,
+        5
+      ]
+    },
+    {
+      "end": [
+        7,
+        36
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.ts",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        17,
+        49
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.ts",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        17,
+        5
+      ]
+    },
+    {
+      "end": [
+        22,
+        29
+      ],
+      "path": "javascript/injection/cra-javascript-exec-injection.ts",
+      "rule_id": "cra-javascript-exec-injection",
+      "severity": "ERROR",
+      "start": [
+        22,
+        5
+      ]
+    },
+    {
+      "end": [
+        3,
+        22
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        3,
+        6
+      ]
+    },
+    {
+      "end": [
+        6,
+        25
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        6,
+        8
+      ]
+    },
+    {
+      "end": [
+        9,
+        32
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        9,
+        12
+      ]
+    },
+    {
+      "end": [
+        12,
+        29
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        12,
+        10
+      ]
+    },
+    {
+      "end": [
+        15,
+        23
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        15,
+        7
+      ]
+    },
+    {
+      "end": [
+        21,
+        18
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        21,
+        10
+      ]
+    },
+    {
+      "end": [
+        27,
+        23
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        27,
+        15
+      ]
+    },
+    {
+      "end": [
+        33,
+        21
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        33,
+        13
+      ]
+    },
+    {
+      "end": [
+        9,
+        46
+      ],
+      "path": "php/ssrf/cra-php-curl-url-superglobal-taint.php",
+      "rule_id": "cra-php-curl-url-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        9,
+        39
+      ]
+    },
+    {
+      "end": [
+        15,
+        46
+      ],
+      "path": "php/ssrf/cra-php-curl-url-superglobal-taint.php",
+      "rule_id": "cra-php-curl-url-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        15,
+        39
+      ]
+    },
+    {
+      "end": [
+        21,
+        29
+      ],
+      "path": "php/ssrf/cra-php-curl-url-superglobal-taint.php",
+      "rule_id": "cra-php-curl-url-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        21,
+        22
+      ]
+    },
+    {
+      "end": [
+        28,
+        29
+      ],
+      "path": "php/ssrf/cra-php-curl-url-superglobal-taint.php",
+      "rule_id": "cra-php-curl-url-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        28,
+        22
+      ]
+    },
+    {
+      "end": [
+        4,
+        28
+      ],
+      "path": "php/xss/cra-php-echo-superglobal-taint.php",
+      "rule_id": "cra-php-echo-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        4,
+        11
+      ]
+    },
+    {
+      "end": [
+        10,
+        18
+      ],
+      "path": "php/xss/cra-php-echo-superglobal-taint.php",
+      "rule_id": "cra-php-echo-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        10,
+        10
+      ]
+    },
+    {
+      "end": [
+        17,
+        18
+      ],
+      "path": "php/xss/cra-php-echo-superglobal-taint.php",
+      "rule_id": "cra-php-echo-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        17,
+        10
+      ]
+    },
+    {
+      "end": [
+        9,
+        19
+      ],
+      "path": "php/path/cra-php-file-superglobal-taint.php",
+      "rule_id": "cra-php-file-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        9,
+        14
+      ]
+    },
+    {
+      "end": [
+        15,
+        16
+      ],
+      "path": "php/path/cra-php-file-superglobal-taint.php",
+      "rule_id": "cra-php-file-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        15,
+        11
+      ]
+    },
+    {
+      "end": [
+        21,
+        35
+      ],
+      "path": "php/path/cra-php-file-superglobal-taint.php",
+      "rule_id": "cra-php-file-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        21,
+        30
+      ]
+    },
+    {
+      "end": [
+        28,
+        35
+      ],
+      "path": "php/path/cra-php-file-superglobal-taint.php",
+      "rule_id": "cra-php-file-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        28,
+        30
+      ]
+    },
+    {
+      "end": [
+        10,
+        28
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        10,
+        22
+      ]
+    },
+    {
+      "end": [
+        16,
+        27
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        16,
+        21
+      ]
+    },
+    {
+      "end": [
+        23,
+        30
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        23,
+        24
+      ]
+    },
+    {
+      "end": [
+        30,
+        47
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        30,
+        22
+      ]
+    },
+    {
+      "end": [
+        4,
+        35
+      ],
+      "path": "php/crypto/cra-php-superglobal-password-md5.php",
+      "rule_id": "cra-php-superglobal-password-md5",
+      "severity": "ERROR",
+      "start": [
+        4,
+        12
+      ]
+    },
+    {
+      "end": [
+        9,
+        37
+      ],
+      "path": "php/crypto/cra-php-superglobal-password-md5.php",
+      "rule_id": "cra-php-superglobal-password-md5",
+      "severity": "ERROR",
+      "start": [
+        9,
+        12
+      ]
+    },
+    {
+      "end": [
+        14,
+        29
+      ],
+      "path": "php/crypto/cra-php-superglobal-password-md5.php",
+      "rule_id": "cra-php-superglobal-password-md5",
+      "severity": "ERROR",
+      "start": [
+        14,
+        12
+      ]
+    },
+    {
+      "end": [
+        19,
+        40
+      ],
+      "path": "php/crypto/cra-php-superglobal-password-md5.php",
+      "rule_id": "cra-php-superglobal-password-md5",
+      "severity": "ERROR",
+      "start": [
+        19,
+        12
+      ]
+    },
+    {
+      "end": [
+        24,
+        46
+      ],
+      "path": "php/crypto/cra-php-superglobal-password-md5.php",
+      "rule_id": "cra-php-superglobal-password-md5",
+      "severity": "ERROR",
+      "start": [
+        24,
+        12
+      ]
+    },
+    {
+      "end": [
+        3,
+        42
+      ],
+      "path": "php/deserialization/cra-php-unserialize-superglobal.php",
+      "rule_id": "cra-php-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        3,
+        23
+      ]
+    },
+    {
+      "end": [
+        6,
+        46
+      ],
+      "path": "php/deserialization/cra-php-unserialize-superglobal.php",
+      "rule_id": "cra-php-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        6,
+        26
+      ]
+    },
+    {
+      "end": [
+        12,
+        32
+      ],
+      "path": "php/deserialization/cra-php-unserialize-superglobal.php",
+      "rule_id": "cra-php-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        12,
+        24
+      ]
+    },
+    {
+      "end": [
+        2,
+        22
+      ],
+      "path": "python/django/cra-python-django-allowed-hosts-wildcard.py",
+      "rule_id": "cra-python-django-allowed-hosts-wildcard",
+      "severity": "WARNING",
+      "start": [
+        2,
+        1
+      ]
+    },
+    {
+      "end": [
+        5,
+        41
+      ],
+      "path": "python/django/cra-python-django-allowed-hosts-wildcard.py",
+      "rule_id": "cra-python-django-allowed-hosts-wildcard",
+      "severity": "WARNING",
+      "start": [
+        5,
+        1
+      ]
+    },
+    {
+      "end": [
+        13,
+        12
+      ],
+      "path": "python/django/cra-python-django-csrf-exempt.py",
+      "rule_id": "cra-python-django-csrf-exempt",
+      "severity": "WARNING",
+      "start": [
+        13,
+        5
+      ]
+    },
+    {
+      "end": [
+        20,
+        14
+      ],
+      "path": "python/django/cra-python-django-csrf-exempt.py",
+      "rule_id": "cra-python-django-csrf-exempt",
+      "severity": "WARNING",
+      "start": [
+        20,
+        7
+      ]
+    },
+    {
+      "end": [
+        31,
+        43
+      ],
+      "path": "python/django/cra-python-django-csrf-exempt.py",
+      "rule_id": "cra-python-django-csrf-exempt",
+      "severity": "WARNING",
+      "start": [
+        31,
+        33
+      ]
+    },
+    {
+      "end": [
+        15,
+        34
+      ],
+      "path": "python/django/cra-python-django-file-path-traversal.py",
+      "rule_id": "cra-python-django-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        15,
+        30
+      ]
+    },
+    {
+      "end": [
+        22,
+        34
+      ],
+      "path": "python/django/cra-python-django-file-path-traversal.py",
+      "rule_id": "cra-python-django-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        22,
+        30
+      ]
+    },
+    {
+      "end": [
+        28,
+        34
+      ],
+      "path": "python/django/cra-python-django-file-path-traversal.py",
+      "rule_id": "cra-python-django-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        28,
+        30
+      ]
+    },
+    {
+      "end": [
+        35,
+        34
+      ],
+      "path": "python/django/cra-python-django-file-path-traversal.py",
+      "rule_id": "cra-python-django-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        35,
+        30
+      ]
+    },
+    {
+      "end": [
+        73,
+        34
+      ],
+      "path": "python/django/cra-python-django-file-path-traversal.py",
+      "rule_id": "cra-python-django-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        73,
+        30
+      ]
+    },
+    {
+      "end": [
+        7,
+        46
+      ],
+      "path": "python/django/cra-python-django-format-html-interpolated.py",
+      "rule_id": "cra-python-django-format-html-interpolated",
+      "severity": "WARNING",
+      "start": [
+        7,
+        24
+      ]
+    },
+    {
+      "end": [
+        13,
+        48
+      ],
+      "path": "python/django/cra-python-django-format-html-interpolated.py",
+      "rule_id": "cra-python-django-format-html-interpolated",
+      "severity": "WARNING",
+      "start": [
+        13,
+        24
+      ]
+    },
+    {
+      "end": [
+        19,
+        54
+      ],
+      "path": "python/django/cra-python-django-format-html-interpolated.py",
+      "rule_id": "cra-python-django-format-html-interpolated",
+      "severity": "WARNING",
+      "start": [
+        19,
+        24
+      ]
+    },
+    {
+      "end": [
+        25,
+        51
+      ],
+      "path": "python/django/cra-python-django-format-html-interpolated.py",
+      "rule_id": "cra-python-django-format-html-interpolated",
+      "severity": "WARNING",
+      "start": [
+        25,
+        24
+      ]
+    },
+    {
+      "end": [
+        6,
+        57
+      ],
+      "path": "python/django/cra-python-django-hardcoded-secret-key.py",
+      "rule_id": "cra-python-django-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        6,
+        14
+      ]
+    },
+    {
+      "end": [
+        9,
+        50
+      ],
+      "path": "python/django/cra-python-django-hardcoded-secret-key.py",
+      "rule_id": "cra-python-django-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        9,
+        25
+      ]
+    },
+    {
+      "end": [
+        12,
+        47
+      ],
+      "path": "python/django/cra-python-django-hardcoded-secret-key.py",
+      "rule_id": "cra-python-django-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        12,
+        14
+      ]
+    },
+    {
+      "end": [
+        14,
+        48
+      ],
+      "path": "python/django/cra-python-django-httpresponse-html-taint.py",
+      "rule_id": "cra-python-django-httpresponse-html-taint",
+      "severity": "ERROR",
+      "start": [
+        14,
+        25
+      ]
+    },
+    {
+      "end": [
+        20,
+        48
+      ],
+      "path": "python/django/cra-python-django-httpresponse-html-taint.py",
+      "rule_id": "cra-python-django-httpresponse-html-taint",
+      "severity": "ERROR",
+      "start": [
+        20,
+        25
+      ]
+    },
+    {
+      "end": [
+        26,
+        53
+      ],
+      "path": "python/django/cra-python-django-httpresponse-html-taint.py",
+      "rule_id": "cra-python-django-httpresponse-html-taint",
+      "severity": "ERROR",
+      "start": [
+        26,
+        25
+      ]
+    },
+    {
+      "end": [
+        32,
+        50
+      ],
+      "path": "python/django/cra-python-django-httpresponse-html-taint.py",
+      "rule_id": "cra-python-django-httpresponse-html-taint",
+      "severity": "ERROR",
+      "start": [
+        32,
+        25
+      ]
+    },
+    {
+      "end": [
+        38,
+        58
+      ],
+      "path": "python/django/cra-python-django-httpresponse-html-taint.py",
+      "rule_id": "cra-python-django-httpresponse-html-taint",
+      "severity": "ERROR",
+      "start": [
+        38,
+        35
+      ]
+    },
+    {
+      "end": [
+        74,
+        56
+      ],
+      "path": "python/django/cra-python-django-httpresponse-html-taint.py",
+      "rule_id": "cra-python-django-httpresponse-html-taint",
+      "severity": "ERROR",
+      "start": [
+        74,
+        25
+      ]
+    },
+    {
+      "end": [
+        18,
+        47
+      ],
+      "path": "python/django/cra-python-django-mark-safe-request.py",
+      "rule_id": "cra-python-django-mark-safe-request",
+      "severity": "ERROR",
+      "start": [
+        18,
+        22
+      ]
+    },
+    {
+      "end": [
+        24,
+        42
+      ],
+      "path": "python/django/cra-python-django-mark-safe-request.py",
+      "rule_id": "cra-python-django-mark-safe-request",
+      "severity": "ERROR",
+      "start": [
+        24,
+        22
+      ]
+    },
+    {
+      "end": [
+        31,
+        47
+      ],
+      "path": "python/django/cra-python-django-mark-safe-request.py",
+      "rule_id": "cra-python-django-mark-safe-request",
+      "severity": "ERROR",
+      "start": [
+        31,
+        22
+      ]
+    },
+    {
+      "end": [
+        38,
+        44
+      ],
+      "path": "python/django/cra-python-django-mark-safe-request.py",
+      "rule_id": "cra-python-django-mark-safe-request",
+      "severity": "ERROR",
+      "start": [
+        38,
+        22
+      ]
+    },
+    {
+      "end": [
+        45,
+        50
+      ],
+      "path": "python/django/cra-python-django-mark-safe-request.py",
+      "rule_id": "cra-python-django-mark-safe-request",
+      "severity": "ERROR",
+      "start": [
+        45,
+        22
+      ]
+    },
+    {
+      "end": [
+        100,
+        55
+      ],
+      "path": "python/django/cra-python-django-mark-safe-request.py",
+      "rule_id": "cra-python-django-mark-safe-request",
+      "severity": "ERROR",
+      "start": [
+        100,
+        22
+      ]
+    },
+    {
+      "end": [
+        17,
+        27
+      ],
+      "path": "python/django/cra-python-django-open-redirect.py",
+      "rule_id": "cra-python-django-open-redirect",
+      "severity": "ERROR",
+      "start": [
+        17,
+        21
+      ]
+    },
+    {
+      "end": [
+        23,
+        24
+      ],
+      "path": "python/django/cra-python-django-open-redirect.py",
+      "rule_id": "cra-python-django-open-redirect",
+      "severity": "ERROR",
+      "start": [
+        23,
+        21
+      ]
+    },
+    {
+      "end": [
+        29,
+        36
+      ],
+      "path": "python/django/cra-python-django-open-redirect.py",
+      "rule_id": "cra-python-django-open-redirect",
+      "severity": "ERROR",
+      "start": [
+        29,
+        33
+      ]
+    },
+    {
+      "end": [
+        35,
+        45
+      ],
+      "path": "python/django/cra-python-django-open-redirect.py",
+      "rule_id": "cra-python-django-open-redirect",
+      "severity": "ERROR",
+      "start": [
+        35,
+        42
+      ]
+    },
+    {
+      "end": [
+        41,
+        25
+      ],
+      "path": "python/django/cra-python-django-open-redirect.py",
+      "rule_id": "cra-python-django-open-redirect",
+      "severity": "ERROR",
+      "start": [
+        41,
+        21
+      ]
+    },
+    {
+      "end": [
+        64,
+        34
+      ],
+      "path": "python/django/cra-python-django-open-redirect.py",
+      "rule_id": "cra-python-django-open-redirect",
+      "severity": "ERROR",
+      "start": [
+        64,
+        21
+      ]
+    },
+    {
+      "end": [
+        72,
+        50
+      ],
+      "path": "python/django/cra-python-django-open-redirect.py",
+      "rule_id": "cra-python-django-open-redirect",
+      "severity": "ERROR",
+      "start": [
+        72,
+        33
+      ]
+    },
+    {
+      "end": [
+        4,
+        62
+      ],
+      "path": "python/django/cra-python-django-queryset-extra-format.py",
+      "rule_id": "cra-python-django-queryset-extra-format",
+      "severity": "ERROR",
+      "start": [
+        4,
+        38
+      ]
+    },
+    {
+      "end": [
+        10,
+        64
+      ],
+      "path": "python/django/cra-python-django-queryset-extra-format.py",
+      "rule_id": "cra-python-django-queryset-extra-format",
+      "severity": "ERROR",
+      "start": [
+        10,
+        38
+      ]
+    },
+    {
+      "end": [
+        16,
+        67
+      ],
+      "path": "python/django/cra-python-django-queryset-extra-format.py",
+      "rule_id": "cra-python-django-queryset-extra-format",
+      "severity": "ERROR",
+      "start": [
+        16,
+        38
+      ]
+    },
+    {
+      "end": [
+        22,
+        83
+      ],
+      "path": "python/django/cra-python-django-queryset-extra-format.py",
+      "rule_id": "cra-python-django-queryset-extra-format",
+      "severity": "ERROR",
+      "start": [
+        22,
+        39
+      ]
+    },
+    {
+      "end": [
+        28,
+        51
+      ],
+      "path": "python/django/cra-python-django-queryset-extra-format.py",
+      "rule_id": "cra-python-django-queryset-extra-format",
+      "severity": "ERROR",
+      "start": [
+        28,
+        41
+      ]
+    },
+    {
+      "end": [
+        7,
+        78
+      ],
+      "path": "python/django/cra-python-django-raw-sql-format.py",
+      "rule_id": "cra-python-django-raw-sql-format",
+      "severity": "ERROR",
+      "start": [
+        7,
+        29
+      ]
+    },
+    {
+      "end": [
+        14,
+        80
+      ],
+      "path": "python/django/cra-python-django-raw-sql-format.py",
+      "rule_id": "cra-python-django-raw-sql-format",
+      "severity": "ERROR",
+      "start": [
+        14,
+        29
+      ]
+    },
+    {
+      "end": [
+        21,
+        86
+      ],
+      "path": "python/django/cra-python-django-raw-sql-format.py",
+      "rule_id": "cra-python-django-raw-sql-format",
+      "severity": "ERROR",
+      "start": [
+        21,
+        29
+      ]
+    },
+    {
+      "end": [
+        28,
+        83
+      ],
+      "path": "python/django/cra-python-django-raw-sql-format.py",
+      "rule_id": "cra-python-django-raw-sql-format",
+      "severity": "ERROR",
+      "start": [
+        28,
+        29
+      ]
+    },
+    {
+      "end": [
+        7,
+        80
+      ],
+      "path": "python/django/cra-python-django-rawsql-expression.py",
+      "rule_id": "cra-python-django-rawsql-expression",
+      "severity": "ERROR",
+      "start": [
+        7,
+        48
+      ]
+    },
+    {
+      "end": [
+        13,
+        82
+      ],
+      "path": "python/django/cra-python-django-rawsql-expression.py",
+      "rule_id": "cra-python-django-rawsql-expression",
+      "severity": "ERROR",
+      "start": [
+        13,
+        48
+      ]
+    },
+    {
+      "end": [
+        19,
+        88
+      ],
+      "path": "python/django/cra-python-django-rawsql-expression.py",
+      "rule_id": "cra-python-django-rawsql-expression",
+      "severity": "ERROR",
+      "start": [
+        19,
+        48
+      ]
+    },
+    {
+      "end": [
+        25,
+        85
+      ],
+      "path": "python/django/cra-python-django-rawsql-expression.py",
+      "rule_id": "cra-python-django-rawsql-expression",
+      "severity": "ERROR",
+      "start": [
+        25,
+        48
+      ]
+    },
+    {
+      "end": [
+        11,
+        41
+      ],
+      "path": "python/django/cra-python-django-safe-filter-templatetag.py",
+      "rule_id": "cra-python-django-safe-filter-templatetag",
+      "severity": "WARNING",
+      "start": [
+        11,
+        22
+      ]
+    },
+    {
+      "end": [
+        17,
+        46
+      ],
+      "path": "python/django/cra-python-django-safe-filter-templatetag.py",
+      "rule_id": "cra-python-django-safe-filter-templatetag",
+      "severity": "WARNING",
+      "start": [
+        17,
+        22
+      ]
+    },
+    {
+      "end": [
+        23,
+        43
+      ],
+      "path": "python/django/cra-python-django-safe-filter-templatetag.py",
+      "rule_id": "cra-python-django-safe-filter-templatetag",
+      "severity": "WARNING",
+      "start": [
+        23,
+        22
+      ]
+    },
+    {
+      "end": [
+        29,
+        49
+      ],
+      "path": "python/django/cra-python-django-safe-filter-templatetag.py",
+      "rule_id": "cra-python-django-safe-filter-templatetag",
+      "severity": "WARNING",
+      "start": [
+        29,
+        22
+      ]
+    },
+    {
+      "end": [
+        4,
+        30
+      ],
+      "path": "python/django/cra-python-django-session-cookie-insecure.py",
+      "rule_id": "cra-python-django-session-cookie-insecure",
+      "severity": "WARNING",
+      "start": [
+        4,
+        1
+      ]
+    },
+    {
+      "end": [
+        7,
+        27
+      ],
+      "path": "python/django/cra-python-django-session-cookie-insecure.py",
+      "rule_id": "cra-python-django-session-cookie-insecure",
+      "severity": "WARNING",
+      "start": [
+        7,
+        1
+      ]
+    },
+    {
+      "end": [
+        4,
+        13
+      ],
+      "path": "python/django/cra-python-django-settings-debug-true.py",
+      "rule_id": "cra-python-django-settings-debug-true",
+      "severity": "WARNING",
+      "start": [
+        4,
+        1
+      ]
+    },
+    {
+      "end": [
+        7,
+        61
+      ],
+      "path": "python/django/cra-python-django-signing-loads-untrusted.py",
+      "rule_id": "cra-python-django-signing-loads-untrusted",
+      "severity": "WARNING",
+      "start": [
+        7,
+        12
+      ]
+    },
+    {
+      "end": [
+        12,
+        63
+      ],
+      "path": "python/django/cra-python-django-signing-loads-untrusted.py",
+      "rule_id": "cra-python-django-signing-loads-untrusted",
+      "severity": "WARNING",
+      "start": [
+        12,
+        12
+      ]
+    },
+    {
+      "end": [
+        17,
+        70
+      ],
+      "path": "python/django/cra-python-django-signing-loads-untrusted.py",
+      "rule_id": "cra-python-django-signing-loads-untrusted",
+      "severity": "WARNING",
+      "start": [
+        17,
+        12
+      ]
+    },
+    {
+      "end": [
+        22,
+        79
+      ],
+      "path": "python/django/cra-python-django-signing-loads-untrusted.py",
+      "rule_id": "cra-python-django-signing-loads-untrusted",
+      "severity": "WARNING",
+      "start": [
+        22,
+        12
+      ]
+    },
+    {
+      "end": [
+        4,
+        28
+      ],
+      "path": "python/django/cra-python-django-ssl-redirect-disabled.py",
+      "rule_id": "cra-python-django-ssl-redirect-disabled",
+      "severity": "INFO",
+      "start": [
+        4,
+        1
+      ]
+    },
+    {
+      "end": [
+        11,
+        54
+      ],
+      "path": "python/flask/cra-python-flask-cors-wildcard-credentials.py",
+      "rule_id": "cra-python-flask-cors-wildcard-credentials",
+      "severity": "WARNING",
+      "start": [
+        11,
+        5
+      ]
+    },
+    {
+      "end": [
+        16,
+        56
+      ],
+      "path": "python/flask/cra-python-flask-cors-wildcard-credentials.py",
+      "rule_id": "cra-python-flask-cors-wildcard-credentials",
+      "severity": "WARNING",
+      "start": [
+        16,
+        5
+      ]
+    },
+    {
+      "end": [
+        21,
+        55
+      ],
+      "path": "python/flask/cra-python-flask-cors-wildcard-credentials.py",
+      "rule_id": "cra-python-flask-cors-wildcard-credentials",
+      "severity": "WARNING",
+      "start": [
+        21,
+        5
+      ]
+    },
+    {
+      "end": [
+        26,
+        67
+      ],
+      "path": "python/flask/cra-python-flask-cors-wildcard-credentials.py",
+      "rule_id": "cra-python-flask-cors-wildcard-credentials",
+      "severity": "WARNING",
+      "start": [
+        26,
+        5
+      ]
+    },
+    {
+      "end": [
+        31,
+        54
+      ],
+      "path": "python/flask/cra-python-flask-cors-wildcard-credentials.py",
+      "rule_id": "cra-python-flask-cors-wildcard-credentials",
+      "severity": "WARNING",
+      "start": [
+        31,
+        2
+      ]
+    },
+    {
+      "end": [
+        10,
+        39
+      ],
+      "path": "python/flask/cra-python-flask-debug-true.py",
+      "rule_id": "cra-python-flask-debug-true",
+      "severity": "ERROR",
+      "start": [
+        10,
+        35
+      ]
+    },
+    {
+      "end": [
+        15,
+        31
+      ],
+      "path": "python/flask/cra-python-flask-debug-true.py",
+      "rule_id": "cra-python-flask-debug-true",
+      "severity": "ERROR",
+      "start": [
+        15,
+        27
+      ]
+    },
+    {
+      "end": [
+        20,
+        33
+      ],
+      "path": "python/flask/cra-python-flask-debug-true.py",
+      "rule_id": "cra-python-flask-debug-true",
+      "severity": "ERROR",
+      "start": [
+        20,
+        29
+      ]
+    },
+    {
+      "end": [
+        25,
+        21
+      ],
+      "path": "python/flask/cra-python-flask-debug-true.py",
+      "rule_id": "cra-python-flask-debug-true",
+      "severity": "ERROR",
+      "start": [
+        25,
+        17
+      ]
+    },
+    {
+      "end": [
+        10,
+        48
+      ],
+      "path": "python/flask/cra-python-flask-hardcoded-secret-key.py",
+      "rule_id": "cra-python-flask-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        10,
+        32
+      ]
+    },
+    {
+      "end": [
+        15,
+        42
+      ],
+      "path": "python/flask/cra-python-flask-hardcoded-secret-key.py",
+      "rule_id": "cra-python-flask-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        15,
+        22
+      ]
+    },
+    {
+      "end": [
+        20,
+        49
+      ],
+      "path": "python/flask/cra-python-flask-hardcoded-secret-key.py",
+      "rule_id": "cra-python-flask-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        20,
+        34
+      ]
+    },
+    {
+      "end": [
+        25,
+        52
+      ],
+      "path": "python/flask/cra-python-flask-hardcoded-secret-key.py",
+      "rule_id": "cra-python-flask-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        25,
+        32
+      ]
+    },
+    {
+      "end": [
+        30,
+        51
+      ],
+      "path": "python/flask/cra-python-flask-hardcoded-secret-key.py",
+      "rule_id": "cra-python-flask-hardcoded-secret-key",
+      "severity": "ERROR",
+      "start": [
+        30,
+        32
+      ]
+    },
+    {
+      "end": [
+        12,
+        36
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        12,
+        12
+      ]
+    },
+    {
+      "end": [
+        18,
+        42
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        18,
+        12
+      ]
+    },
+    {
+      "end": [
+        24,
+        42
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        24,
+        12
+      ]
+    },
+    {
+      "end": [
+        30,
+        38
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        30,
+        12
+      ]
+    },
+    {
+      "end": [
+        36,
+        36
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        36,
+        12
+      ]
+    },
+    {
+      "end": [
+        42,
+        42
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        42,
+        12
+      ]
+    },
+    {
+      "end": [
+        48,
+        36
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        48,
+        12
+      ]
+    },
+    {
+      "end": [
+        54,
+        31
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        54,
+        12
+      ]
+    },
+    {
+      "end": [
+        60,
+        37
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        60,
+        12
+      ]
+    },
+    {
+      "end": [
+        66,
+        33
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        66,
+        12
+      ]
+    },
+    {
+      "end": [
+        72,
+        31
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        72,
+        12
+      ]
+    },
+    {
+      "end": [
+        78,
+        37
+      ],
+      "path": "python/flask/cra-python-flask-jsonify-request-reflect-secret.py",
+      "rule_id": "cra-python-flask-jsonify-request-reflect-secret",
+      "severity": "INFO",
+      "start": [
+        78,
+        12
+      ]
+    },
+    {
+      "end": [
+        14,
+        43
+      ],
+      "path": "python/flask/cra-python-flask-markup-untrusted.py",
+      "rule_id": "cra-python-flask-markup-untrusted",
+      "severity": "ERROR",
+      "start": [
+        14,
+        19
+      ]
+    },
+    {
+      "end": [
+        20,
+        43
+      ],
+      "path": "python/flask/cra-python-flask-markup-untrusted.py",
+      "rule_id": "cra-python-flask-markup-untrusted",
+      "severity": "ERROR",
+      "start": [
+        20,
+        19
+      ]
+    },
+    {
+      "end": [
+        26,
+        46
+      ],
+      "path": "python/flask/cra-python-flask-markup-untrusted.py",
+      "rule_id": "cra-python-flask-markup-untrusted",
+      "severity": "ERROR",
+      "start": [
+        26,
+        19
+      ]
+    },
+    {
+      "end": [
+        32,
+        46
+      ],
+      "path": "python/flask/cra-python-flask-markup-untrusted.py",
+      "rule_id": "cra-python-flask-markup-untrusted",
+      "severity": "ERROR",
+      "start": [
+        32,
+        19
+      ]
+    },
+    {
+      "end": [
+        38,
+        39
+      ],
+      "path": "python/flask/cra-python-flask-markup-untrusted.py",
+      "rule_id": "cra-python-flask-markup-untrusted",
+      "severity": "ERROR",
+      "start": [
+        38,
+        19
+      ]
+    },
+    {
+      "end": [
+        43,
+        54
+      ],
+      "path": "python/flask/cra-python-flask-markup-untrusted.py",
+      "rule_id": "cra-python-flask-markup-untrusted",
+      "severity": "ERROR",
+      "start": [
+        43,
+        25
+      ]
+    },
+    {
+      "end": [
+        65,
+        51
+      ],
+      "path": "python/flask/cra-python-flask-markup-untrusted.py",
+      "rule_id": "cra-python-flask-markup-untrusted",
+      "severity": "ERROR",
+      "start": [
+        65,
+        19
+      ]
+    },
+    {
+      "end": [
+        12,
+        27
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        12,
+        21
+      ]
+    },
+    {
+      "end": [
+        18,
+        27
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        18,
+        21
+      ]
+    },
+    {
+      "end": [
+        24,
+        31
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        24,
+        27
+      ]
+    },
+    {
+      "end": [
+        29,
+        57
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        29,
+        27
+      ]
+    },
+    {
+      "end": [
+        44,
+        38
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        44,
+        21
+      ]
+    },
+    {
+      "end": [
+        16,
+        17
+      ],
+      "path": "python/flask/cra-python-flask-plaintext-password-compare.py",
+      "rule_id": "cra-python-flask-plaintext-password-compare",
+      "severity": "WARNING",
+      "start": [
+        16,
+        8
+      ]
+    },
+    {
+      "end": [
+        24,
+        17
+      ],
+      "path": "python/flask/cra-python-flask-plaintext-password-compare.py",
+      "rule_id": "cra-python-flask-plaintext-password-compare",
+      "severity": "WARNING",
+      "start": [
+        24,
+        8
+      ]
+    },
+    {
+      "end": [
+        32,
+        34
+      ],
+      "path": "python/flask/cra-python-flask-plaintext-password-compare.py",
+      "rule_id": "cra-python-flask-plaintext-password-compare",
+      "severity": "WARNING",
+      "start": [
+        32,
+        25
+      ]
+    },
+    {
+      "end": [
+        40,
+        17
+      ],
+      "path": "python/flask/cra-python-flask-plaintext-password-compare.py",
+      "rule_id": "cra-python-flask-plaintext-password-compare",
+      "severity": "WARNING",
+      "start": [
+        40,
+        8
+      ]
+    },
+    {
+      "end": [
+        48,
+        17
+      ],
+      "path": "python/flask/cra-python-flask-plaintext-password-compare.py",
+      "rule_id": "cra-python-flask-plaintext-password-compare",
+      "severity": "WARNING",
+      "start": [
+        48,
+        8
+      ]
+    },
+    {
+      "end": [
+        56,
+        17
+      ],
+      "path": "python/flask/cra-python-flask-plaintext-password-compare.py",
+      "rule_id": "cra-python-flask-plaintext-password-compare",
+      "severity": "WARNING",
+      "start": [
+        56,
+        8
+      ]
+    },
+    {
+      "end": [
+        76,
+        17
+      ],
+      "path": "python/flask/cra-python-flask-plaintext-password-compare.py",
+      "rule_id": "cra-python-flask-plaintext-password-compare",
+      "severity": "WARNING",
+      "start": [
+        76,
+        8
+      ]
+    },
+    {
+      "end": [
+        12,
+        43
+      ],
+      "path": "python/flask/cra-python-flask-render-template-string-ssti.py",
+      "rule_id": "cra-python-flask-render-template-string-ssti",
+      "severity": "ERROR",
+      "start": [
+        12,
+        35
+      ]
+    },
+    {
+      "end": [
+        19,
+        43
+      ],
+      "path": "python/flask/cra-python-flask-render-template-string-ssti.py",
+      "rule_id": "cra-python-flask-render-template-string-ssti",
+      "severity": "ERROR",
+      "start": [
+        19,
+        35
+      ]
+    },
+    {
+      "end": [
+        25,
+        56
+      ],
+      "path": "python/flask/cra-python-flask-render-template-string-ssti.py",
+      "rule_id": "cra-python-flask-render-template-string-ssti",
+      "severity": "ERROR",
+      "start": [
+        25,
+        35
+      ]
+    },
+    {
+      "end": [
+        32,
+        44
+      ],
+      "path": "python/flask/cra-python-flask-render-template-string-ssti.py",
+      "rule_id": "cra-python-flask-render-template-string-ssti",
+      "severity": "ERROR",
+      "start": [
+        32,
+        41
+      ]
+    },
+    {
+      "end": [
+        37,
+        75
+      ],
+      "path": "python/flask/cra-python-flask-render-template-string-ssti.py",
+      "rule_id": "cra-python-flask-render-template-string-ssti",
+      "severity": "ERROR",
+      "start": [
+        37,
+        41
+      ]
+    },
+    {
+      "end": [
+        13,
+        26
+      ],
+      "path": "python/flask/cra-python-flask-send-file-path-traversal.py",
+      "rule_id": "cra-python-flask-send-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        13,
+        22
+      ]
+    },
+    {
+      "end": [
+        19,
+        41
+      ],
+      "path": "python/flask/cra-python-flask-send-file-path-traversal.py",
+      "rule_id": "cra-python-flask-send-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        19,
+        22
+      ]
+    },
+    {
+      "end": [
+        26,
+        32
+      ],
+      "path": "python/flask/cra-python-flask-send-file-path-traversal.py",
+      "rule_id": "cra-python-flask-send-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        26,
+        28
+      ]
+    },
+    {
+      "end": [
+        31,
+        58
+      ],
+      "path": "python/flask/cra-python-flask-send-file-path-traversal.py",
+      "rule_id": "cra-python-flask-send-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        31,
+        28
+      ]
+    },
+    {
+      "end": [
+        60,
+        26
+      ],
+      "path": "python/flask/cra-python-flask-send-file-path-traversal.py",
+      "rule_id": "cra-python-flask-send-file-path-traversal",
+      "severity": "ERROR",
+      "start": [
+        60,
+        22
+      ]
+    },
+    {
+      "end": [
+        10,
+        50
+      ],
+      "path": "python/flask/cra-python-flask-session-cookie-httponly-false.py",
+      "rule_id": "cra-python-flask-session-cookie-httponly-false",
+      "severity": "WARNING",
+      "start": [
+        10,
+        45
+      ]
+    },
+    {
+      "end": [
+        15,
+        52
+      ],
+      "path": "python/flask/cra-python-flask-session-cookie-httponly-false.py",
+      "rule_id": "cra-python-flask-session-cookie-httponly-false",
+      "severity": "WARNING",
+      "start": [
+        15,
+        47
+      ]
+    },
+    {
+      "end": [
+        10,
+        48
+      ],
+      "path": "python/flask/cra-python-flask-session-cookie-insecure-false.py",
+      "rule_id": "cra-python-flask-session-cookie-insecure-false",
+      "severity": "WARNING",
+      "start": [
+        10,
+        43
+      ]
+    },
+    {
+      "end": [
+        15,
+        50
+      ],
+      "path": "python/flask/cra-python-flask-session-cookie-insecure-false.py",
+      "rule_id": "cra-python-flask-session-cookie-insecure-false",
+      "severity": "WARNING",
+      "start": [
+        15,
+        45
+      ]
+    },
+    {
+      "end": [
+        9,
+        43
+      ],
+      "path": "python/flask/cra-python-flask-wtf-csrf-disabled.py",
+      "rule_id": "cra-python-flask-wtf-csrf-disabled",
+      "severity": "WARNING",
+      "start": [
+        9,
+        38
+      ]
+    },
+    {
+      "end": [
+        14,
+        45
+      ],
+      "path": "python/flask/cra-python-flask-wtf-csrf-disabled.py",
+      "rule_id": "cra-python-flask-wtf-csrf-disabled",
+      "severity": "WARNING",
+      "start": [
+        14,
+        40
+      ]
+    },
+    {
+      "end": [
+        12,
+        63
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-alg-none.py",
+      "rule_id": "cra-python-jwt-decode-alg-none",
+      "severity": "WARNING",
+      "start": [
+        12,
+        46
+      ]
+    },
+    {
+      "end": [
+        17,
+        54
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-alg-none.py",
+      "rule_id": "cra-python-jwt-decode-alg-none",
+      "severity": "WARNING",
+      "start": [
+        17,
+        46
+      ]
+    },
+    {
+      "end": [
+        22,
+        54
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-alg-none.py",
+      "rule_id": "cra-python-jwt-decode-alg-none",
+      "severity": "WARNING",
+      "start": [
+        22,
+        46
+      ]
+    },
+    {
+      "end": [
+        27,
+        68
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-alg-none.py",
+      "rule_id": "cra-python-jwt-decode-alg-none",
+      "severity": "WARNING",
+      "start": [
+        27,
+        51
+      ]
+    },
+    {
+      "end": [
+        32,
+        52
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-alg-none.py",
+      "rule_id": "cra-python-jwt-decode-alg-none",
+      "severity": "WARNING",
+      "start": [
+        32,
+        46
+      ]
+    },
+    {
+      "end": [
+        6,
+        41
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-missing-algorithms.py",
+      "rule_id": "cra-python-jwt-decode-missing-algorithms",
+      "severity": "WARNING",
+      "start": [
+        6,
+        12
+      ]
+    },
+    {
+      "end": [
+        11,
+        45
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-missing-algorithms.py",
+      "rule_id": "cra-python-jwt-decode-missing-algorithms",
+      "severity": "WARNING",
+      "start": [
+        11,
+        12
+      ]
+    },
+    {
+      "end": [
+        32,
+        77
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-missing-algorithms.py",
+      "rule_id": "cra-python-jwt-decode-verify-disabled",
+      "severity": "ERROR",
+      "start": [
+        32,
+        50
+      ]
+    },
+    {
+      "end": [
+        37,
+        65
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-missing-algorithms.py",
+      "rule_id": "cra-python-jwt-decode-verify-disabled",
+      "severity": "ERROR",
+      "start": [
+        37,
+        38
+      ]
+    },
+    {
+      "end": [
+        7,
+        94
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-verify-disabled.py",
+      "rule_id": "cra-python-jwt-decode-verify-disabled",
+      "severity": "ERROR",
+      "start": [
+        7,
+        67
+      ]
+    },
+    {
+      "end": [
+        13,
+        93
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-verify-disabled.py",
+      "rule_id": "cra-python-jwt-decode-verify-disabled",
+      "severity": "ERROR",
+      "start": [
+        13,
+        45
+      ]
+    },
+    {
+      "end": [
+        19,
+        77
+      ],
+      "path": "python/jwt/cra-python-jwt-decode-verify-disabled.py",
+      "rule_id": "cra-python-jwt-decode-verify-disabled",
+      "severity": "ERROR",
+      "start": [
+        19,
+        50
+      ]
+    },
+    {
+      "end": [
+        9,
+        50
+      ],
+      "path": "python/jwt/cra-python-jwt-hardcoded-secret.py",
+      "rule_id": "cra-python-jwt-hardcoded-secret",
+      "severity": "WARNING",
+      "start": [
+        9,
+        32
+      ]
+    },
+    {
+      "end": [
+        14,
+        52
+      ],
+      "path": "python/jwt/cra-python-jwt-hardcoded-secret.py",
+      "rule_id": "cra-python-jwt-hardcoded-secret",
+      "severity": "WARNING",
+      "start": [
+        14,
+        36
+      ]
+    },
+    {
+      "end": [
+        19,
+        48
+      ],
+      "path": "python/jwt/cra-python-jwt-hardcoded-secret.py",
+      "rule_id": "cra-python-jwt-hardcoded-secret",
+      "severity": "WARNING",
+      "start": [
+        19,
+        30
+      ]
+    },
+    {
+      "end": [
+        24,
+        52
+      ],
+      "path": "python/jwt/cra-python-jwt-hardcoded-secret.py",
+      "rule_id": "cra-python-jwt-hardcoded-secret",
+      "severity": "WARNING",
+      "start": [
+        24,
+        35
+      ]
+    },
+    {
+      "end": [
+        9,
+        30
+      ],
+      "path": "python/deserialization/cra-python-pickle-loads.py",
+      "rule_id": "cra-python-pickle-loads",
+      "severity": "ERROR",
+      "start": [
+        9,
+        12
+      ]
+    },
+    {
+      "end": [
+        15,
+        27
+      ],
+      "path": "python/deserialization/cra-python-pickle-loads.py",
+      "rule_id": "cra-python-pickle-loads",
+      "severity": "ERROR",
+      "start": [
+        15,
+        12
+      ]
+    },
+    {
+      "end": [
+        12,
+        68
+      ],
+      "path": "python/injection/cra-python-sql-injection.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        12,
+        5
+      ]
+    },
+    {
+      "end": [
+        18,
+        74
+      ],
+      "path": "python/injection/cra-python-sql-injection.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        18,
+        5
+      ]
+    },
+    {
+      "end": [
+        24,
+        66
+      ],
+      "path": "python/injection/cra-python-sql-injection.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        24,
+        5
+      ]
+    },
+    {
+      "end": [
+        30,
+        71
+      ],
+      "path": "python/injection/cra-python-sql-injection.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        30,
+        5
+      ]
+    },
+    {
+      "end": [
+        6,
+        65
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-exec-driver-sql-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-exec-driver-sql-interpolation",
+      "severity": "ERROR",
+      "start": [
+        6,
+        12
+      ]
+    },
+    {
+      "end": [
+        11,
+        73
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-exec-driver-sql-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-exec-driver-sql-interpolation",
+      "severity": "ERROR",
+      "start": [
+        11,
+        12
+      ]
+    },
+    {
+      "end": [
+        16,
+        67
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-exec-driver-sql-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-exec-driver-sql-interpolation",
+      "severity": "ERROR",
+      "start": [
+        16,
+        12
+      ]
+    },
+    {
+      "end": [
+        21,
+        65
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-exec-driver-sql-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-exec-driver-sql-interpolation",
+      "severity": "ERROR",
+      "start": [
+        21,
+        12
+      ]
+    },
+    {
+      "end": [
+        26,
+        63
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-exec-driver-sql-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-exec-driver-sql-interpolation",
+      "severity": "ERROR",
+      "start": [
+        26,
+        12
+      ]
+    },
+    {
+      "end": [
+        7,
+        43
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-literal-column-dynamic.py",
+      "rule_id": "cra-python-sqlalchemy-literal-column-dynamic",
+      "severity": "WARNING",
+      "start": [
+        7,
+        19
+      ]
+    },
+    {
+      "end": [
+        13,
+        51
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-literal-column-dynamic.py",
+      "rule_id": "cra-python-sqlalchemy-literal-column-dynamic",
+      "severity": "WARNING",
+      "start": [
+        13,
+        19
+      ]
+    },
+    {
+      "end": [
+        19,
+        45
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-literal-column-dynamic.py",
+      "rule_id": "cra-python-sqlalchemy-literal-column-dynamic",
+      "severity": "WARNING",
+      "start": [
+        19,
+        19
+      ]
+    },
+    {
+      "end": [
+        25,
+        48
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-literal-column-dynamic.py",
+      "rule_id": "cra-python-sqlalchemy-literal-column-dynamic",
+      "severity": "WARNING",
+      "start": [
+        25,
+        19
+      ]
+    },
+    {
+      "end": [
+        31,
+        50
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-literal-column-dynamic.py",
+      "rule_id": "cra-python-sqlalchemy-literal-column-dynamic",
+      "severity": "WARNING",
+      "start": [
+        31,
+        19
+      ]
+    },
+    {
+      "end": [
+        37,
+        58
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-literal-column-dynamic.py",
+      "rule_id": "cra-python-sqlalchemy-literal-column-dynamic",
+      "severity": "WARNING",
+      "start": [
+        37,
+        19
+      ]
+    },
+    {
+      "end": [
+        8,
+        56
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-order-by-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-order-by-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        8,
+        12
+      ]
+    },
+    {
+      "end": [
+        13,
+        56
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-order-by-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-order-by-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        13,
+        12
+      ]
+    },
+    {
+      "end": [
+        18,
+        61
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-order-by-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-order-by-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        18,
+        12
+      ]
+    },
+    {
+      "end": [
+        23,
+        50
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-order-by-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-order-by-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        23,
+        12
+      ]
+    },
+    {
+      "end": [
+        28,
+        54
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-order-by-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-order-by-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        28,
+        12
+      ]
+    },
+    {
+      "end": [
+        33,
+        61
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-order-by-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        33,
+        41
+      ]
+    },
+    {
+      "end": [
+        9,
+        62
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        9,
+        12
+      ]
+    },
+    {
+      "end": [
+        15,
+        70
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        15,
+        12
+      ]
+    },
+    {
+      "end": [
+        21,
+        64
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        21,
+        12
+      ]
+    },
+    {
+      "end": [
+        27,
+        61
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        27,
+        12
+      ]
+    },
+    {
+      "end": [
+        33,
+        40
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        33,
+        12
+      ]
+    },
+    {
+      "end": [
+        39,
+        73
+      ],
+      "path": "python/sqlalchemy/cra-python-sqlalchemy-text-interpolation.py",
+      "rule_id": "cra-python-sqlalchemy-text-interpolation",
+      "severity": "WARNING",
+      "start": [
+        39,
+        12
+      ]
+    },
+    {
+      "end": [
+        7,
+        36
+      ],
+      "path": "python/injection/cra-python-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        7,
+        5
+      ]
+    },
+    {
+      "end": [
+        13,
+        37
+      ],
+      "path": "python/injection/cra-python-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        13,
+        5
+      ]
+    },
+    {
+      "end": [
+        19,
+        38
+      ],
+      "path": "python/injection/cra-python-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        19,
+        5
+      ]
+    },
+    {
+      "end": [
+        25,
+        45
+      ],
+      "path": "python/injection/cra-python-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        25,
+        5
+      ]
+    },
+    {
+      "end": [
+        15,
+        40
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        15,
+        5
+      ]
+    },
+    {
+      "end": [
+        22,
+        36
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        22,
+        5
+      ]
+    },
+    {
+      "end": [
+        29,
+        37
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        29,
+        5
+      ]
+    },
+    {
+      "end": [
+        36,
+        42
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        36,
+        5
+      ]
+    },
+    {
+      "end": [
+        43,
+        52
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        43,
+        5
+      ]
+    },
+    {
+      "end": [
+        50,
+        36
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        50,
+        5
+      ]
+    },
+    {
+      "end": [
+        57,
+        36
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        57,
+        5
+      ]
+    },
+    {
+      "end": [
+        64,
+        36
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        64,
+        5
+      ]
+    },
+    {
+      "end": [
+        71,
+        36
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        71,
+        5
+      ]
+    },
+    {
+      "end": [
+        12,
+        20
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        12,
+        10
+      ]
+    },
+    {
+      "end": [
+        19,
+        14
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        19,
+        10
+      ]
+    },
+    {
+      "end": [
+        26,
+        14
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        26,
+        10
+      ]
+    },
+    {
+      "end": [
+        33,
+        17
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        33,
+        10
+      ]
+    },
+    {
+      "end": [
+        40,
+        13
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        40,
+        10
+      ]
+    },
+    {
+      "end": [
+        47,
+        13
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        47,
+        10
+      ]
+    },
+    {
+      "end": [
+        54,
+        12
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        54,
+        10
+      ]
+    },
+    {
+      "end": [
+        61,
+        14
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        61,
+        10
+      ]
+    },
+    {
+      "end": [
+        68,
+        14
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        68,
+        10
+      ]
+    },
+    {
+      "end": [
+        20,
+        22
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        20,
+        17
+      ]
+    },
+    {
+      "end": [
+        28,
+        22
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        28,
+        17
+      ]
+    },
+    {
+      "end": [
+        36,
+        18
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        36,
+        17
+      ]
+    },
+    {
+      "end": [
+        44,
+        18
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        44,
+        17
+      ]
+    },
+    {
+      "end": [
+        52,
+        18
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        52,
+        17
+      ]
+    },
+    {
+      "end": [
+        60,
+        22
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        60,
+        17
+      ]
+    },
+    {
+      "end": [
+        69,
+        18
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        69,
+        17
+      ]
+    },
+    {
+      "end": [
+        15,
+        27
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        15,
+        20
+      ]
+    },
+    {
+      "end": [
+        22,
+        23
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        22,
+        20
+      ]
+    },
+    {
+      "end": [
+        29,
+        24
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        29,
+        21
+      ]
+    },
+    {
+      "end": [
+        36,
+        29
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        36,
+        22
+      ]
+    },
+    {
+      "end": [
+        43,
+        39
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        43,
+        29
+      ]
+    },
+    {
+      "end": [
+        50,
+        23
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        50,
+        20
+      ]
+    },
+    {
+      "end": [
+        57,
+        23
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        57,
+        20
+      ]
+    },
+    {
+      "end": [
+        64,
+        23
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        64,
+        20
+      ]
+    },
+    {
+      "end": [
+        71,
+        23
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        71,
+        20
+      ]
+    },
+    {
+      "end": [
+        77,
+        18
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        77,
+        15
+      ]
+    },
+    {
+      "end": [
+        83,
+        17
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        83,
+        14
+      ]
+    },
+    {
+      "end": [
+        7,
+        27
+      ],
+      "path": "python/deserialization/cra-python-yaml-load.py",
+      "rule_id": "cra-python-yaml-load",
+      "severity": "WARNING",
+      "start": [
+        7,
+        12
+      ]
+    },
+    {
+      "end": [
+        12,
+        47
+      ],
+      "path": "python/deserialization/cra-python-yaml-load.py",
+      "rule_id": "cra-python-yaml-load",
+      "severity": "WARNING",
+      "start": [
+        12,
+        12
+      ]
+    },
+    {
+      "end": [
+        17,
+        53
+      ],
+      "path": "python/deserialization/cra-python-yaml-load.py",
+      "rule_id": "cra-python-yaml-load",
+      "severity": "WARNING",
+      "start": [
+        17,
+        12
+      ]
+    },
+    {
+      "end": [
+        8,
+        48
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        8,
+        44
+      ]
+    },
+    {
+      "end": [
+        14,
+        38
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        14,
+        34
+      ]
+    },
+    {
+      "end": [
+        20,
+        40
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        20,
+        36
+      ]
+    },
+    {
+      "end": [
+        48,
+        39
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        48,
+        34
+      ]
+    },
+    {
+      "end": [
+        64,
+        38
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        64,
+        34
+      ]
+    },
+    {
+      "end": [
+        75,
+        47
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        75,
+        42
+      ]
+    },
+    {
+      "end": [
+        86,
+        43
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        86,
+        38
+      ]
+    },
+    {
+      "end": [
+        97,
+        47
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        97,
+        42
+      ]
+    },
+    {
+      "end": [
+        108,
+        47
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        108,
+        42
+      ]
+    },
+    {
+      "end": [
+        122,
+        43
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        122,
+        38
+      ]
+    },
+    {
+      "end": [
+        134,
+        47
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        134,
+        42
+      ]
+    },
+    {
+      "end": [
+        147,
+        51
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        147,
+        46
+      ]
+    },
+    {
+      "end": [
+        162,
+        47
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        162,
+        42
+      ]
+    },
+    {
+      "end": [
+        175,
+        47
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        175,
+        42
+      ]
+    },
+    {
+      "end": [
+        3,
+        76
+      ],
+      "path": "rust/secrets/cra-rust-jsonwebtoken-hardcoded-secret.rs",
+      "rule_id": "cra-rust-jsonwebtoken-hardcoded-secret",
+      "severity": "ERROR",
+      "start": [
+        3,
+        15
+      ]
+    },
+    {
+      "end": [
+        8,
+        76
+      ],
+      "path": "rust/secrets/cra-rust-jsonwebtoken-hardcoded-secret.rs",
+      "rule_id": "cra-rust-jsonwebtoken-hardcoded-secret",
+      "severity": "ERROR",
+      "start": [
+        8,
+        15
+      ]
+    },
+    {
+      "end": [
+        13,
+        88
+      ],
+      "path": "rust/secrets/cra-rust-jsonwebtoken-hardcoded-secret.rs",
+      "rule_id": "cra-rust-jsonwebtoken-hardcoded-secret",
+      "severity": "ERROR",
+      "start": [
+        13,
+        15
+      ]
+    },
+    {
+      "end": [
+        8,
+        40
+      ],
+      "path": "rust/ssrf/cra-rust-reqwest-env-taint.rs",
+      "rule_id": "cra-rust-reqwest-env-taint",
+      "severity": "ERROR",
+      "start": [
+        8,
+        34
+      ]
+    },
+    {
+      "end": [
+        14,
+        40
+      ],
+      "path": "rust/ssrf/cra-rust-reqwest-env-taint.rs",
+      "rule_id": "cra-rust-reqwest-env-taint",
+      "severity": "ERROR",
+      "start": [
+        14,
+        34
+      ]
+    },
+    {
+      "end": [
+        21,
+        39
+      ],
+      "path": "rust/ssrf/cra-rust-reqwest-env-taint.rs",
+      "rule_id": "cra-rust-reqwest-env-taint",
+      "severity": "ERROR",
+      "start": [
+        21,
+        33
+      ]
+    },
+    {
+      "end": [
+        3,
+        65
+      ],
+      "path": "rust/tls/cra-rust-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        3,
+        5
+      ]
+    },
+    {
+      "end": [
+        8,
+        69
+      ],
+      "path": "rust/tls/cra-rust-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        8,
+        5
+      ]
+    },
+    {
+      "end": [
+        13,
+        73
+      ],
+      "path": "rust/tls/cra-rust-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        13,
+        5
+      ]
+    },
+    {
+      "end": [
+        10,
+        45
+      ],
+      "path": "rust/injection/cra-rust-shell-command-env-args.rs",
+      "rule_id": "cra-rust-shell-command-env-args",
+      "severity": "ERROR",
+      "start": [
+        10,
+        38
+      ]
+    },
+    {
+      "end": [
+        16,
+        45
+      ],
+      "path": "rust/injection/cra-rust-shell-command-env-args.rs",
+      "rule_id": "cra-rust-shell-command-env-args",
+      "severity": "ERROR",
+      "start": [
+        16,
+        38
+      ]
+    },
+    {
+      "end": [
+        22,
+        45
+      ],
+      "path": "rust/injection/cra-rust-shell-command-env-args.rs",
+      "rule_id": "cra-rust-shell-command-env-args",
+      "severity": "ERROR",
+      "start": [
+        22,
+        38
+      ]
+    },
+    {
+      "end": [
+        30,
+        24
+      ],
+      "path": "rust/injection/cra-rust-shell-command-env-args.rs",
+      "rule_id": "cra-rust-shell-command-env-args",
+      "severity": "ERROR",
+      "start": [
+        30,
+        17
+      ]
+    },
+    {
+      "end": [
+        9,
+        40
+      ],
+      "path": "rust/injection/cra-rust-sqlx-query-env-taint.rs",
+      "rule_id": "cra-rust-sqlx-query-env-taint",
+      "severity": "ERROR",
+      "start": [
+        9,
+        29
+      ]
+    },
+    {
+      "end": [
+        15,
+        84
+      ],
+      "path": "rust/injection/cra-rust-sqlx-query-env-taint.rs",
+      "rule_id": "cra-rust-sqlx-query-env-taint",
+      "severity": "ERROR",
+      "start": [
+        15,
+        29
+      ]
+    },
+    {
+      "end": [
+        22,
+        47
+      ],
+      "path": "rust/injection/cra-rust-sqlx-query-env-taint.rs",
+      "rule_id": "cra-rust-sqlx-query-env-taint",
+      "severity": "ERROR",
+      "start": [
+        22,
+        36
+      ]
+    },
+    {
+      "end": [
+        3,
+        37
+      ],
+      "path": "rust/crypto/cra-rust-weak-digest.rs",
+      "rule_id": "cra-rust-weak-digest",
+      "severity": "WARNING",
+      "start": [
+        3,
+        18
+      ]
+    },
+    {
+      "end": [
+        8,
+        35
+      ],
+      "path": "rust/crypto/cra-rust-weak-digest.rs",
+      "rule_id": "cra-rust-weak-digest",
+      "severity": "WARNING",
+      "start": [
+        8,
+        18
+      ]
+    },
+    {
+      "end": [
+        13,
+        33
+      ],
+      "path": "rust/crypto/cra-rust-weak-digest.rs",
+      "rule_id": "cra-rust-weak-digest",
+      "severity": "WARNING",
+      "start": [
+        13,
+        18
+      ]
+    }
+  ],
+  "findings_by_rule": {
+    "cra-c-curl-verification-disabled": 2,
+    "cra-c-insecure-temp-name": 2,
+    "cra-c-printf-argv-format": 2,
+    "cra-c-strcpy-argv": 2,
+    "cra-c-system-argv": 2,
+    "cra-c-system-getenv-taint": 2,
+    "cra-cpp-curl-verification-disabled": 2,
+    "cra-cpp-insecure-temp-name": 2,
+    "cra-cpp-printf-argv-format": 4,
+    "cra-cpp-strcpy-argv": 3,
+    "cra-cpp-system-argv": 3,
+    "cra-cpp-system-getenv-taint": 2,
+    "cra-csharp-binaryformatter-deserialize": 2,
+    "cra-csharp-certificate-callback-accept-all": 3,
+    "cra-csharp-file-request-taint": 5,
+    "cra-csharp-httpclient-request-taint": 3,
+    "cra-csharp-jwt-hardcoded-secret": 1,
+    "cra-csharp-process-request-taint": 6,
+    "cra-csharp-sql-request-taint": 3,
+    "cra-csharp-weak-hash": 4,
+    "cra-go-hmac-reused-hash": 3,
+    "cra-go-hmac-timing": 2,
+    "cra-go-parseint-downcast": 23,
+    "cra-go-tls-insecure": 4,
+    "cra-go-weak-hash": 4,
+    "cra-go-wrong-lock-unlock": 5,
+    "cra-java-file-request-taint": 5,
+    "cra-java-hostname-verifier-accept-all": 2,
+    "cra-java-objectinputstream-readobject": 2,
+    "cra-java-runtime-exec-request": 2,
+    "cra-java-sql-request-taint": 4,
+    "cra-java-url-request-taint": 2,
+    "cra-java-weak-message-digest": 18,
+    "cra-java-xxe-doctype-enabled": 4,
+    "cra-javascript-eval": 3,
+    "cra-javascript-exec-injection": 13,
+    "cra-php-command-superglobal": 8,
+    "cra-php-curl-url-superglobal-taint": 4,
+    "cra-php-echo-superglobal-taint": 3,
+    "cra-php-file-superglobal-taint": 4,
+    "cra-php-sql-superglobal-taint": 4,
+    "cra-php-superglobal-password-md5": 5,
+    "cra-php-unserialize-superglobal": 3,
+    "cra-python-django-allowed-hosts-wildcard": 2,
+    "cra-python-django-csrf-exempt": 3,
+    "cra-python-django-file-path-traversal": 5,
+    "cra-python-django-format-html-interpolated": 4,
+    "cra-python-django-hardcoded-secret-key": 3,
+    "cra-python-django-httpresponse-html-taint": 6,
+    "cra-python-django-mark-safe-request": 6,
+    "cra-python-django-open-redirect": 7,
+    "cra-python-django-queryset-extra-format": 5,
+    "cra-python-django-raw-sql-format": 4,
+    "cra-python-django-rawsql-expression": 4,
+    "cra-python-django-safe-filter-templatetag": 4,
+    "cra-python-django-session-cookie-insecure": 2,
+    "cra-python-django-settings-debug-true": 1,
+    "cra-python-django-signing-loads-untrusted": 4,
+    "cra-python-django-ssl-redirect-disabled": 1,
+    "cra-python-flask-cors-wildcard-credentials": 5,
+    "cra-python-flask-debug-true": 4,
+    "cra-python-flask-hardcoded-secret-key": 5,
+    "cra-python-flask-jsonify-request-reflect-secret": 12,
+    "cra-python-flask-markup-untrusted": 7,
+    "cra-python-flask-open-redirect": 5,
+    "cra-python-flask-plaintext-password-compare": 7,
+    "cra-python-flask-render-template-string-ssti": 5,
+    "cra-python-flask-send-file-path-traversal": 5,
+    "cra-python-flask-session-cookie-httponly-false": 2,
+    "cra-python-flask-session-cookie-insecure-false": 2,
+    "cra-python-flask-wtf-csrf-disabled": 2,
+    "cra-python-jwt-decode-alg-none": 5,
+    "cra-python-jwt-decode-missing-algorithms": 2,
+    "cra-python-jwt-decode-verify-disabled": 5,
+    "cra-python-jwt-hardcoded-secret": 4,
+    "cra-python-pickle-loads": 2,
+    "cra-python-sql-injection": 4,
+    "cra-python-sqlalchemy-exec-driver-sql-interpolation": 5,
+    "cra-python-sqlalchemy-literal-column-dynamic": 6,
+    "cra-python-sqlalchemy-order-by-text-interpolation": 5,
+    "cra-python-sqlalchemy-text-interpolation": 7,
+    "cra-python-subprocess-shell": 13,
+    "cra-python-taint-eval-exec": 9,
+    "cra-python-taint-sql-inject": 7,
+    "cra-python-taint-subprocess-shell": 11,
+    "cra-python-yaml-load": 3,
+    "cra-rust-file-env-taint": 14,
+    "cra-rust-jsonwebtoken-hardcoded-secret": 3,
+    "cra-rust-reqwest-env-taint": 3,
+    "cra-rust-reqwest-invalid-certs": 3,
+    "cra-rust-shell-command-env-args": 4,
+    "cra-rust-sqlx-query-env-taint": 3,
+    "cra-rust-weak-digest": 3
+  }
+}

@@ -1,7 +1,18 @@
 import os
 
 from django.http import FileResponse
-from django.utils._os import safe_join
+import django.utils._os
+import werkzeug.utils
+
+
+def requested_file(request):
+    return request.GET["f"]
+
+
+def download_across_helper(request):
+    name = requested_file(request)
+    # ruleid: cra-python-django-file-path-traversal
+    return FileResponse(open(name, "rb"))
 
 
 def download_join(request):
@@ -40,8 +51,25 @@ def download_basename(request):
 
 def download_safe_join(request):
     name = request.GET["f"]
-    path = safe_join("/srv/files", name)
+    path = django.utils._os.safe_join("/srv/files", name)
     # ok: cra-python-django-file-path-traversal
+    return FileResponse(open(path, "rb"))
+
+
+def download_secure_filename(request):
+    name = werkzeug.utils.secure_filename(request.GET["f"])
+    path = os.path.join("/srv/files", name)
+    # ok: cra-python-django-file-path-traversal
+    return FileResponse(open(path, "rb"))
+
+
+def download_shadowed_safe_join(request):
+    def safe_join(base, name):
+        return base + "/" + name
+
+    name = request.GET["f"]
+    path = safe_join("/srv/files", name)
+    # ruleid: cra-python-django-file-path-traversal
     return FileResponse(open(path, "rb"))
 
 

@@ -6,6 +6,7 @@ rules:
       Use parameterized queries instead (pass values as a second argument to execute()).
     severity: ERROR
     metadata:
+      tier: default
       cwe:
         - "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
       owasp:
@@ -23,4 +24,5 @@ rules:
     pattern-either:
       - pattern: $CUR.execute($X % $Y)
       - pattern: $CUR.execute($X.format(...))
-      - pattern: $CUR.execute(f"...")
+      - pattern: $CUR.execute(f"...{$X}...")
+      - pattern: $CUR.execute($X + $Y)

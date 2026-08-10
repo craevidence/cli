@@ -3,8 +3,18 @@ from django.http import (
     HttpResponseRedirect,
     HttpResponsePermanentRedirect,
 )
-from django.urls import reverse
+import django.urls
 from django.utils.http import url_has_allowed_host_and_scheme
+
+
+def requested_redirect(request):
+    return request.GET.get("next")
+
+
+def go_across_helper(request):
+    target = requested_redirect(request)
+    # ruleid: cra-python-django-open-redirect
+    return redirect(target)
 
 
 def go_shortcut(request):
@@ -42,6 +52,15 @@ def go_validated(request):
 def go_reverse(request):
     name = request.GET.get("view")
     # ok: cra-python-django-open-redirect
+    return redirect(django.urls.reverse(name))
+
+
+def go_shadowed_reverse(request):
+    def reverse(value):
+        return value
+
+    name = request.GET.get("view")
+    # ruleid: cra-python-django-open-redirect
     return redirect(reverse(name))
 
 
