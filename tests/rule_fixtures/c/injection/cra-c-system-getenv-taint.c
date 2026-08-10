@@ -22,3 +22,12 @@ void good(void) {
     // ok: cra-c-system-getenv-taint
     execl("/usr/bin/lookup", "lookup", argument, (char *)0);
 }
+
+/* Bad: the environment value is copied into a buffer before the sink */
+void badEnvThroughBuffer(void)
+{
+    char command[256];
+    snprintf(command, sizeof(command), "ls %s", getenv("TARGET_DIR"));
+    /* ruleid: cra-c-system-getenv-taint */
+    system(command);
+}

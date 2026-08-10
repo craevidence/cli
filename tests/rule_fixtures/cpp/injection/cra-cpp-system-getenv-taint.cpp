@@ -22,3 +22,12 @@ void good() {
     // ok: cra-cpp-system-getenv-taint
     posix_spawn(nullptr, "/usr/bin/id", nullptr, nullptr, arguments, nullptr);
 }
+
+/* Bad: the environment value is copied into a buffer before the sink */
+void badEnvThroughBuffer(void)
+{
+    char command[256];
+    snprintf(command, sizeof(command), "ls %s", getenv("TARGET_DIR"));
+    /* ruleid: cra-cpp-system-getenv-taint */
+    system(command);
+}

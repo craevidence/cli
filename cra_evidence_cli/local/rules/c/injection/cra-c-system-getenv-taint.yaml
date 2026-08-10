@@ -23,6 +23,25 @@ rules:
     mode: taint
     pattern-sources:
       - pattern: getenv(...)
+    pattern-propagators:
+      - pattern: strcpy($DST, $SRC)
+        from: $SRC
+        to: $DST
+      - pattern: strncpy($DST, $SRC, ...)
+        from: $SRC
+        to: $DST
+      - pattern: strcat($DST, $SRC)
+        from: $SRC
+        to: $DST
+      - pattern: strncat($DST, $SRC, ...)
+        from: $SRC
+        to: $DST
+      - pattern: sprintf($DST, ..., $SRC, ...)
+        from: $SRC
+        to: $DST
+      - pattern: snprintf($DST, ..., $SRC, ...)
+        from: $SRC
+        to: $DST
     pattern-sinks:
       - patterns:
           - pattern: system($COMMAND)

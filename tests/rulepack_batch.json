@@ -1,6 +1,6 @@
 {
   "files_scanned": 101,
-  "finding_count": 444,
+  "finding_count": 446,
   "findings": [
     {
       "end": [
@@ -155,6 +155,19 @@
       "severity": "ERROR",
       "start": [
         17,
+        12
+      ]
+    },
+    {
+      "end": [
+        32,
+        19
+      ],
+      "path": "c/injection/cra-c-system-getenv-taint.c",
+      "rule_id": "cra-c-system-getenv-taint",
+      "severity": "ERROR",
+      "start": [
+        32,
         12
       ]
     },
@@ -364,6 +377,19 @@
       "start": [
         17,
         17
+      ]
+    },
+    {
+      "end": [
+        32,
+        19
+      ],
+      "path": "cpp/injection/cra-cpp-system-getenv-taint.cpp",
+      "rule_id": "cra-cpp-system-getenv-taint",
+      "severity": "ERROR",
+      "start": [
+        32,
+        12
       ]
     },
     {
@@ -5781,13 +5807,13 @@
     "cra-c-printf-argv-format": 2,
     "cra-c-strcpy-argv": 2,
     "cra-c-system-argv": 2,
-    "cra-c-system-getenv-taint": 2,
+    "cra-c-system-getenv-taint": 3,
     "cra-cpp-curl-verification-disabled": 2,
     "cra-cpp-insecure-temp-name": 2,
     "cra-cpp-printf-argv-format": 4,
     "cra-cpp-strcpy-argv": 3,
     "cra-cpp-system-argv": 3,
-    "cra-cpp-system-getenv-taint": 2,
+    "cra-cpp-system-getenv-taint": 3,
     "cra-csharp-binaryformatter-deserialize": 2,
     "cra-csharp-certificate-callback-accept-all": 3,
     "cra-csharp-file-request-taint": 5,
