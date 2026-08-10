@@ -24,6 +24,11 @@ rules:
           - pattern: $_POST
           - pattern: $_REQUEST
           - pattern: $_COOKIE
+          - patterns:
+              - pattern: $_SERVER[$KEY]
+              - metavariable-regex:
+                  metavariable: $KEY
+                  regex: ^["'](HTTP_[A-Z_]+|PATH_INFO|QUERY_STRING|REQUEST_URI|PHP_AUTH_USER|PHP_AUTH_PW)["']$
     pattern-sanitizers:
       - pattern-either:
           - pattern: intval(...)

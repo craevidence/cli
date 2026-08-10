@@ -48,3 +48,11 @@ function good_filter_var(PDO $database): void {
     // ok: cra-php-sql-superglobal-taint
     $database->query("SELECT * FROM users WHERE id = " . $id);
 }
+
+
+// Bad: a client controlled $_SERVER entry is a source too
+function bad_server_header_superglobal()
+{
+    // ruleid: cra-php-sql-superglobal-taint
+    mysqli_query($conn, "SELECT * FROM t WHERE ua = '" . $_SERVER["HTTP_USER_AGENT"] . "'");
+}

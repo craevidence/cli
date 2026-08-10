@@ -32,3 +32,11 @@ function good($handle): void {
     // ok: cra-php-curl-url-superglobal-taint
     curl_setopt($handle, CURLOPT_URL, "https://updates.example.com/manifest.json");
 }
+
+
+// Bad: a client controlled $_SERVER entry is a source too
+function bad_server_header_superglobal()
+{
+    // ruleid: cra-php-curl-url-superglobal-taint
+    $c = curl_init(); curl_setopt($c, CURLOPT_URL, $_SERVER["HTTP_REFERER"]);
+}

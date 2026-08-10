@@ -28,3 +28,11 @@ function good_htmlentities(): void {
     // ok: cra-php-echo-superglobal-taint
     echo htmlentities($title, ENT_QUOTES | ENT_SUBSTITUTE, "UTF-8");
 }
+
+
+// Bad: a client controlled $_SERVER entry is a source too
+function bad_server_header_superglobal()
+{
+    // ruleid: cra-php-echo-superglobal-taint
+    echo $_SERVER["HTTP_REFERER"];
+}

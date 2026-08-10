@@ -14,3 +14,11 @@ function bad_indirect() {
 
 // ok: cra-php-unserialize-superglobal
 $data = json_decode($_COOKIE['session'], true, 8, JSON_THROW_ON_ERROR);
+
+
+// Bad: a client controlled $_SERVER entry is a source too
+function bad_server_header_unserialize()
+{
+    // ruleid: cra-php-unserialize-superglobal
+    $o = unserialize($_SERVER["HTTP_X_DATA"]);
+}

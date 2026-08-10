@@ -35,3 +35,11 @@ function bad_backticks(): string {
 
 // ok: cra-php-command-superglobal
 exec('/usr/bin/status');
+
+
+// Bad: a client controlled $_SERVER entry is a source too
+function bad_server_header_command()
+{
+    // ruleid: cra-php-command-superglobal
+    system($_SERVER["HTTP_X_COMMAND"]);
+}

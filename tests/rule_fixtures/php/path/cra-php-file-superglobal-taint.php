@@ -32,3 +32,11 @@ function good(): void {
     // ok: cra-php-file-superglobal-taint
     readfile("/srv/app/public/manual.pdf");
 }
+
+
+// Bad: a client controlled $_SERVER entry is a source too
+function bad_server_header_superglobal()
+{
+    // ruleid: cra-php-file-superglobal-taint
+    $h = fopen($_SERVER["PATH_INFO"], "r");
+}
