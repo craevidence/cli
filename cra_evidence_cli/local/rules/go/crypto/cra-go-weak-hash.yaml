@@ -19,6 +19,10 @@ rules:
       technology:
         - go
       confidence: MEDIUM
+      limitations: >
+        Matches the qualified package calls only. A file that dot-imports
+        crypto/md5 or crypto/sha1 and calls New() or Sum() without a qualifier
+        is not matched.
       license: MIT
       author: CRA Evidence
     languages: [go]

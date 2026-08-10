@@ -39,6 +39,34 @@ func badLockRUnlockAfterStatement(mu *sync.RWMutex) {
 	_ = value
 }
 
+// Branch 5: Lock() + deferred closure calling RUnlock() -- mismatched
+func badLockDeferredClosureRUnlock(mu *sync.RWMutex) {
+	// ruleid: cra-go-wrong-lock-unlock
+	mu.Lock()
+	defer func() { mu.RUnlock() }()
+}
+
+// Branch 6: RLock() + deferred closure calling Unlock() -- mismatched
+func badRLockDeferredClosureUnlock(mu *sync.RWMutex) {
+	// ruleid: cra-go-wrong-lock-unlock
+	mu.RLock()
+	defer func() { mu.Unlock() }()
+}
+
+// Safe: Lock() + deferred closure calling Unlock() -- correct pair
+func okLockDeferredClosureUnlock(mu *sync.RWMutex) {
+	// ok: cra-go-wrong-lock-unlock
+	mu.Lock()
+	defer func() { mu.Unlock() }()
+}
+
+// Safe: RLock() + deferred closure calling RUnlock() -- correct pair
+func okRLockDeferredClosureRUnlock(mu *sync.RWMutex) {
+	// ok: cra-go-wrong-lock-unlock
+	mu.RLock()
+	defer func() { mu.RUnlock() }()
+}
+
 // Safe: Lock() + defer Unlock() -- correct pair
 func okLockUnlock(mu *sync.Mutex) {
 	// ok: cra-go-wrong-lock-unlock

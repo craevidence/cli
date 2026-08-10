@@ -11,21 +11,45 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/328.html
         - https://learn.microsoft.com/en-us/dotnet/standard/security/cryptographic-services
+        - https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.md5.hashdata
       category: security
       technology: [csharp, dotnet, cryptography]
       confidence: VERY HIGH
+      scope: >
+        Detects the MD5 and SHA-1 implementations in
+        System.Security.Cryptography reached through direct construction, the
+        static Create factory, a literal algorithm name passed to
+        HashAlgorithm.Create, or the static one-shot hashing entry points
+        added in .NET 5.
+      limitations: >
+        Does not flag HMAC constructions such as HMACMD5, whose security
+        properties differ from those of a bare digest, and does not resolve
+        algorithm names built at runtime or read from configuration.
       license: MIT
       author: CRA Evidence
     languages: [csharp]
     pattern-either:
       - pattern: MD5.Create()
       - pattern: SHA1.Create()
+      - pattern: SHA1Managed.Create()
       - pattern: System.Security.Cryptography.MD5.Create()
       - pattern: System.Security.Cryptography.SHA1.Create()
+      - pattern: MD5.HashData(...)
+      - pattern: SHA1.HashData(...)
+      - pattern: MD5.TryHashData(...)
+      - pattern: SHA1.TryHashData(...)
+      - pattern: MD5.HashDataAsync(...)
+      - pattern: SHA1.HashDataAsync(...)
+      - pattern: System.Security.Cryptography.MD5.HashData(...)
+      - pattern: System.Security.Cryptography.SHA1.HashData(...)
       - pattern: new MD5CryptoServiceProvider(...)
       - pattern: new SHA1CryptoServiceProvider(...)
+      - pattern: new SHA1Managed(...)
+      - pattern: new MD5Cng(...)
+      - pattern: new SHA1Cng(...)
       - pattern: new System.Security.Cryptography.MD5CryptoServiceProvider(...)
       - pattern: new System.Security.Cryptography.SHA1CryptoServiceProvider(...)
+      - pattern: new System.Security.Cryptography.SHA1Managed(...)
       - pattern: HashAlgorithm.Create("MD5")
       - pattern: HashAlgorithm.Create("SHA1")
       - pattern: HashAlgorithm.Create("SHA-1")

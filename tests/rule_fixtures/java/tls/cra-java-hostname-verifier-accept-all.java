@@ -20,3 +20,28 @@ class TlsClient {
         connection.setHostnameVerifier(HttpsURLConnection.getDefaultHostnameVerifier());
     }
 }
+
+class DefaultVerifierSetter {
+    void badStaticDefault() {
+        // ruleid: cra-java-hostname-verifier-accept-all
+        HttpsURLConnection.setDefaultHostnameVerifier((hostname, session) -> true);
+    }
+
+    void badAnonymousInnerClass(HttpsURLConnection connection) {
+        connection.setHostnameVerifier(new HostnameVerifier() {
+            public boolean verify(String hostname, SSLSession session) {
+                // ruleid: cra-java-hostname-verifier-accept-all
+                return true;
+            }
+        });
+    }
+
+    void okAnonymousInnerClassChecksHost(HttpsURLConnection connection) {
+        connection.setHostnameVerifier(new HostnameVerifier() {
+            public boolean verify(String hostname, SSLSession session) {
+                // ok: cra-java-hostname-verifier-accept-all
+                return hostname.equals("known.example");
+            }
+        });
+    }
+}

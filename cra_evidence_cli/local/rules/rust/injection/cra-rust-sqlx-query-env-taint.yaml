@@ -32,4 +32,10 @@ rules:
               - pattern: query($QUERY)
               - pattern: sqlx::query_scalar($QUERY)
               - pattern: query_scalar($QUERY)
+              - pattern: sqlx::query_scalar::<$DB, $ROW>($QUERY)
+              - pattern: query_scalar::<$DB, $ROW>($QUERY)
+              - pattern: sqlx::query_as($QUERY)
+              - pattern: query_as($QUERY)
+              - pattern: sqlx::query_as::<$DB, $ROW>($QUERY)
+              - pattern: query_as::<$DB, $ROW>($QUERY)
           - focus-metavariable: $QUERY

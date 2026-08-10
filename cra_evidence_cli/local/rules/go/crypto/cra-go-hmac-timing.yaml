@@ -35,3 +35,11 @@ rules:
           $H = $MAC.Sum(...)
           ...
           bytes.Equal(..., $H)
+      - pattern: |
+          $MAC = hmac.New(...)
+          ...
+          bytes.Equal($MAC.Sum(...), ...)
+      - pattern: |
+          $MAC = hmac.New(...)
+          ...
+          bytes.Equal(..., $MAC.Sum(...))

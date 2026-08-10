@@ -26,6 +26,28 @@ rules:
     pattern-either:
       - pattern: $CONNECTION.setHostnameVerifier(($HOST, $SESSION) -> true)
       - pattern: $CLIENT.hostnameVerifier(($HOST, $SESSION) -> true)
+      - pattern: HttpsURLConnection.setDefaultHostnameVerifier(($HOST, $SESSION) -> true)
+      - pattern: javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier(($HOST, $SESSION) -> true)
+      - patterns:
+          - pattern: return true;
+          - pattern-inside: |
+              new HostnameVerifier() {
+                ...
+                public boolean verify(String $HOST, SSLSession $SESSION) {
+                  ...
+                }
+                ...
+              }
+      - patterns:
+          - pattern: return true;
+          - pattern-inside: |
+              new javax.net.ssl.HostnameVerifier() {
+                ...
+                public boolean verify(String $HOST, javax.net.ssl.SSLSession $SESSION) {
+                  ...
+                }
+                ...
+              }
       - patterns:
           - pattern: return true;
           - pattern-inside: |

@@ -295,6 +295,26 @@
       },
       "promotion_ready": false,
       "promotion_blocker": "All 10 alerts whose argument is the literal true are covered, with no finding on a good line. The 7 uncovered alerts pass a variable or const, which the rule does not resolve, the same non-literal boolean boundary the Go TLS rule has."
+    },
+    {
+      "name": "codeql-js-cwe078",
+      "benchmark_type": "codeql-markers",
+      "source_type": "git",
+      "directory": "codeql-js",
+      "repository": "https://github.com/github/codeql.git",
+      "commit": "dfe05599d3792cf5b50c5a95759735383865cda1",
+      "license_note": "MIT, per the github/codeql repository LICENSE. Fixture text is reused as ground truth; the CodeQL engine is not run.",
+      "rules_subdir": "javascript",
+      "source_path": "javascript/ql/test/query-tests/Security/CWE-078/CommandInjection",
+      "alert_query": "$ Alert",
+      "expected": {
+        "alert_lines": 96,
+        "alert_lines_covered": 11,
+        "good_lines": 0,
+        "good_lines_reported": 0
+      },
+      "promotion_ready": false,
+      "promotion_blocker": "The 96 alert lines are the whole CodeQL command injection tree, which is dominated by sinks these rules never claimed: execa, cross-spawn, ssh2, opener, @actions/exec, promisified exec wrappers, and spawn or execFile argument arrays. 11 alert lines are inside the published scope of cra-javascript-exec-injection, exec or execSync resolved from child_process with the command built by concatenation or template interpolation, and all 11 are covered. Read the covered figure against that 11, not against 96. The tree carries no good-marked lines, so this benchmark measures recall only and gives no false positive signal."
     }
   ]
 }

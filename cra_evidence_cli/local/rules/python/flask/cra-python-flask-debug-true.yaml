@@ -23,6 +23,16 @@ rules:
         - python
         - flask
       confidence: HIGH
+      scope: >
+        Covers app.run(debug=True), the config subscript, config.update(),
+        config.from_mapping() in both keyword and dict form, the app.debug
+        attribute, and DEBUG = True in the body of a config class that
+        app.config.from_object() would load.
+      limitations: >
+        Config classes whose name starts with dev, development, test, testing,
+        local, stage, staging, sandbox, debug, or qa are skipped, because debug
+        mode is intended in those environments. Values read from a file by
+        from_pyfile() or from_envvar() are outside the scanned file.
       license: MIT
       author: CRA Evidence
     pattern-either:
@@ -45,8 +55,41 @@ rules:
               pattern: "True"
           - focus-metavariable: $DEBUG
       - patterns:
+          - pattern: '$APP.config.update({..., "DEBUG": $DEBUG, ...})'
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - focus-metavariable: $DEBUG
+      - patterns:
+          - pattern: $APP.config.from_mapping(..., DEBUG=$DEBUG, ...)
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - focus-metavariable: $DEBUG
+      - patterns:
+          - pattern: '$APP.config.from_mapping({..., "DEBUG": $DEBUG, ...})'
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - focus-metavariable: $DEBUG
+      - patterns:
           - pattern: $APP.debug = $DEBUG
           - metavariable-pattern:
               metavariable: $DEBUG
               pattern: "True"
+          - focus-metavariable: $DEBUG
+      - patterns:
+          - pattern-inside: |
+              class $C(...):
+                  ...
+          - pattern-not-inside: |
+              def $F(...):
+                  ...
+          - pattern: DEBUG = $DEBUG
+          - metavariable-pattern:
+              metavariable: $DEBUG
+              pattern: "True"
+          - metavariable-regex:
+              metavariable: $C
+              regex: ^(?!(?i:dev|develop|development|test|testing|local|stage|staging|sandbox|debug|qa)([_A-Z]|$))
           - focus-metavariable: $DEBUG

@@ -1,5 +1,6 @@
 rules:
   - id: cra-python-django-raw-sql-format
+    mode: taint
     message: >
       A query string built with an f-string, %, str.format(), or concatenation is
       passed to QuerySet.raw(). This can allow SQL injection when the interpolated
@@ -23,17 +24,42 @@ rules:
         - python
         - django
       confidence: HIGH
+      scope: >
+        Follows request query, form, cookie, header, and body data into the SQL
+        text argument of QuerySet.raw(), whether it is interpolated in the call
+        itself or assembled into a variable first. Values passed through the
+        params argument are not sinks.
+      limitations: >
+        Intrafile taint does not cross file boundaries, so a helper in another
+        module that interpolates a caller-supplied value is not reported.
+        Interpolation of data that does not come from the request, such as a
+        setting or a value read back from the database, is not reported either.
+      sanitizer_analysis:
+        status: not-modeled
+        reason: >
+          No sanitizer is declared. A parameterised call is excluded by the sink
+          shape rather than by a sanitizer: the sink focuses on the query string
+          argument, so a value passed through the params argument is never a
+          sink. Escaping helpers and allowlist checks applied to the value before
+          interpolation are not recognised, so a query built from a validated
+          value is still reported.
       license: MIT
       author: CRA Evidence
-    pattern-either:
+    pattern-sources:
+      - pattern: request.GET.get(...)
+      - pattern: request.GET[...]
+      - pattern: request.POST.get(...)
+      - pattern: request.POST[...]
+      - pattern: request.query_params.get(...)
+      - pattern: request.query_params[...]
+      - pattern: request.COOKIES.get(...)
+      - pattern: request.COOKIES[...]
+      - pattern: request.headers.get(...)
+      - pattern: request.headers[...]
+      - pattern: request.data.get(...)
+      - pattern: request.data[...]
+      - pattern: request.body
+    pattern-sinks:
       - patterns:
           - pattern: $M.raw($Q, ...)
-          - pattern: $M.raw(f"...{$X}...", ...)
-          - focus-metavariable: $Q
-      - patterns:
-          - pattern: $M.raw($Q, ...)
-          - pattern-either:
-              - pattern: $M.raw($A % $B, ...)
-              - pattern: $M.raw($A.format(...), ...)
-              - pattern: $M.raw($A + $B, ...)
           - focus-metavariable: $Q

@@ -21,7 +21,27 @@ async fn bad_post() {
     let _response = client.post(target).send().await;
 }
 
+async fn bad_put() {
+    let target = std::env::var("WEBHOOK_URL").unwrap_or_default();
+    let client = reqwest::Client::new();
+    // ruleid: cra-rust-reqwest-env-taint
+    let _response = client.put(target).send().await;
+}
+
+async fn bad_delete() {
+    let target = std::env::var("WEBHOOK_URL").unwrap_or_default();
+    let client = reqwest::Client::new();
+    // ruleid: cra-rust-reqwest-env-taint
+    let _response = client.delete(target).send().await;
+}
+
 async fn good() {
     // ok: cra-rust-reqwest-env-taint
     let _response = reqwest::get("https://updates.example.com/manifest.json").await;
+}
+
+async fn good_put() {
+    let client = reqwest::Client::new();
+    // ok: cra-rust-reqwest-env-taint
+    let _response = client.put("https://updates.example.com/report").send().await;
 }

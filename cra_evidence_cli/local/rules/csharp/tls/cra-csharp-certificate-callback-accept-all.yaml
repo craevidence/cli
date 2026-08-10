@@ -11,15 +11,41 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/295.html
         - https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.servercertificatecustomvalidationcallback
+        - https://learn.microsoft.com/en-us/dotnet/api/system.net.security.sslclientauthenticationoptions.remotecertificatevalidationcallback
       category: security
       technology: [csharp, dotnet, tls]
       confidence: VERY HIGH
+      scope: >
+        Detects an accept-all callback attached to the HttpClientHandler,
+        ServicePointManager, or SslClientAuthenticationOptions certificate
+        validation properties. Covers plain assignment, compound assignment,
+        object initializers, expression and block lambdas, anonymous
+        delegates, and the DangerousAcceptAnyServerCertificateValidator field.
+      limitations: >
+        Does not follow method groups, named callback variables, or helper
+        methods that return true, and does not evaluate callbacks defined in
+        another file.
       license: MIT
       author: CRA Evidence
     languages: [csharp]
-    pattern-either:
-      - pattern: $HANDLER.ServerCertificateCustomValidationCallback = ($A, $B, $C, $D) => true
-      - pattern: ServicePointManager.ServerCertificateValidationCallback = ($A, $B, $C, $D) => true
-      - pattern: $HANDLER.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-      - pattern: $HANDLER.ServerCertificateCustomValidationCallback = ($A, $B, $C, $D) => { return true; }
-      - pattern: ServicePointManager.ServerCertificateValidationCallback = ($A, $B, $C, $D) => { return true; }
+    patterns:
+      - pattern-either:
+          - pattern: $X.ServerCertificateCustomValidationCallback = $CALLBACK
+          - pattern: $X.ServerCertificateCustomValidationCallback += $CALLBACK
+          - pattern: ServerCertificateCustomValidationCallback = $CALLBACK
+          - pattern: ServerCertificateCustomValidationCallback += $CALLBACK
+          - pattern: $X.ServerCertificateValidationCallback = $CALLBACK
+          - pattern: $X.ServerCertificateValidationCallback += $CALLBACK
+          - pattern: ServerCertificateValidationCallback = $CALLBACK
+          - pattern: ServerCertificateValidationCallback += $CALLBACK
+          - pattern: $X.RemoteCertificateValidationCallback = $CALLBACK
+          - pattern: $X.RemoteCertificateValidationCallback += $CALLBACK
+          - pattern: RemoteCertificateValidationCallback = $CALLBACK
+          - pattern: RemoteCertificateValidationCallback += $CALLBACK
+      - metavariable-pattern:
+          metavariable: $CALLBACK
+          pattern-either:
+            - pattern: ($A, $B, $C, $D) => true
+            - pattern: ($A, $B, $C, $D) => { return true; }
+            - pattern: delegate { return true; }
+            - pattern: HttpClientHandler.DangerousAcceptAnyServerCertificateValidator

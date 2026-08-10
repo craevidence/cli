@@ -23,8 +23,9 @@ rules:
     mode: taint
     pattern-sources:
       - pattern-either:
-          - pattern: std::env::args().nth(...)
+          - pattern: std::env::args()
           - pattern: std::env::var(...)
+          - pattern: std::env::var_os(...)
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -32,6 +33,8 @@ rules:
               - pattern: Command::new($SHELL).arg("-c").arg($CMD)
               - pattern: std::process::Command::new($SHELL).args(["-c", $CMD])
               - pattern: Command::new($SHELL).args(["-c", $CMD])
+              - pattern: std::process::Command::new($SHELL).args(&["-c", $CMD])
+              - pattern: Command::new($SHELL).args(&["-c", $CMD])
           - metavariable-regex:
               metavariable: $SHELL
               regex: '^("sh"|"bash"|"/bin/sh"|"/bin/bash")$'

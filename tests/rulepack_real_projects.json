@@ -72,10 +72,12 @@
       "scan_path": ".",
       "tracked_source_files": 300,
       "known_engine_exclusions": "One hundred twenty-eight Rust files under tests directories are excluded by the engine; 172 are selected.",
-      "capability_overlap": "No std::env taint source reaches a declared sink. Zero findings do not measure precision or recall.",
+      "capability_overlap": "One finding is expected and was reviewed: axum/src/extract/ws.rs builds the WebSocket accept value with Sha1::default() and the RFC 6455 GUID. SHA-1 is mandated there by the protocol, so the finding is a correct syntactic match and is not actionable. It is the same class of non-actionable result that blocks promotion for the Java digest rule, and it is recorded rather than suppressed because suppressing it would hide the rule's real signal-to-noise on production code.",
       "expected": {
         "files_scanned": 172,
-        "findings_by_rule": {},
+        "findings_by_rule": {
+          "cra-rust-weak-digest": 1
+        },
         "engine_errors_by_kind": {}
       },
       "parse_coverage_complete": true
@@ -126,10 +128,12 @@
       "scan_path": ".",
       "tracked_source_files": 83,
       "known_engine_exclusions": "Forty-eight Python files under tests are excluded by the engine; 35 package and example files are selected.",
-      "capability_overlap": "The framework implementation is not an application using Flask request sources. This run checks default Python rule parser compatibility and obvious false positives.",
+      "capability_overlap": "The framework implementation is not an application using Flask request sources. This run checks default Python rule parser compatibility and obvious false positives. One finding is expected and was reviewed: examples/tutorial/flaskr/__init__.py sets SECRET_KEY=\"dev\" through config.from_mapping and relies on a later from_pyfile call with silent=True to override it. That override is not guaranteed, so a deployment without an instance config runs on a published key. It is a true positive against the rule's stated scope, not a tolerated false positive.",
       "expected": {
         "files_scanned": 35,
-        "findings_by_rule": {},
+        "findings_by_rule": {
+          "cra-python-flask-hardcoded-secret-key": 1
+        },
         "engine_errors_by_kind": {}
       },
       "parse_coverage_complete": true
@@ -165,8 +169,12 @@
       "capability_overlap": "One internal eval call is reported by the broad experimental eval rule. It is a reviewed false-positive signal, not proof of exploitability.",
       "expected": {
         "files_scanned": 356,
-        "findings_by_rule": {"cra-javascript-eval": 1},
-        "engine_errors_by_kind": {"PartialParsing": 1}
+        "findings_by_rule": {
+          "cra-javascript-eval": 1
+        },
+        "engine_errors_by_kind": {
+          "PartialParsing": 1
+        }
       },
       "parse_coverage_complete": false,
       "coverage_blocker": "Pinned Opengrep reports a partial parse in prepared-router.ts."

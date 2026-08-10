@@ -14,17 +14,29 @@ rules:
       category: security
       technology: [csharp, dotnet]
       confidence: VERY HIGH
+      scope: >
+        Detects a Deserialize call on a BinaryFormatter that is constructed
+        inline or assigned to a local in the same function, including the
+        target-typed new and object initializer spellings.
+      limitations: >
+        Does not track formatters held in fields, received as parameters, or
+        constructed through a fully qualified type name, and does not follow
+        deserialization across files.
       license: MIT
       author: CRA Evidence
     languages: [csharp]
     pattern-either:
       - pattern: new BinaryFormatter(...).Deserialize(...)
+      - pattern: new BinaryFormatter(...) { ... }.Deserialize(...)
       - patterns:
           - pattern: $FORMATTER.Deserialize(...)
           - pattern-either:
               - pattern-inside: |
-                  BinaryFormatter $FORMATTER = new BinaryFormatter(...);
+                  BinaryFormatter $FORMATTER = new BinaryFormatter(...) { ... };
                   ...
               - pattern-inside: |
-                  var $FORMATTER = new BinaryFormatter(...);
+                  var $FORMATTER = new BinaryFormatter(...) { ... };
+                  ...
+              - pattern-inside: |
+                  BinaryFormatter $FORMATTER = new(...) { ... };
                   ...

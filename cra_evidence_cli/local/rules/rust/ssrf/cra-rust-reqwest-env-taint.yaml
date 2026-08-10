@@ -15,6 +15,9 @@ rules:
       category: security
       technology: [rust, reqwest, http]
       confidence: HIGH
+      limitations: >
+        The client sinks match HTTP method names on any receiver, so a tainted
+        value passed to a same-named method on another type is reported.
       sanitizer_analysis:
         status: not-modeled
         reason: Safe destination validation requires an allowlist, DNS resolution, and checked control flow.
@@ -32,8 +35,11 @@ rules:
               - pattern: reqwest::get($URL)
               - focus-metavariable: $URL
           - patterns:
-              - pattern: $CLIENT.get($URL)
-              - focus-metavariable: $URL
-          - patterns:
-              - pattern: $CLIENT.post($URL)
+              - pattern-either:
+                  - pattern: $CLIENT.get($URL)
+                  - pattern: $CLIENT.post($URL)
+                  - pattern: $CLIENT.put($URL)
+                  - pattern: $CLIENT.patch($URL)
+                  - pattern: $CLIENT.delete($URL)
+                  - pattern: $CLIENT.head($URL)
               - focus-metavariable: $URL
