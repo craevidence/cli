@@ -25,3 +25,6 @@ rules:
       - pattern: yaml.load($X)
       - pattern: yaml.load($X, ..., Loader=yaml.Loader, ...)
       - pattern: yaml.load($X, ..., Loader=yaml.UnsafeLoader, ...)
+      - pattern: yaml.load($X, yaml.Loader)
+      - pattern: yaml.load($X, yaml.UnsafeLoader)
+      - pattern: yaml.unsafe_load(...)

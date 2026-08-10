@@ -1,6 +1,6 @@
 {
   "files_scanned": 101,
-  "finding_count": 446,
+  "finding_count": 449,
   "findings": [
     {
       "end": [
@@ -3410,6 +3410,19 @@
     },
     {
       "end": [
+        54,
+        41
+      ],
+      "path": "python/flask/cra-python-flask-cors-wildcard-credentials.py",
+      "rule_id": "cra-python-flask-cors-wildcard-credentials",
+      "severity": "WARNING",
+      "start": [
+        54,
+        5
+      ]
+    },
+    {
+      "end": [
         10,
         39
       ],
@@ -5373,6 +5386,32 @@
     },
     {
       "end": [
+        35,
+        44
+      ],
+      "path": "python/deserialization/cra-python-yaml-load.py",
+      "rule_id": "cra-python-yaml-load",
+      "severity": "WARNING",
+      "start": [
+        35,
+        12
+      ]
+    },
+    {
+      "end": [
+        41,
+        38
+      ],
+      "path": "python/deserialization/cra-python-yaml-load.py",
+      "rule_id": "cra-python-yaml-load",
+      "severity": "WARNING",
+      "start": [
+        41,
+        12
+      ]
+    },
+    {
+      "end": [
         8,
         48
       ],
@@ -5861,7 +5900,7 @@
     "cra-python-django-settings-debug-true": 1,
     "cra-python-django-signing-loads-untrusted": 4,
     "cra-python-django-ssl-redirect-disabled": 1,
-    "cra-python-flask-cors-wildcard-credentials": 5,
+    "cra-python-flask-cors-wildcard-credentials": 6,
     "cra-python-flask-debug-true": 4,
     "cra-python-flask-hardcoded-secret-key": 5,
     "cra-python-flask-jsonify-request-reflect-secret": 12,
@@ -5887,7 +5926,7 @@
     "cra-python-taint-eval-exec": 10,
     "cra-python-taint-sql-inject": 8,
     "cra-python-taint-subprocess-shell": 13,
-    "cra-python-yaml-load": 3,
+    "cra-python-yaml-load": 5,
     "cra-rust-file-env-taint": 14,
     "cra-rust-jsonwebtoken-hardcoded-secret": 3,
     "cra-rust-reqwest-env-taint": 3,
