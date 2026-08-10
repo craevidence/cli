@@ -52,4 +52,11 @@ class FileHandler {
         // ok: cra-java-file-request-taint
         return new java.io.File("/srv/app", "config.json");
     }
+
+
+    // Bad: Spring binds the request value to an annotated parameter
+    public void fileSpringParam(@RequestParam("value") String value) throws Exception {
+        // ruleid: cra-java-file-request-taint
+        new java.io.File(value).delete();
+    }
 }

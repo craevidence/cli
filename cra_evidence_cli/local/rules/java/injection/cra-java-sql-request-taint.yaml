@@ -30,6 +30,19 @@ rules:
           - pattern: $REQ.getParameter(...)
           - pattern: $REQ.getHeader(...)
           - pattern: $REQ.getQueryString()
+          - patterns:
+              - pattern-either:
+                  - pattern: |
+                      $RET $M(..., @RequestParam(...) $T $X, ...) { ... }
+                  - pattern: |
+                      $RET $M(..., @RequestParam $T $X, ...) { ... }
+                  - pattern: |
+                      $RET $M(..., @PathVariable(...) $T $X, ...) { ... }
+                  - pattern: |
+                      $RET $M(..., @PathVariable $T $X, ...) { ... }
+                  - pattern: |
+                      $RET $M(..., @RequestBody $T $X, ...) { ... }
+              - focus-metavariable: $X
     pattern-sanitizers:
       - pattern-either:
           - pattern: Integer.parseInt(...)

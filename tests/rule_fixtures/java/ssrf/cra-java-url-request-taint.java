@@ -23,4 +23,11 @@ class FetchHandler {
         // ok: cra-java-url-request-taint
         return new URL("https://updates.example.com/manifest.json");
     }
+
+
+    // Bad: Spring binds the request value to an annotated parameter
+    public void fetchSpringParam(@RequestParam("value") String value) throws Exception {
+        // ruleid: cra-java-url-request-taint
+        new URL(value).openStream();
+    }
 }

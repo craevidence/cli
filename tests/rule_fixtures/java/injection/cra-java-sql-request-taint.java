@@ -62,4 +62,11 @@ class SqlHandler {
         // ok: cra-java-sql-request-taint
         statement.executeQuery("SELECT * FROM users WHERE id = '" + id + "'");
     }
+
+
+    // Bad: Spring binds the request value to an annotated parameter
+    public void querySpringParam(java.sql.Statement statement, @RequestParam("value") String value) throws Exception {
+        // ruleid: cra-java-sql-request-taint
+        statement.executeQuery("SELECT * FROM t WHERE a = '" + value + "'");
+    }
 }

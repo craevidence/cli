@@ -1,6 +1,6 @@
 {
   "files_scanned": 101,
-  "finding_count": 440,
+  "finding_count": 444,
   "findings": [
     {
       "end": [
@@ -1317,6 +1317,19 @@
     },
     {
       "end": [
+        60,
+        31
+      ],
+      "path": "java/path/cra-java-file-request-taint.java",
+      "rule_id": "cra-java-file-request-taint",
+      "severity": "WARNING",
+      "start": [
+        60,
+        26
+      ]
+    },
+    {
+      "end": [
         8,
         20
       ],
@@ -1395,6 +1408,19 @@
     },
     {
       "end": [
+        34,
+        41
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        34,
+        9
+      ]
+    },
+    {
+      "end": [
         16,
         37
       ],
@@ -1447,6 +1473,19 @@
     },
     {
       "end": [
+        70,
+        75
+      ],
+      "path": "java/injection/cra-java-sql-request-taint.java",
+      "rule_id": "cra-java-sql-request-taint",
+      "severity": "WARNING",
+      "start": [
+        70,
+        32
+      ]
+    },
+    {
+      "end": [
         13,
         30
       ],
@@ -1469,6 +1508,19 @@
       "start": [
         19,
         27
+      ]
+    },
+    {
+      "end": [
+        31,
+        22
+      ],
+      "path": "java/ssrf/cra-java-url-request-taint.java",
+      "rule_id": "cra-java-url-request-taint",
+      "severity": "WARNING",
+      "start": [
+        31,
+        17
       ]
     },
     {
@@ -5750,12 +5802,12 @@
     "cra-go-tls-insecure": 4,
     "cra-go-weak-hash": 4,
     "cra-go-wrong-lock-unlock": 5,
-    "cra-java-file-request-taint": 5,
+    "cra-java-file-request-taint": 6,
     "cra-java-hostname-verifier-accept-all": 2,
     "cra-java-objectinputstream-readobject": 2,
-    "cra-java-runtime-exec-request": 2,
-    "cra-java-sql-request-taint": 4,
-    "cra-java-url-request-taint": 2,
+    "cra-java-runtime-exec-request": 3,
+    "cra-java-sql-request-taint": 5,
+    "cra-java-url-request-taint": 3,
     "cra-java-weak-message-digest": 18,
     "cra-java-xxe-doctype-enabled": 4,
     "cra-javascript-eval": 3,

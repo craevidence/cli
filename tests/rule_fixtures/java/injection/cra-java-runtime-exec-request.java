@@ -26,4 +26,11 @@ class CommandHandler {
         // ok: cra-java-runtime-exec-request
         new ProcessBuilder("/usr/bin/lookup", value).start();
     }
+
+
+    // Bad: Spring binds the request value to an annotated parameter
+    public void execSpringParam(@RequestParam("value") String value) throws Exception {
+        // ruleid: cra-java-runtime-exec-request
+        Runtime.getRuntime().exec(value);
+    }
 }
