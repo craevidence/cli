@@ -1,10 +1,11 @@
 rules:
   - id: cra-python-flask-session-cookie-insecure-false
     message: >
-      SESSION_COOKIE_SECURE is explicitly set to False. Without the Secure attribute
-      the session cookie can be transmitted over plaintext HTTP and captured by a
-      network attacker. Set SESSION_COOKIE_SECURE to True in any deployment served
-      over HTTPS so the session cookie is never sent over plaintext connections.
+      A cookie is sent without the Secure attribute: either SESSION_COOKIE_SECURE is
+      set to False, or a response cookie is set with secure=False. Without the Secure
+      attribute the cookie can be transmitted over plaintext HTTP and captured by a
+      network attacker. Set SESSION_COOKIE_SECURE to True and pass secure=True to
+      set_cookie in any deployment served over HTTPS.
     severity: WARNING
     languages: [python]
     metadata:
@@ -33,6 +34,12 @@ rules:
           - focus-metavariable: $VAL
       - patterns:
           - pattern: $APP.config.update(..., SESSION_COOKIE_SECURE=$VAL, ...)
+          - metavariable-pattern:
+              metavariable: $VAL
+              pattern: "False"
+          - focus-metavariable: $VAL
+      - patterns:
+          - pattern: $RESP.set_cookie(..., secure=$VAL, ...)
           - metavariable-pattern:
               metavariable: $VAL
               pattern: "False"

@@ -22,9 +22,33 @@ rules:
         - python
         - flask
       confidence: HIGH
+      scope: >
+        Follows Flask request query, form, cookie, header, and body data, and
+        values read from input(), into the code argument of eval() or exec().
+        Multi-value accessors such as args.getlist and the raw query_string are
+        sources as well. The globals and locals arguments of eval and exec are
+        not sinks, because they do not carry the code text.
+      limitations: >
+        Intrafile taint does not cross file boundaries, so a request value that a
+        helper in another module returns is not reported. Taint is lost through a
+        match statement, through string slicing, and through a value written into
+        a configparser section and read back by key, so a flow that passes any of
+        those is missed. Query and form key names, as opposed to values, are not
+        treated as sources: on OWASP BenchmarkPython that source would add one
+        true finding and one false one, and precision is the more valuable of the
+        two.
       sanitizer_analysis:
-        status: not-modeled
-        reason: Untrusted code text has no general sanitizer; the remediation removes eval or exec.
+        status: partial
+        reason: >
+          One sanitizer is declared: a value validated to be a quoted string
+          literal, meaning it is checked to start and end with the same quote
+          character and to hold no further copy of that character between them.
+          After that check the value can only evaluate to a string constant, so
+          it cannot inject code. All three parts of the check are required. A
+          value checked only for its start and its end can still carry a call
+          between the quotes and is still reported. No other sanitizer is
+          modelled, because untrusted code text has no general escape, and the
+          remediation is to remove eval or exec.
       license: MIT
       author: CRA Evidence
     pattern-sources:
@@ -52,7 +76,34 @@ rules:
       - pattern: flask.request.values[...]
       - pattern: flask.request.headers[...]
       - pattern: flask.request.cookies[...]
+      - pattern: request.args.getlist(...)
+      - pattern: request.form.getlist(...)
+      - pattern: request.values.getlist(...)
+      - pattern: request.headers.getlist(...)
+      - pattern: flask.request.args.getlist(...)
+      - pattern: flask.request.form.getlist(...)
+      - pattern: flask.request.values.getlist(...)
+      - pattern: flask.request.headers.getlist(...)
+      - pattern: request.query_string
+      - pattern: flask.request.query_string
+      - pattern: request.get_json(...)
+      - pattern: flask.request.get_json(...)
       - pattern: input(...)
+    pattern-sanitizers:
+      - by-side-effect: true
+        patterns:
+          - pattern: $V.startswith($Q)
+          - focus-metavariable: $V
+          - pattern-inside: |
+              if <... $V.endswith($Q) ...>:
+                  ...
+          - pattern-either:
+              - pattern-inside: |
+                  if <... $Q in $V[1:-1] ...>:
+                      ...
+              - pattern-inside: |
+                  if <... $Q not in $V[1:-1] ...>:
+                      ...
     pattern-sinks:
       - patterns:
           - pattern: eval($CODE, ...)

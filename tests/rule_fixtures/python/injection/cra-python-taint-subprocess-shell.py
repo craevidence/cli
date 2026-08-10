@@ -113,3 +113,49 @@ def bad_subscript_form_to_shell():
     command = request.form["cmd"]
     # ruleid: cra-python-taint-subprocess-shell
     subprocess.run(command, shell=True)
+
+
+# Bad: the shell is started through the argument list rather than shell=True
+def bad_shell_argv_literal():
+    cmd = request.args.get("cmd")
+    # ruleid: cra-python-taint-subprocess-shell
+    subprocess.run(["/bin/sh", "-c", cmd])
+
+
+# Bad: the same shell argument list built with append
+def bad_shell_argv_appended():
+    cmd = request.form.get("cmd")
+    argv = []
+    argv.append("sh")
+    argv.append("-c")
+    # ruleid: cra-python-taint-subprocess-shell
+    argv.append(f"echo {cmd}")
+    subprocess.run(argv)
+
+
+# Bad: getoutput always runs the command through a shell
+def bad_getoutput():
+    cmd = request.args.get("cmd")
+    # ruleid: cra-python-taint-subprocess-shell
+    subprocess.getoutput(cmd)
+
+
+# Bad: multi-value accessor is a source
+def bad_run_from_getlist():
+    values = request.args.getlist("cmd")
+    # ruleid: cra-python-taint-subprocess-shell
+    subprocess.run(values[0], shell=True)
+
+
+# Bad: the form key name is chosen by the client
+def bad_run_from_form_key():
+    for name in request.form.keys():
+        # ruleid: cra-python-taint-subprocess-shell
+        subprocess.run(name, shell=True)
+
+
+# Safe: -c belongs to a program that is not a shell
+def ok_non_shell_dash_c():
+    value = request.args.get("value")
+    # ok: cra-python-taint-subprocess-shell
+    subprocess.run(["git", "-c", value, "status"])

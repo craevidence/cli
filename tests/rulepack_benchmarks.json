@@ -354,9 +354,9 @@
             "tn": 103
           },
           "78": {
-            "tp": 7,
+            "tp": 13,
             "fp": 7,
-            "fn": 6,
+            "fn": 0,
             "tn": 0
           },
           "79": {
@@ -372,10 +372,10 @@
             "tn": 11
           },
           "95": {
-            "tp": 3,
-            "fp": 4,
-            "fn": 17,
-            "tn": 29
+            "tp": 8,
+            "fp": 0,
+            "fn": 12,
+            "tn": 33
           },
           "502": {
             "tp": 18,
@@ -384,15 +384,15 @@
             "tn": 24
           },
           "601": {
-            "tp": 6,
-            "fp": 5,
-            "fn": 7,
-            "tn": 16
+            "tp": 9,
+            "fp": 2,
+            "fn": 4,
+            "tn": 19
           },
           "614": {
-            "tp": 0,
+            "tp": 24,
             "fp": 0,
-            "fn": 24,
+            "fn": 0,
             "tn": 15
           }
         },
@@ -495,10 +495,10 @@
           },
           "cra-python-flask-open-redirect": {
             "601": {
-              "tp": 6,
-              "fp": 5,
-              "fn": 7,
-              "tn": 16
+              "tp": 9,
+              "fp": 2,
+              "fn": 4,
+              "tn": 19
             }
           },
           "cra-python-flask-send-file-path-traversal": {
@@ -511,9 +511,9 @@
           },
           "cra-python-flask-session-cookie-insecure-false": {
             "614": {
-              "tp": 0,
+              "tp": 24,
               "fp": 0,
-              "fn": 24,
+              "fn": 0,
               "tn": 15
             }
           },
@@ -567,18 +567,18 @@
           },
           "cra-python-subprocess-shell": {
             "78": {
-              "tp": 7,
+              "tp": 13,
               "fp": 7,
-              "fn": 6,
+              "fn": 0,
               "tn": 0
             }
           },
           "cra-python-taint-eval-exec": {
             "95": {
-              "tp": 3,
-              "fp": 4,
-              "fn": 17,
-              "tn": 29
+              "tp": 8,
+              "fp": 0,
+              "fn": 12,
+              "tn": 33
             }
           },
           "cra-python-taint-sql-inject": {
@@ -591,9 +591,9 @@
           },
           "cra-python-taint-subprocess-shell": {
             "78": {
-              "tp": 2,
+              "tp": 9,
               "fp": 0,
-              "fn": 11,
+              "fn": 4,
               "tn": 7
             }
           },
@@ -608,7 +608,7 @@
         }
       },
       "promotion_ready": false,
-      "promotion_blocker": "First external measurement of the default tier, and it does not support promotion. Three of the eight applicable CWEs score zero recall: path traversal 0 of 65, XSS 0 of 31, and insecure session cookie 0 of 24. Precision is between 43 and 60 percent for command injection, eval, deserialization and open redirect. Only deserialization reaches full recall, at 60 percent precision. The corpus carries no hardcoded secret, SSRF or Flask configuration cases, so those rules remain unmeasured.",
+      "promotion_blocker": "Measured, and mixed. Three rules meet an 80 percent precision bar: the two taint rules at 100 percent and the Flask open redirect rule at 82 percent. Command injection reaches full recall at 65 percent precision, capped because the pattern rule carries no data flow. Path traversal, XSS and Django-only rules score zero because the corpus is a Flask application that uses none of their sinks, which is a scope boundary rather than a defect. Deserialization sits at its corpus ceiling: the 12 remaining false positives keep a sink byte-identical to a true positive and differ only by dead-code dataflow.",
       "cwe_aliases": {
         "94": 95
       },

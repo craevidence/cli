@@ -24,21 +24,68 @@ rules:
         - python
         - flask
       confidence: MEDIUM
+      scope: >
+        Follows Flask request query, form, cookie, header, referrer, and raw
+        query-string data into the location argument of redirect() through flows
+        supported within one file.
+      limitations: >
+        Intrafile taint is path-insensitive, so a target that a constant branch
+        or a container index makes unreachable at runtime is still reported.
+        Taint is not carried through slice expressions such as value[4:-17], nor
+        through container objects such as configparser, so a target assembled
+        that way is not reported. Values that reach redirect() from another
+        module are not reported either.
+      sanitizer_analysis:
+        status: modeled
+        reason: >
+          A target produced by url_for is server-controlled and is not reported.
+          A target whose parsed netloc or hostname is tested for membership in an
+          allowlist is treated as validated for the whole enclosing function,
+          which also suppresses a use of that value placed before the check.
+          Other validation shapes, such as a startswith test on a path prefix or
+          a helper that returns a boolean, are not recognised and are still
+          reported.
       license: MIT
       author: CRA Evidence
     pattern-sources:
       - pattern: request.args
       - pattern: request.form
       - pattern: request.values
+      - pattern: request.cookies
+      - pattern: request.query_string
       - pattern: request.referrer
       - pattern: request.headers
       - pattern: flask.request.args
       - pattern: flask.request.form
       - pattern: flask.request.values
+      - pattern: flask.request.cookies
+      - pattern: flask.request.query_string
       - pattern: flask.request.referrer
       - pattern: flask.request.headers
     pattern-sanitizers:
       - pattern: flask.url_for(...)
+      - patterns:
+          - pattern: $V
+          - pattern-either:
+              - pattern-inside: |
+                  def $F(...):
+                      ...
+                      $U = urlparse($V)
+                      ...
+                      if <... $U.$HOST not in $ALLOWED ...>:
+                          ...
+                      ...
+              - pattern-inside: |
+                  def $F(...):
+                      ...
+                      $U = urllib.parse.urlparse($V)
+                      ...
+                      if <... $U.$HOST not in $ALLOWED ...>:
+                          ...
+                      ...
+          - metavariable-regex:
+              metavariable: $HOST
+              regex: ^(netloc|hostname)$
     pattern-sinks:
       - patterns:
           - pattern-either:

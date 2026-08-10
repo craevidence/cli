@@ -86,3 +86,46 @@ def bad_subscript_args_to_eval():
     expression = request.args["expr"]
     # ruleid: cra-python-taint-eval-exec
     eval(expression)
+
+
+# Safe: validated to be a quoted string literal, so it can only evaluate to a
+# string constant
+def ok_eval_quoted_literal_guard():
+    code = request.args.get("expr")
+    if not code.startswith("'") or not code.endswith("'") or "'" in code[1:-1]:
+        return "not a literal"
+    # ok: cra-python-taint-eval-exec
+    eval(code)
+
+
+# Bad: the ends are checked but a quote between them can still close the literal
+# and start a call
+def bad_eval_partial_quote_guard():
+    code = request.args.get("expr")
+    if not code.startswith("'") or not code.endswith("'"):
+        return "not a literal"
+    # ruleid: cra-python-taint-eval-exec
+    eval(code)
+
+
+# Bad: a prefix check leaves the rest of the value free
+def bad_eval_prefix_guard():
+    code = request.args.get("expr")
+    if not code.startswith("safe_"):
+        return "rejected"
+    # ruleid: cra-python-taint-eval-exec
+    eval(code)
+
+
+# Bad: multi-value accessor is a source
+def bad_eval_from_getlist():
+    values = request.args.getlist("expr")
+    # ruleid: cra-python-taint-eval-exec
+    eval(values[0])
+
+
+# Bad: the raw query string is a source
+def bad_eval_from_query_string():
+    raw = request.query_string
+    # ruleid: cra-python-taint-eval-exec
+    exec(raw)

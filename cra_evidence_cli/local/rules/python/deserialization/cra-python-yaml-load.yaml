@@ -18,6 +18,23 @@ rules:
       technology:
         - python
       confidence: HIGH
+      scope: >
+        Reports yaml.load with no Loader argument, yaml.load with Loader set to
+        yaml.Loader or yaml.UnsafeLoader, and yaml.unsafe_load. Those loaders
+        construct arbitrary Python objects, so the call itself is the finding
+        and the rule does not try to establish where the document came from.
+      limitations: >
+        Because the origin of the document is not analysed, a call on YAML the
+        application ships itself is reported the same way as a call on request
+        data. A loader selected through a variable or a helper is not resolved,
+        so yaml.load(text, Loader=chosen) is not reported.
+      sanitizer_analysis:
+        status: not-applicable
+        reason: >
+          The safe outcome is a different loader rather than a transformation of
+          the input, and safe_load and SafeLoader are excluded by the patterns
+          themselves. No construct applied to the document is treated as
+          neutralising an unsafe loader.
       license: MIT
       author: CRA Evidence
     languages: [python]

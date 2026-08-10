@@ -1,6 +1,6 @@
 {
   "files_scanned": 101,
-  "finding_count": 502,
+  "finding_count": 525,
   "findings": [
     {
       "end": [
@@ -4294,67 +4294,106 @@
     },
     {
       "end": [
-        12,
+        14,
         27
       ],
       "path": "python/flask/cra-python-flask-open-redirect.py",
       "rule_id": "cra-python-flask-open-redirect",
       "severity": "WARNING",
       "start": [
-        12,
+        14,
         21
       ]
     },
     {
       "end": [
-        18,
+        20,
         27
       ],
       "path": "python/flask/cra-python-flask-open-redirect.py",
       "rule_id": "cra-python-flask-open-redirect",
       "severity": "WARNING",
       "start": [
-        18,
+        20,
         21
       ]
     },
     {
       "end": [
-        24,
+        26,
         31
       ],
       "path": "python/flask/cra-python-flask-open-redirect.py",
       "rule_id": "cra-python-flask-open-redirect",
       "severity": "WARNING",
       "start": [
-        24,
+        26,
         27
       ]
     },
     {
       "end": [
-        29,
+        31,
         57
       ],
       "path": "python/flask/cra-python-flask-open-redirect.py",
       "rule_id": "cra-python-flask-open-redirect",
       "severity": "WARNING",
       "start": [
-        29,
+        31,
         27
       ]
     },
     {
       "end": [
-        44,
+        46,
         38
       ],
       "path": "python/flask/cra-python-flask-open-redirect.py",
       "rule_id": "cra-python-flask-open-redirect",
       "severity": "WARNING",
       "start": [
-        44,
+        46,
         21
+      ]
+    },
+    {
+      "end": [
+        52,
+        33
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        52,
+        27
+      ]
+    },
+    {
+      "end": [
+        58,
+        33
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        58,
+        27
+      ]
+    },
+    {
+      "end": [
+        85,
+        33
+      ],
+      "path": "python/flask/cra-python-flask-open-redirect.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        85,
+        27
       ]
     },
     {
@@ -4628,6 +4667,45 @@
       "start": [
         15,
         45
+      ]
+    },
+    {
+      "end": [
+        31,
+        61
+      ],
+      "path": "python/flask/cra-python-flask-session-cookie-insecure-false.py",
+      "rule_id": "cra-python-flask-session-cookie-insecure-false",
+      "severity": "WARNING",
+      "start": [
+        31,
+        56
+      ]
+    },
+    {
+      "end": [
+        42,
+        21
+      ],
+      "path": "python/flask/cra-python-flask-session-cookie-insecure-false.py",
+      "rule_id": "cra-python-flask-session-cookie-insecure-false",
+      "severity": "WARNING",
+      "start": [
+        42,
+        16
+      ]
+    },
+    {
+      "end": [
+        51,
+        71
+      ],
+      "path": "python/flask/cra-python-flask-session-cookie-insecure-false.py",
+      "rule_id": "cra-python-flask-session-cookie-insecure-false",
+      "severity": "WARNING",
+      "start": [
+        51,
+        66
       ]
     },
     {
@@ -5308,6 +5386,45 @@
     },
     {
       "end": [
+        49,
+        30
+      ],
+      "path": "python/injection/cra-python-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        49,
+        5
+      ]
+    },
+    {
+      "end": [
+        55,
+        43
+      ],
+      "path": "python/injection/cra-python-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        55,
+        5
+      ]
+    },
+    {
+      "end": [
+        64,
+        21
+      ],
+      "path": "python/injection/cra-python-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        64,
+        5
+      ]
+    },
+    {
+      "end": [
         15,
         40
       ],
@@ -5451,6 +5568,71 @@
     },
     {
       "end": [
+        122,
+        43
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        122,
+        5
+      ]
+    },
+    {
+      "end": [
+        132,
+        31
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        132,
+        5
+      ]
+    },
+    {
+      "end": [
+        140,
+        30
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        140,
+        5
+      ]
+    },
+    {
+      "end": [
+        147,
+        42
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        147,
+        5
+      ]
+    },
+    {
+      "end": [
+        154,
+        41
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-subprocess-shell",
+      "severity": "WARNING",
+      "start": [
+        154,
+        9
+      ]
+    },
+    {
+      "end": [
         12,
         20
       ],
@@ -5576,6 +5758,58 @@
       "severity": "ERROR",
       "start": [
         88,
+        10
+      ]
+    },
+    {
+      "end": [
+        108,
+        14
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        108,
+        10
+      ]
+    },
+    {
+      "end": [
+        117,
+        14
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        117,
+        10
+      ]
+    },
+    {
+      "end": [
+        124,
+        19
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        124,
+        10
+      ]
+    },
+    {
+      "end": [
+        131,
+        13
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        131,
         10
       ]
     },
@@ -5850,6 +6084,71 @@
       "start": [
         115,
         20
+      ]
+    },
+    {
+      "end": [
+        122,
+        41
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        122,
+        38
+      ]
+    },
+    {
+      "end": [
+        132,
+        30
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        132,
+        17
+      ]
+    },
+    {
+      "end": [
+        140,
+        29
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        140,
+        26
+      ]
+    },
+    {
+      "end": [
+        147,
+        29
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        147,
+        20
+      ]
+    },
+    {
+      "end": [
+        154,
+        28
+      ],
+      "path": "python/injection/cra-python-taint-subprocess-shell.py",
+      "rule_id": "cra-python-taint-subprocess-shell",
+      "severity": "ERROR",
+      "start": [
+        154,
+        24
       ]
     },
     {
@@ -6594,12 +6893,12 @@
     "cra-python-flask-hardcoded-secret-key": 9,
     "cra-python-flask-jsonify-request-reflect-secret": 12,
     "cra-python-flask-markup-untrusted": 7,
-    "cra-python-flask-open-redirect": 5,
+    "cra-python-flask-open-redirect": 8,
     "cra-python-flask-plaintext-password-compare": 7,
     "cra-python-flask-render-template-string-ssti": 5,
     "cra-python-flask-send-file-path-traversal": 5,
     "cra-python-flask-session-cookie-httponly-false": 2,
-    "cra-python-flask-session-cookie-insecure-false": 2,
+    "cra-python-flask-session-cookie-insecure-false": 5,
     "cra-python-flask-wtf-csrf-disabled": 2,
     "cra-python-jwt-decode-alg-none": 5,
     "cra-python-jwt-decode-missing-algorithms": 2,
@@ -6611,10 +6910,10 @@
     "cra-python-sqlalchemy-literal-column-dynamic": 6,
     "cra-python-sqlalchemy-order-by-text-interpolation": 5,
     "cra-python-sqlalchemy-text-interpolation": 7,
-    "cra-python-subprocess-shell": 15,
-    "cra-python-taint-eval-exec": 10,
+    "cra-python-subprocess-shell": 23,
+    "cra-python-taint-eval-exec": 14,
     "cra-python-taint-sql-inject": 8,
-    "cra-python-taint-subprocess-shell": 13,
+    "cra-python-taint-subprocess-shell": 18,
     "cra-python-yaml-load": 5,
     "cra-rust-file-env-taint": 14,
     "cra-rust-jsonwebtoken-hardcoded-secret": 5,

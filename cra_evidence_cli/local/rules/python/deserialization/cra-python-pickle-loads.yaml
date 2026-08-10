@@ -19,6 +19,22 @@ rules:
       technology:
         - python
       confidence: HIGH
+      scope: >
+        Reports every pickle.loads and pickle.load call. The pickle format
+        executes arbitrary constructors on load, so the call itself is the
+        finding and the rule does not try to establish where the payload came
+        from.
+      limitations: >
+        Because the origin of the payload is not analysed, a call on data the
+        application fully controls, such as a constant or a file it wrote
+        itself, is reported the same way as a call on request data. Review is
+        needed to decide whether the input can be influenced by an attacker.
+      sanitizer_analysis:
+        status: not-applicable
+        reason: >
+          There is no sanitizer for pickle input. Signing or encrypting the
+          payload limits who can supply it but does not make loading it safe,
+          so no construct is treated as neutralising the call.
       license: MIT
       author: CRA Evidence
     languages: [python]

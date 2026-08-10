@@ -1,9 +1,13 @@
 rules:
   - id: cra-python-subprocess-shell
     message: >
-      subprocess called with shell=True. When the command string includes
-      untrusted input this can allow OS command injection. Pass arguments as a
-      list and omit shell=True unless the shell is strictly required.
+      subprocess runs a command through a shell and the command string is
+      assembled at runtime rather than fixed in the source. This happens with
+      shell=True, with the shell APIs getoutput and getstatusoutput, and with an
+      argument list that starts a shell and passes the command after -c. When any
+      part of that string comes from untrusted input the shell interprets
+      metacharacters and the call becomes OS command injection. Pass the program
+      and its arguments as a list without a shell.
     severity: WARNING
     metadata:
       tier: default
@@ -12,13 +16,80 @@ rules:
       owasp:
         - "A03:2021 - Injection"
       references:
+        - https://docs.python.org/3/library/subprocess.html#security-considerations
         - https://cwe.mitre.org/data/definitions/78.html
         - https://owasp.org/Top10/A03_2021-Injection/
       category: security
       technology:
         - python
       confidence: HIGH
+      scope: >
+        Reports the shell invocation itself, in three shapes: shell=True on any
+        subprocess call, subprocess.getoutput and subprocess.getstatusoutput,
+        which always use a shell, and an argument list whose first element is a
+        shell binary followed by -c or /c, either written as a list literal or
+        built with append. A command written entirely as a string literal is not
+        reported, because nothing can be injected into it.
+      limitations: >
+        This rule does not track data flow, so it cannot tell whether the runtime
+        part of the command carries untrusted input. On OWASP BenchmarkPython it
+        reports 13 of the 13 command injection cases and also reports 7 cases the
+        corpus labels safe, where a request value is assigned into a container and
+        a fixed value is read back out, which is 65 percent precision. The data
+        flow judgement belongs to cra-python-taint-subprocess-shell, which reports
+        the same corpus at 100 percent precision. Treat a finding here as a
+        hardening item: the shell is avoidable in almost every case.
+      sanitizer_analysis:
+        status: not-modeled
+        reason: >
+          No sanitizer is declared, because this rule does not follow a value. A
+          command string escaped with shlex.quote is still reported, since the
+          rule cannot see the escaping and the shell is still avoidable. The
+          remediation is to drop the shell rather than to escape for it.
       license: MIT
       author: CRA Evidence
     languages: [python]
-    pattern: subprocess.$FUNC(..., shell=True, ...)
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: subprocess.$FUNC(..., shell=True, ...)
+              - pattern-not: subprocess.$FUNC("...", ..., shell=True, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern: subprocess.getoutput($CMD, ...)
+                  - pattern: subprocess.getstatusoutput($CMD, ...)
+              - pattern-not: subprocess.getoutput("...", ...)
+              - pattern-not: subprocess.getstatusoutput("...", ...)
+          - patterns:
+              - pattern-either:
+                  - pattern: subprocess.$FUNC([$SHELL, "-c", $CMD, ...], ...)
+                  - pattern: subprocess.$FUNC([$SHELL, "/c", $CMD, ...], ...)
+              - pattern-not: subprocess.$FUNC([$SHELL2, $FLAG, "...", ...], ...)
+              - metavariable-regex:
+                  metavariable: $SHELL
+                  regex: ^["']?([A-Za-z]:)?([^"']*[/\\])?(sh|bash|zsh|dash|ksh|ash|csh|tcsh|cmd|cmd\.exe|command\.com|powershell|powershell\.exe|pwsh|pwsh\.exe)["']?$
+          - patterns:
+              - pattern: $ARGV.append($CMD)
+              - pattern-not: $ARGV.append("...")
+              - pattern-either:
+                  - pattern-inside: |
+                      def $F(...):
+                          ...
+                          $ARGV.append($SHELL)
+                          ...
+                          $ARGV.append("-c")
+                          ...
+                          subprocess.$FUNC($ARGV, ...)
+                          ...
+                  - pattern-inside: |
+                      def $F(...):
+                          ...
+                          $ARGV.append($SHELL)
+                          ...
+                          $ARGV.append("/c")
+                          ...
+                          subprocess.$FUNC($ARGV, ...)
+                          ...
+              - metavariable-regex:
+                  metavariable: $SHELL
+                  regex: ^["']?([A-Za-z]:)?([^"']*[/\\])?(sh|bash|zsh|dash|ksh|ash|csh|tcsh|cmd|cmd\.exe|command\.com|powershell|powershell\.exe|pwsh|pwsh\.exe)["']?$

@@ -2,10 +2,12 @@ rules:
   - id: cra-python-taint-subprocess-shell
     mode: taint
     message: >
-      Untrusted input flows into a shell command through subprocess with
-      shell=True, os.system(), or os.popen(). This allows OS command injection.
-      Pass arguments as a list without a shell, or apply strict validation before
-      constructing the command string.
+      Untrusted input flows into a command that a shell interprets: subprocess
+      with shell=True, subprocess.getoutput or getstatusoutput, os.system,
+      os.popen, or an argument list that starts a shell and passes the command
+      after -c. The shell treats metacharacters in that string as syntax, so this
+      allows OS command injection. Pass the program and its arguments as a list
+      without a shell.
     severity: ERROR
     languages: [python]
     metadata:
@@ -22,9 +24,31 @@ rules:
         - python
         - flask
       confidence: HIGH
+      scope: >
+        Follows Flask request query, form, cookie, header, and body data, and
+        values read from input(), into a command a shell interprets. Sinks are
+        shell=True on any subprocess call, subprocess.getoutput and
+        getstatusoutput, os.system and os.popen, and the command element of an
+        argument list whose first element is a shell binary followed by -c or /c,
+        whether that list is written as a literal or built with append. Query and
+        form key names are sources as well as values, because a client chooses
+        both.
+      limitations: >
+        Intrafile taint does not cross file boundaries, so a request value that a
+        helper in another module returns is not reported. Taint is lost through a
+        match statement and through string slicing, so a flow that passes either
+        is missed. A list passed to subprocess without a shell is not a sink, even
+        when it carries request data, because the operating system hands those
+        elements to the program as arguments rather than to a shell.
       sanitizer_analysis:
         status: not-modeled
-        reason: The remediation removes shell mode or applies application-specific validation before changing command structure.
+        reason: >
+          No sanitizer is declared. shlex.quote is a real escape for a single
+          argument, but it does not make a command string safe when the untrusted
+          value spans more than one argument or when it lands outside quotes, and
+          the remediation is to drop the shell rather than to escape for it, so a
+          quoted value is still reported. Allowlist checks applied to the value
+          before the command is built are not recognised either.
       license: MIT
       author: CRA Evidence
     pattern-sources:
@@ -52,11 +76,64 @@ rules:
       - pattern: flask.request.values[...]
       - pattern: flask.request.headers[...]
       - pattern: flask.request.cookies[...]
+      - pattern: request.args.getlist(...)
+      - pattern: request.form.getlist(...)
+      - pattern: request.values.getlist(...)
+      - pattern: request.headers.getlist(...)
+      - pattern: flask.request.args.getlist(...)
+      - pattern: flask.request.form.getlist(...)
+      - pattern: flask.request.values.getlist(...)
+      - pattern: flask.request.headers.getlist(...)
+      - pattern: request.args.keys()
+      - pattern: request.form.keys()
+      - pattern: request.values.keys()
+      - pattern: flask.request.args.keys()
+      - pattern: flask.request.form.keys()
+      - pattern: flask.request.values.keys()
+      - pattern: request.query_string
+      - pattern: flask.request.query_string
+      - pattern: request.get_json(...)
+      - pattern: flask.request.get_json(...)
       - pattern: input(...)
     pattern-sinks:
       - patterns:
           - pattern-either:
               - pattern: subprocess.$FUNC($CMD, ..., shell=True, ...)
+              - pattern: subprocess.getoutput($CMD, ...)
+              - pattern: subprocess.getstatusoutput($CMD, ...)
               - pattern: os.system($CMD)
               - pattern: os.popen($CMD, ...)
           - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: subprocess.$FUNC([$SHELL, "-c", $CMD, ...], ...)
+              - pattern: subprocess.$FUNC([$SHELL, "/c", $CMD, ...], ...)
+          - focus-metavariable: $CMD
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: ^["']?([A-Za-z]:)?([^"']*[/\\])?(sh|bash|zsh|dash|ksh|ash|csh|tcsh|cmd|cmd\.exe|command\.com|powershell|powershell\.exe|pwsh|pwsh\.exe)["']?$
+      - patterns:
+          - pattern: $ARGV.append($CMD)
+          - focus-metavariable: $CMD
+          - pattern-either:
+              - pattern-inside: |
+                  def $F(...):
+                      ...
+                      $ARGV.append($SHELL)
+                      ...
+                      $ARGV.append("-c")
+                      ...
+                      subprocess.$FUNC($ARGV, ...)
+                      ...
+              - pattern-inside: |
+                  def $F(...):
+                      ...
+                      $ARGV.append($SHELL)
+                      ...
+                      $ARGV.append("/c")
+                      ...
+                      subprocess.$FUNC($ARGV, ...)
+                      ...
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: ^["']?([A-Za-z]:)?([^"']*[/\\])?(sh|bash|zsh|dash|ksh|ash|csh|tcsh|cmd|cmd\.exe|command\.com|powershell|powershell\.exe|pwsh|pwsh\.exe)["']?$
