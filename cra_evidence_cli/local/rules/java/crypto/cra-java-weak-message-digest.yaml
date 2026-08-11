@@ -6,7 +6,7 @@ rules:
       a password-specific KDF for passwords.
     severity: WARNING
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-328: Use of Weak Hash"]
       owasp: ["A02:2021 - Cryptographic Failures"]
       references:

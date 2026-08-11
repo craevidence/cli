@@ -7,7 +7,7 @@ rules:
       intentional. Use SHA-256 or stronger for security-sensitive hashing.
     severity: WARNING
     metadata:
-      tier: experimental
+      tier: default
       cwe:
         - "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
       owasp:
@@ -15,19 +15,50 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/327.html
         - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+        - https://pkg.go.dev/crypto/md5
+        - https://pkg.go.dev/crypto/sha1
       category: security
       technology:
         - go
       confidence: MEDIUM
+      scope: >
+        Reports a call to md5.New, md5.Sum, sha1.New, or sha1.Sum written with
+        the package qualifier. The call site alone decides the finding: what the
+        digest is later used for is not examined, so a checksum with no security
+        role is reported the same way a signature digest is. A call where the
+        qualifier has been rebound to a local variable of the same name is not
+        reported, because the call is then a method on that value rather than
+        the crypto package function.
       limitations: >
         Matches the qualified package calls only. A file that dot-imports
         crypto/md5 or crypto/sha1 and calls New() or Sum() without a qualifier
-        is not matched.
+        is not matched, and neither is the crypto.MD5.New or crypto.SHA1.New
+        spelling that reaches the same algorithms through the crypto.Hash
+        registry. Package names are matched as written rather than resolved to
+        an import path, so a third-party package named md5 or sha1 is treated
+        the same as the standard library one. Weak digests other than MD5 and
+        SHA-1, such as MD4 and RIPEMD-160, are outside this rule.
       license: MIT
       author: CRA Evidence
     languages: [go]
-    pattern-either:
-      - pattern: md5.New()
-      - pattern: md5.Sum(...)
-      - pattern: sha1.New()
-      - pattern: sha1.Sum(...)
+    patterns:
+      - pattern-either:
+          - pattern: md5.New()
+          - pattern: md5.Sum(...)
+          - pattern: sha1.New()
+          - pattern: sha1.Sum(...)
+      # md5 and sha1 are ordinary identifiers. A local of either name shadows
+      # the package for the rest of its scope, and the call is then a method on
+      # that value, which this rule makes no claim about.
+      - pattern-not-inside: |
+          md5 := $V
+          ...
+      - pattern-not-inside: |
+          sha1 := $V
+          ...
+      - pattern-not-inside: |
+          var md5 $T = $V
+          ...
+      - pattern-not-inside: |
+          var sha1 $T = $V
+          ...

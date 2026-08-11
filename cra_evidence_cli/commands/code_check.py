@@ -49,35 +49,40 @@ _HONEST_NOTE = (
     "finding metadata is sent to CRA Evidence."
 )
 
-_DEFAULT_ZERO_FILES_REASON = (
-    "No files matched the enabled default rules. Experimental rules for Go, "
-    "JavaScript, TypeScript, Java, C, C++, Rust, PHP, and C# are disabled; use "
-    "--include-experimental to enable them."
-)
+_LANGUAGE_DISPLAY_NAMES = {
+    "c": "C",
+    "cpp": "C++",
+    "csharp": "C#",
+    "go": "Go",
+    "java": "Java",
+    "javascript": "JavaScript and TypeScript",
+    "php": "PHP",
+    "python": "Python",
+    "rust": "Rust",
+}
 
-_EXPERIMENTAL_EXTENSIONS = frozenset(
-    {
-        ".go",
-        ".js",
-        ".jsx",
-        ".ts",
-        ".tsx",
-        ".mjs",
-        ".cjs",
-        ".mts",
-        ".cts",
-        ".java",
-        ".c",
-        ".h",
-        ".cc",
-        ".cpp",
-        ".cxx",
-        ".hpp",
-        ".rs",
-        ".php",
-        ".cs",
-    }
-)
+
+def _default_zero_files_reason(inventory) -> str:
+    """Name only the languages the pack actually leaves to experimental rules.
+
+    Derived from the inventory rather than written out, so promoting a rule to
+    the default tier cannot leave this text claiming its language is disabled.
+    """
+    names = [
+        _LANGUAGE_DISPLAY_NAMES.get(language, language)
+        for language in inventory.experimental_only_languages
+    ]
+    if not names:
+        return "No files matched the enabled default rules."
+    if len(names) == 1:
+        listed = names[0]
+    else:
+        listed = ", ".join(names[:-1]) + ", and " + names[-1]
+    return (
+        "No files matched the enabled default rules. Experimental rules for "
+        f"{listed} are disabled; use --include-experimental to enable them."
+    )
+
 _IGNORED_DIRECTORY_NAMES = frozenset(
     {
         "tests",
@@ -121,7 +126,17 @@ def _code_advisory_block() -> dict:
     return {**advisory_block(), "code_check": _HONEST_NOTE}
 
 
-def _has_experimental_source(path: Path) -> bool:
+def _experimental_only_extensions(inventory) -> frozenset[str]:
+    """Extensions whose languages the pack covers with experimental rules only."""
+    languages = set(inventory.experimental_only_languages)
+    return frozenset(
+        extension
+        for extension, (_, groups) in _EXTENSION_LANGUAGE_GROUPS.items()
+        if languages.issuperset(groups)
+    )
+
+
+def _has_experimental_source(path: Path, extensions: frozenset[str]) -> bool:
     candidates = [path] if path.is_file() else path.rglob("*")
     try:
         for candidate in candidates:
@@ -133,7 +148,7 @@ def _has_experimental_source(path: Path) -> bool:
                 relative_parts = candidate.parts
             if _IGNORED_DIRECTORY_NAMES.intersection(relative_parts):
                 continue
-            if candidate.suffix.lower() in _EXPERIMENTAL_EXTENSIONS:
+            if candidate.suffix.lower() in extensions:
                 return True
     except OSError:
         return False
@@ -721,9 +736,9 @@ def code_check(
             report.failure_reason == "Opengrep scanned zero files"
             and inventory is not None
             and not include_experimental
-            and _has_experimental_source(path)
+            and _has_experimental_source(path, _experimental_only_extensions(inventory))
         ):
-            _replace_failure_reason(report, _DEFAULT_ZERO_FILES_REASON)
+            _replace_failure_reason(report, _default_zero_files_reason(inventory))
     # Show the bundled pack version when the bundled rules were used.
     if rules_path is None:
         report.pack_version = PACK_VERSION

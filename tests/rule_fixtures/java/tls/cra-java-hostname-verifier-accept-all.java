@@ -3,8 +3,16 @@ import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLSession;
 
 class AcceptAllHostnames implements HostnameVerifier {
+    // ruleid: cra-java-hostname-verifier-accept-all
     public boolean verify(String hostname, SSLSession session) {
-        // ruleid: cra-java-hostname-verifier-accept-all
+        return true;
+    }
+}
+
+class AcceptAllAfterLogging implements HostnameVerifier {
+    // ruleid: cra-java-hostname-verifier-accept-all
+    public boolean verify(String hostname, SSLSession session) {
+        System.out.println("skipping hostname check for " + hostname);
         return true;
     }
 }
@@ -29,8 +37,8 @@ class DefaultVerifierSetter {
 
     void badAnonymousInnerClass(HttpsURLConnection connection) {
         connection.setHostnameVerifier(new HostnameVerifier() {
+            // ruleid: cra-java-hostname-verifier-accept-all
             public boolean verify(String hostname, SSLSession session) {
-                // ruleid: cra-java-hostname-verifier-accept-all
                 return true;
             }
         });
@@ -38,10 +46,58 @@ class DefaultVerifierSetter {
 
     void okAnonymousInnerClassChecksHost(HttpsURLConnection connection) {
         connection.setHostnameVerifier(new HostnameVerifier() {
+            // ok: cra-java-hostname-verifier-accept-all
             public boolean verify(String hostname, SSLSession session) {
-                // ok: cra-java-hostname-verifier-accept-all
                 return hostname.equals("known.example");
             }
         });
+    }
+
+    void okAnonymousInnerClassWithHelper(HttpsURLConnection connection) {
+        connection.setHostnameVerifier(new HostnameVerifier() {
+
+            private boolean auditingEnabled() {
+                // ok: cra-java-hostname-verifier-accept-all
+                return true;
+            }
+
+            public boolean verify(String hostname, SSLSession session) {
+                if (auditingEnabled()) {
+                    System.out.println(hostname);
+                }
+                return hostname.endsWith(".known.example");
+            }
+        });
+    }
+}
+
+// A branch that accepts one host is a real check, not an accept-all verifier.
+class BranchingVerifier implements HostnameVerifier {
+    // ok: cra-java-hostname-verifier-accept-all
+    public boolean verify(String hostname, SSLSession session) {
+        if (hostname.equals("known.example")) {
+            return true;
+        }
+        return false;
+    }
+}
+
+// An unrelated boolean method next to a correct verify method.
+class VerifierWithFlag implements HostnameVerifier {
+    // ok: cra-java-hostname-verifier-accept-all
+    public boolean isEnabled() {
+        return true;
+    }
+
+    public boolean verify(String hostname, SSLSession session) {
+        return hostname.equals("known.example");
+    }
+}
+
+// Same method signature on a type that is not a HostnameVerifier.
+class FeatureFlag {
+    // ok: cra-java-hostname-verifier-accept-all
+    public boolean verify(String hostname, SSLSession session) {
+        return true;
     }
 }

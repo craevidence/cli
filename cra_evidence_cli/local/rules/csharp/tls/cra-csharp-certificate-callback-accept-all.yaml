@@ -5,7 +5,7 @@ rules:
       Remove the callback and use the platform certificate validation policy.
     severity: ERROR
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-295: Improper Certificate Validation"]
       owasp: ["A02:2021 - Cryptographic Failures"]
       references:

@@ -102,7 +102,10 @@ function badMemberAccessBinding(host) {
 }
 
 // Bad: single-name ESM import rather than a pair
-function badSingleNameImportPlaceholder(host) {
+// The single-name ESM import form is exercised in the TypeScript fixture,
+// which can use import syntax. This file is CommonJS, so it covers the
+// inline require call instead.
+function badInlineRequireExecSync(host) {
     // ruleid: cra-javascript-exec-injection
     require("child_process").execSync("ping " + host);
 }

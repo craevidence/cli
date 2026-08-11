@@ -24,6 +24,27 @@ class NativeDeserializer {
         return stream.readObject();
     }
 
+    Object goodFilteredAssignment(InputStream input) throws Exception {
+        ObjectInputStream stream = new ObjectInputStream(input);
+        stream.setObjectInputFilter(
+            ObjectInputFilter.Config.createFilter("java.base/*;!*")
+        );
+        // ok: cra-java-objectinputstream-readobject
+        Object value = stream.readObject();
+        return value;
+    }
+
+    Object badFilterOnAnotherStream(InputStream trustedInput, InputStream input)
+            throws Exception {
+        ObjectInputStream trusted = new ObjectInputStream(trustedInput);
+        trusted.setObjectInputFilter(
+            ObjectInputFilter.Config.createFilter("java.base/*;!*")
+        );
+        ObjectInputStream stream = new ObjectInputStream(input);
+        // ruleid: cra-java-objectinputstream-readobject
+        return stream.readObject();
+    }
+
     Object badLateFilter(InputStream input) throws Exception {
         ObjectInputStream stream = new ObjectInputStream(input);
         // ruleid: cra-java-objectinputstream-readobject

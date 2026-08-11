@@ -39,3 +39,27 @@ func okSHA256(data []byte) [32]byte {
 	// ok: cra-go-weak-hash
 	return sha256.Sum256(data)
 }
+
+// An accumulator that borrows the spelling of the digest packages without being
+// a message digest.
+type byteCounter struct {
+	seen int
+}
+
+func (c *byteCounter) New() *byteCounter { return &byteCounter{} }
+
+func (c *byteCounter) Sum(b []byte) []byte {
+	c.seen += len(b)
+	return b
+}
+
+// Safe: the local declarations rebind the package names, so these calls are
+// methods on the accumulator rather than digest constructors.
+func okShadowedDigestNames(data []byte) []byte {
+	md5 := &byteCounter{}
+	sha1 := &byteCounter{}
+	_ = md5.New()
+	_ = sha1.New()
+	// ok: cra-go-weak-hash
+	return append(md5.Sum(data), sha1.Sum(data)...)
+}

@@ -187,10 +187,11 @@
         "G401": "testutils/g401_samples.go",
         "G402": "testutils/g402_samples.go",
         "G501": "testutils/g501_samples.go",
-        "G505": "testutils/g505_samples.go"
+        "G505": "testutils/g505_samples.go",
+        "G204": "testutils/g204_samples.go"
       },
       "expected": {
-        "cases_total": 178,
+        "cases_total": 191,
         "by_rule": {
           "G109": {
             "cases": 6,
@@ -201,6 +202,12 @@
           "G115": {
             "cases": 143,
             "vulnerable": 32,
+            "detected": 0,
+            "fp_on_safe": 0
+          },
+          "G204": {
+            "cases": 13,
+            "vulnerable": 7,
             "detected": 0,
             "fp_on_safe": 0
           },
@@ -231,7 +238,7 @@
         }
       },
       "promotion_ready": false,
-      "promotion_blocker": "Detection outside the rules' published scope is expected: G115 is general integer conversion while the rule covers parse-then-downcast, and G402 covers cipher suites and TLS versions the rule does not claim. The corpus supplies precision evidence and in-scope recall, not whole-rule recall.",
+      "promotion_blocker": "Detection outside the rules' published scope is expected: G115 is general integer conversion while the rule covers parse-then-downcast, and G402 covers cipher suites and TLS versions the rule does not claim. The corpus supplies precision evidence and in-scope recall, not whole-rule recall. G204 measures the new cra-go-shell-command-injection rule. It detects 0 of 7 vulnerable cases with 0 false positives on the 6 safe ones. Five of the seven use a program name taken from os.Args or a variable, which is arbitrary program execution rather than shell injection and is outside the rule's stated scope. The two that do use the shell form take the command from a function parameter, which gosec treats as tainted by default and this rule does not, because it requires a recognised source. The corpus supplies precision evidence for this rule and no in-scope recall evidence.",
       "rules_subdir": "go"
     },
     {
@@ -354,10 +361,10 @@
             "tn": 103
           },
           "78": {
-            "tp": 13,
-            "fp": 7,
-            "fn": 0,
-            "tn": 0
+            "tp": 9,
+            "fp": 0,
+            "fn": 4,
+            "tn": 7
           },
           "79": {
             "tp": 0,
@@ -366,15 +373,15 @@
             "tn": 58
           },
           "89": {
-            "tp": 2,
+            "tp": 3,
             "fp": 0,
-            "fn": 3,
+            "fn": 2,
             "tn": 11
           },
           "95": {
-            "tp": 8,
+            "tp": 9,
             "fp": 0,
-            "fn": 12,
+            "fn": 11,
             "tn": 33
           },
           "502": {
@@ -565,27 +572,19 @@
               "tn": 11
             }
           },
-          "cra-python-subprocess-shell": {
-            "78": {
-              "tp": 13,
-              "fp": 7,
-              "fn": 0,
-              "tn": 0
-            }
-          },
           "cra-python-taint-eval-exec": {
             "95": {
-              "tp": 8,
+              "tp": 9,
               "fp": 0,
-              "fn": 12,
+              "fn": 11,
               "tn": 33
             }
           },
           "cra-python-taint-sql-inject": {
             "89": {
-              "tp": 2,
+              "tp": 3,
               "fp": 0,
-              "fn": 3,
+              "fn": 2,
               "tn": 11
             }
           },
@@ -608,11 +607,133 @@
         }
       },
       "promotion_ready": false,
-      "promotion_blocker": "Measured, and mixed. Three rules meet an 80 percent precision bar: the two taint rules at 100 percent and the Flask open redirect rule at 82 percent. Command injection reaches full recall at 65 percent precision, capped because the pattern rule carries no data flow. Path traversal, XSS and Django-only rules score zero because the corpus is a Flask application that uses none of their sinks, which is a scope boundary rather than a defect. Deserialization sits at its corpus ceiling: the 12 remaining false positives keep a sink byte-identical to a true positive and differ only by dead-code dataflow.",
+      "promotion_blocker": "Default tier only. Five of eight applicable CWEs reach 100 percent precision (cookie, command injection, SQL, eval) with open redirect at 82 percent. Deserialization sits at its corpus ceiling of 60 percent, where every remaining false positive keeps a sink byte-identical to a true positive and differs only in dead-code dataflow. Path traversal and XSS score zero because the corpus is a Flask application and those default rules target Django sinks; a Flask response rule covering that shape ships at experimental tier.",
       "cwe_aliases": {
         "94": 95
       },
-      "cwe_alias_note": "The corpus labels eval and exec injection cases CWE-94, a class-level weakness that MITRE 4.20 does not list as mappable. The rule declares CWE-95, the precise child. The alias records that relationship for scoring without weakening the rule's own mapping."
+      "cwe_alias_note": "The corpus labels eval and exec injection cases CWE-94, a class-level weakness that MITRE 4.20 does not list as mappable. The rule declares CWE-95, the precise child. The alias records that relationship for scoring without weakening the rule's own mapping.",
+      "score_tier": "default",
+      "score_tier_note": "Scores the default tier only, since the measurement is about what ships without a flag."
+    },
+    {
+      "name": "nist-sard-php-cwe78",
+      "rules_subdir": "php",
+      "repository": "https://github.com/stivalet/PHP-Vulnerability-test-suite.git",
+      "commit": "6ebd7e0ccbac3b7c3374fe29eaf9167823549744",
+      "source_path": "Injection/CWE_78",
+      "directory": "php-sard",
+      "typo_variable": "$tained",
+      "unassigned_variable": "$sanitized",
+      "label_correction_note": "The corpus labels by directory, safe or unsafe. Two generated shapes carry the wrong label and both are detected mechanically. A safe case that applies its sanitizer to the misspelled variable $tained leaves the tainted value reaching the sink and is scored vulnerable. An unsafe case that reassigns the tainted variable from $sanitized, which it never assigns, kills the taint and is scored safe. 192 of 2496 cases, 7.7 percent, are affected.",
+      "expected": {
+        "files_scanned": 2496,
+        "tp": 117,
+        "fp": 198,
+        "fn": 507,
+        "tn": 1674
+      },
+      "promotion_blocker": "Measures cra-php-command-superglobal only. Precision is far below the promotion bar. Modelled sanitizers are shell escaping, numeric casts and numeric filter_var. Validation by regular expression is deliberately not suppressed because the corpus contains permissive patterns it correctly labels unsafe. Allowlist comparison via in_array is the remaining tractable precision work. Findings on htmlspecialchars, htmlentities and addslashes cases are a deliberate disagreement with the corpus: none of those neutralise shell metacharacters.",
+      "license_note": "The repository carries no LICENSE file. Every generated case embeds its own grant in a header comment: Copyright 2015 Bertrand STIVALET, permission granted without written agreement or royalty fee to use, copy, modify and distribute the software and its documentation for any purpose, provided the copyright notice and disclaimer paragraphs appear in all copies. The corpus is read during scoring and no case is redistributed with this package.",
+      "benchmark_type": "sard-folders",
+      "scored_rule": "cra-php-command-superglobal"
+    },
+    {
+      "name": "nist-sard-php-cwe89",
+      "rules_subdir": "php",
+      "repository": "https://github.com/stivalet/PHP-Vulnerability-test-suite.git",
+      "commit": "6ebd7e0ccbac3b7c3374fe29eaf9167823549744",
+      "source_path": "Injection/CWE_89",
+      "directory": "php-sard",
+      "typo_variable": "$tained",
+      "unassigned_variable": "$sanitized",
+      "label_correction_note": "The corpus labels by directory, safe or unsafe. Two generated shapes carry the wrong label and both are detected mechanically. A safe case that applies its sanitizer to the misspelled variable $tained leaves the tainted value reaching the sink and is scored vulnerable. An unsafe case that reassigns the tainted variable from $sanitized, which it never assigns, kills the taint and is scored safe. 192 of 2496 cases, 7.7 percent, are affected.",
+      "expected": {
+        "files_scanned": 9552,
+        "tp": 153,
+        "fp": 549,
+        "fn": 663,
+        "tn": 8187
+      },
+      "promotion_blocker": "Measures cra-php-sql-superglobal-taint only. Precision is far below the promotion bar, and the rule also produces 15 findings on phpMyAdmin production code, so it fails the real-code half of the bar independently. Recall was 0 percent before this measurement because the corpus executes through mysql_query, the legacy extension removed in PHP 7, which the rule did not cover. Escaping functions are deliberately not modelled as sanitizers: see the rule's sanitizer_analysis.",
+      "license_note": "The repository carries no LICENSE file. Every generated case embeds its own grant in a header comment: Copyright 2015 Bertrand STIVALET, permission granted without written agreement or royalty fee to use, copy, modify and distribute the software and its documentation for any purpose, provided the copyright notice and disclaimer paragraphs appear in all copies. The corpus is read during scoring and no case is redistributed with this package.",
+      "benchmark_type": "sard-folders",
+      "scored_rule": "cra-php-sql-superglobal-taint"
+    },
+    {
+      "name": "nist-juliet-csharp-cwe89",
+      "benchmark_type": "juliet-methods",
+      "source_type": "archive-preprocessed",
+      "directory": "juliet-csharp",
+      "repository": "https://samate.nist.gov/SARD/test-suites/110",
+      "archive_file": "juliet-csharp-1.3.zip",
+      "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
+      "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
+      "rules_subdir": "csharp/injection",
+      "source_path": "src/testcases/CWE89_SQL_Injection",
+      "expected": {
+        "files_with_bad_finding": 189,
+        "findings_in_good_methods": 0,
+        "findings_not_attributed": 0
+      },
+      "promotion_ready": false,
+      "promotion_note": "Measures cra-csharp-sql-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 189 of the 549 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The discriminating controls are the Good methods: GoodG2B puts a hardcoded string into the same bad sink and GoodB2G puts the bad source into a safe sink, and both are silent."
+    },
+    {
+      "name": "nist-juliet-csharp-cwe78",
+      "benchmark_type": "juliet-methods",
+      "source_type": "archive-preprocessed",
+      "directory": "juliet-csharp",
+      "repository": "https://samate.nist.gov/SARD/test-suites/110",
+      "archive_file": "juliet-csharp-1.3.zip",
+      "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
+      "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
+      "rules_subdir": "csharp/injection",
+      "source_path": "src/testcases/CWE78_OS_Command_Injection",
+      "expected": {
+        "files_with_bad_finding": 63,
+        "findings_in_good_methods": 0,
+        "findings_not_attributed": 0
+      },
+      "promotion_ready": false,
+      "promotion_note": "Measures cra-csharp-process-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The discriminating controls are the Good methods: GoodG2B puts a hardcoded string into the same bad sink and GoodB2G puts the bad source into a safe sink, and both are silent."
+    },
+    {
+      "name": "nist-juliet-csharp-cwe23",
+      "benchmark_type": "juliet-methods",
+      "source_type": "archive-preprocessed",
+      "directory": "juliet-csharp",
+      "repository": "https://samate.nist.gov/SARD/test-suites/110",
+      "archive_file": "juliet-csharp-1.3.zip",
+      "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
+      "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
+      "rules_subdir": "csharp/path",
+      "source_path": "src/testcases/CWE23_Relative_Path_Traversal",
+      "expected": {
+        "files_with_bad_finding": 63,
+        "findings_in_good_methods": 0,
+        "findings_not_attributed": 0
+      },
+      "promotion_ready": false,
+      "promotion_note": "Measures cra-csharp-file-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The discriminating controls are the Good methods: GoodG2B puts a hardcoded string into the same bad sink and GoodB2G puts the bad source into a safe sink, and both are silent."
+    },
+    {
+      "name": "nist-juliet-csharp-cwe36",
+      "benchmark_type": "juliet-methods",
+      "source_type": "archive-preprocessed",
+      "directory": "juliet-csharp",
+      "repository": "https://samate.nist.gov/SARD/test-suites/110",
+      "archive_file": "juliet-csharp-1.3.zip",
+      "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
+      "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
+      "rules_subdir": "csharp/path",
+      "source_path": "src/testcases/CWE36_Absolute_Path_Traversal",
+      "expected": {
+        "files_with_bad_finding": 63,
+        "findings_in_good_methods": 0,
+        "findings_not_attributed": 0
+      },
+      "promotion_ready": false,
+      "promotion_note": "Measures cra-csharp-file-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The discriminating controls are the Good methods: GoodG2B puts a hardcoded string into the same bad sink and GoodB2G puts the bad source into a safe sink, and both are silent."
     }
   ]
 }

@@ -1,0 +1,62 @@
+rules:
+  - id: cra-go-shell-command-injection
+    message: >
+      Process input reaches the command string of a shell invocation. The shell
+      treats metacharacters in that string as syntax, so this allows OS command
+      injection. Run the program directly with exec.Command(name, args...) and
+      pass each argument separately, without a shell.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/78.html
+        - https://pkg.go.dev/os/exec#Command
+      category: security
+      technology: [go]
+      confidence: HIGH
+      scope: >
+        Reports process input reaching the command argument that follows a
+        shell's -c or /C switch, in exec.Command or exec.CommandContext. Sources
+        are os.Getenv, the flag package, and net/http request values. Only the
+        shell form is reported: exec.Command("git", userValue) passes the value
+        as a separate argument that no shell interprets, so it is not a command
+        injection and is not reported.
+      limitations: >
+        The shell name is matched as a literal, so a program selected through a
+        variable is not resolved. Taint is followed within one file only, so a
+        command assembled in another package is not seen. Argument injection
+        against a fixed program, where a value the program itself treats as an
+        option changes its behaviour, is a different weakness and is out of
+        scope.
+      sanitizer_analysis:
+        status: not-modeled
+        reason: >
+          Safe shell construction requires an allowlisted command and separately
+          quoted arguments, which cannot be recognised by shape.
+      license: MIT
+      author: CRA Evidence
+    languages: [go]
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: os.Getenv(...)
+          - pattern: flag.String(...)
+          - pattern: flag.Arg(...)
+          - pattern: $R.URL.Query().Get(...)
+          - pattern: $R.FormValue(...)
+          - pattern: $R.PostFormValue(...)
+          - pattern: $R.Header.Get(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: exec.Command($SHELL, $SWITCH, $CMD, ...)
+              - pattern: exec.CommandContext($CTX, $SHELL, $SWITCH, $CMD, ...)
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: ^"(.*/)?(sh|bash|zsh|ksh|dash|cmd|cmd\.exe|powershell|powershell\.exe|pwsh)"$
+          - metavariable-regex:
+              metavariable: $SWITCH
+              regex: ^"(-c|-Command|/c|/C)"$
+          - focus-metavariable: $CMD

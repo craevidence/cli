@@ -5,7 +5,7 @@ rules:
       fixed base directory, canonicalize it, and reject paths outside the base.
     severity: ERROR
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"]
       owasp: ["A01:2021 - Broken Access Control"]
       references:
@@ -14,6 +14,19 @@ rules:
       category: security
       technology: [csharp, dotnet, aspnet, filesystem]
       confidence: HIGH
+      scope: >
+        Tracks ASP.NET Core request collections, System.Web QueryString, Params,
+        Form, Headers and Cookies reads, and [FromQuery], [FromBody] and
+        [FromRoute] parameters into the File read and write helpers and into the
+        StreamReader, StreamWriter and FileStream constructors. Params and
+        Cookies reads require a receiver named req or Request so that an
+        application type with the same property name is not treated as request
+        data.
+      limitations: >
+        Taint is followed within a single file. The stream constructors also
+        accept a Stream, so only a path argument carrying request data is
+        reported. Flows that cross a method boundary through a field, a helper
+        class, or another file are not reported.
       sanitizer_analysis:
         status: modeled
         reason: Canonicalized paths are suppressed only after an explicit base-directory containment guard.
@@ -26,6 +39,18 @@ rules:
           - pattern: $REQUEST.Query[$KEY]
           - pattern: $REQUEST.Form[$KEY]
           - pattern: $REQUEST.Headers[$KEY]
+          - pattern: $REQUEST.QueryString[$KEY]
+          - pattern: $REQUEST.QueryString.Get($KEY)
+          - pattern: $REQUEST.Form.Get($KEY)
+          - pattern: $REQUEST.Headers.Get($KEY)
+          - patterns:
+              - pattern-either:
+                  - pattern: $REQUEST.Params[$KEY]
+                  - pattern: $REQUEST.Params.Get($KEY)
+                  - pattern: $REQUEST.Cookies
+              - metavariable-regex:
+                  metavariable: $REQUEST
+                  regex: '(?i)^([\w.]+\.)?(req|request)$'
           - patterns:
               - pattern-inside: |
                   $RET $METHOD(..., [FromQuery] $TYPE $PARAM, ...) {
@@ -75,4 +100,13 @@ rules:
               - focus-metavariable: $PATH
           - patterns:
               - pattern: File.WriteAllBytes($PATH, ...)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: new StreamReader($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: new StreamWriter($PATH)
+              - focus-metavariable: $PATH
+          - patterns:
+              - pattern: new FileStream($PATH, ...)
               - focus-metavariable: $PATH

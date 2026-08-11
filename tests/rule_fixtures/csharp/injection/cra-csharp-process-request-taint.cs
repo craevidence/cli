@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
+using System.Web;
 
 class ProcessHandler {
     string RequestedCommand(HttpRequest request) {
@@ -63,4 +64,29 @@ class ProcessHandler {
         // ruleid: cra-csharp-process-request-taint
         Process.Start(start);
     }
+
+    void BadQueryStringCollection(HttpRequest req) {
+        string command = req.QueryString["command"];
+        // ruleid: cra-csharp-process-request-taint
+        Process.Start(command);
+    }
+
+    void BadCookieCollection(HttpRequest req) {
+        HttpCookieCollection cookies = req.Cookies;
+        // ruleid: cra-csharp-process-request-taint
+        Process.Start("/bin/ls " + cookies[0].Value);
+    }
+
+    void GoodApplicationParamsHomonym(ReportSpec spec) {
+        // ok: cra-csharp-process-request-taint
+        Process.Start("/usr/bin/report " + spec.Params.Get("range"));
+    }
+}
+
+class ReportSpec {
+    public ParamBag Params { get; set; }
+}
+
+class ParamBag {
+    public string Get(string key) => "fixed";
 }

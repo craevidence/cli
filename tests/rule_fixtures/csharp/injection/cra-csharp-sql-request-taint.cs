@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Data.SqlClient;
+using System.Web;
 
 class SqlHandler {
     string RequestedName(HttpRequest request) {
@@ -52,4 +53,48 @@ class SqlHandler {
         // ok: cra-csharp-sql-request-taint
         return new SqlCommand("SELECT * FROM users WHERE id = '" + id + "'", connection);
     }
+
+    void BadQueryStringCompoundAssign(HttpRequest req, SqlConnection connection) {
+        string name = req.QueryString["name"];
+        var command = new SqlCommand(null, connection);
+        // ruleid: cra-csharp-sql-request-taint
+        command.CommandText += "SELECT * FROM users WHERE name = '" + name + "'";
+    }
+
+    void BadParamsGet(HttpRequest req, SqlConnection connection) {
+        string name = req.Params.Get("name");
+        var command = new SqlCommand(null, connection);
+        // ruleid: cra-csharp-sql-request-taint
+        command.CommandText = "SELECT * FROM users WHERE name = '" + name + "'";
+    }
+
+    void BadCookieCollection(HttpRequest req, SqlConnection connection) {
+        HttpCookieCollection cookies = req.Cookies;
+        string name = cookies[0].Value;
+        var command = new SqlCommand(null, connection);
+        // ruleid: cra-csharp-sql-request-taint
+        command.CommandText = "SELECT * FROM users WHERE name = '" + name + "'";
+    }
+
+    void GoodConstantCompoundAssign(HttpRequest req, SqlConnection connection) {
+        string name = req.QueryString["name"];
+        var command = new SqlCommand(null, connection);
+        command.Parameters.AddWithValue("@name", name);
+        // ok: cra-csharp-sql-request-taint
+        command.CommandText += "SELECT * FROM users WHERE name = @name";
+    }
+
+    void GoodApplicationParamsHomonym(ReportSpec spec, SqlConnection connection) {
+        var command = new SqlCommand("SELECT 1", connection);
+        // ok: cra-csharp-sql-request-taint
+        command.CommandText += " -- " + spec.Params.Get("range");
+    }
+}
+
+class ReportSpec {
+    public ParamBag Params { get; set; }
+}
+
+class ParamBag {
+    public string Get(string key) => "fixed";
 }

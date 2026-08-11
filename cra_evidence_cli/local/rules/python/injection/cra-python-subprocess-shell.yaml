@@ -10,7 +10,7 @@ rules:
       and its arguments as a list without a shell.
     severity: WARNING
     metadata:
-      tier: default
+      tier: experimental
       cwe:
         - "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
       owasp:
@@ -31,14 +31,16 @@ rules:
         built with append. A command written entirely as a string literal is not
         reported, because nothing can be injected into it.
       limitations: >
-        This rule does not track data flow, so it cannot tell whether the runtime
-        part of the command carries untrusted input. On OWASP BenchmarkPython it
-        reports 13 of the 13 command injection cases and also reports 7 cases the
-        corpus labels safe, where a request value is assigned into a container and
-        a fixed value is read back out, which is 65 percent precision. The data
-        flow judgement belongs to cra-python-taint-subprocess-shell, which reports
-        the same corpus at 100 percent precision. Treat a finding here as a
-        hardening item: the shell is avoidable in almost every case.
+        This rule matches the shape of the call without tracking where the
+        command string came from, so it reports hardening observations as well
+        as injections. That is why it is opt-in behind --include-experimental.
+        On OWASP BenchmarkPython it reports 13 of the 13 command injection cases
+        and also reports 7 cases the corpus labels safe, where a request value is
+        assigned into a container and a fixed value is read back out, which is
+        65 percent precision. The same weakness is covered in the default tier by
+        cra-python-taint-subprocess-shell, which follows the value from source to
+        sink and reports the same corpus at 100 percent precision. Treat a finding
+        here as a hardening item: the shell is avoidable in almost every case.
       sanitizer_analysis:
         status: not-modeled
         reason: >

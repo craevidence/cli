@@ -7,7 +7,7 @@ from pathlib import Path
 
 import yaml
 
-PACK_VERSION = "2.22.0"
+PACK_VERSION = "3.0.0"
 TESTED_OPENGREP_VERSION = "1.26.0"
 
 VALID_RULE_TIERS = frozenset({"default", "experimental"})
@@ -27,6 +27,22 @@ class RulePackInventory:
                 if tier == "experimental"
             )
         )
+
+    @property
+    def experimental_only_languages(self) -> tuple[str, ...]:
+        """Languages whose rules are all experimental, so a default run skips them.
+
+        Derived from the pack rather than listed, so promoting a rule to the
+        default tier cannot leave a message claiming its language is disabled.
+        """
+        with_default: set[str] = set()
+        seen: set[str] = set()
+        for rule_id, tier in self.rule_tiers.items():
+            language = self.rule_languages[rule_id]
+            seen.add(language)
+            if tier == "default":
+                with_default.add(language)
+        return tuple(sorted(seen - with_default))
 
     def selection(
         self,

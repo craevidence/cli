@@ -16,24 +16,24 @@ rules:
       technology: [java, serialization]
       confidence: VERY HIGH
       scope: >
-        Detects readObject calls on a locally constructed ObjectInputStream
-        without an earlier local setObjectInputFilter call.
+        Detects readObject calls on a stream declared in the same method as
+        ObjectInputStream or var and constructed with new ObjectInputStream,
+        when that same stream has no earlier setObjectInputFilter call.
       limitations: >
-        Does not prove that the stream is untrusted and does not recognize
-        filters configured through helpers, factories, or other methods.
+        Does not prove that the stream is untrusted, so a stream reading data
+        the application itself wrote is reported. Does not recognize filters
+        configured through helpers, factories, other methods, a serial filter
+        set process-wide, or a readObject override, and does not match a
+        stream declared with a fully qualified type name or acquired through
+        try-with-resources.
       license: MIT
       author: CRA Evidence
     languages: [java]
     patterns:
       - pattern: $STREAM.readObject()
       - pattern-not-inside: |
-          $RET $METHOD(...) {
-            ...
-            $STREAM.setObjectInputFilter(...);
-            ...
-            return $STREAM.readObject();
-            ...
-          }
+          $STREAM.setObjectInputFilter(...);
+          ...
       - pattern-either:
           - pattern-inside: |
               ObjectInputStream $STREAM = new ObjectInputStream(...);

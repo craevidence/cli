@@ -49,11 +49,19 @@ def _git_head(checkout: Path) -> str:
     return result.stdout.strip()
 
 
-def _rule_cwes(rules: Path) -> dict[str, set[int]]:
+def _rule_cwes(rules: Path, tier: str | None = None) -> dict[str, set[int]]:
+    """Map rule id to declared CWEs, optionally restricted to one tier.
+
+    A benchmark that measures what ships by default has to score the default
+    tier only. Including an opt-in rule would credit or blame the default tier
+    for a finding a user never sees without a flag.
+    """
     mapping: dict[str, set[int]] = {}
     for rule_file in sorted(rules.rglob("*.yaml")):
         document = yaml.safe_load(rule_file.read_text(encoding="utf-8"))
         rule = document["rules"][0]
+        if tier is not None and rule["metadata"].get("tier") != tier:
+            continue
         values: set[int] = set()
         for entry in rule["metadata"]["cwe"]:
             match = CWE_RE.match(str(entry))
@@ -173,7 +181,10 @@ def _score(
             raise BenchmarkGateError(message)
         expected_cwe, _ = cases[test_id]
         expected_cwe = aliases.get(expected_cwe, expected_cwe)
-        finding_cwes = rule_cwes.get(rule_id, set())
+        if rule_id not in rule_cwes:
+            # A rule outside the scored tier. Not part of this measurement.
+            continue
+        finding_cwes = rule_cwes[rule_id]
         if expected_cwe not in finding_cwes:
             message = (
                 f"{rule_id} fired on {test_id} (CWE-{expected_cwe}) without a "
@@ -472,6 +483,63 @@ CSHARP_METHOD_RE = re.compile(
 )
 
 
+SARD_SAFE_DIR = "safe"
+
+
+def _sard_truth(path: Path, typo_var: str, unassigned_var: str) -> str:
+    """Classify a SARD PHP case, correcting two defects in the generator.
+
+    The corpus splits cases into safe/ and unsafe/ directories, but two
+    generated shapes carry the wrong label and both are mechanically
+    detectable:
+
+    * a safe case that applies its sanitizer to a misspelled variable leaves
+      the tainted value reaching the sink, so it is vulnerable;
+    * an unsafe case that reassigns the tainted variable from a variable that
+      is never assigned kills the taint, so it is not vulnerable.
+
+    Scoring against the raw directory names would penalise correct behavior on
+    both shapes.
+    """
+    body = path.read_text(encoding="utf-8", errors="replace")
+    marker = body.rfind("MODIFICATIONS.*/")
+    code = body[marker + len("MODIFICATIONS.*/") :] if marker >= 0 else body
+    if f"/{SARD_SAFE_DIR}/" in path.as_posix():
+        return "vulnerable" if re.search(rf"\{typo_var}\b", code) else "safe"
+    uses = unassigned_var in code
+    assigned = re.search(rf"\{unassigned_var}\s*=", code) is not None
+    return "safe" if (uses and not assigned) else "vulnerable"
+
+
+def _score_sard_folders(
+    document: dict,
+    root: Path,  # noqa: ARG001
+    typo_var: str,
+    unassigned_var: str,
+    scored_rule: str,
+) -> dict:
+    scanned = [Path(entry) for entry in document.get("paths", {}).get("scanned", [])]
+    if not scanned:
+        message = "the SARD scan reported no scanned files"
+        raise BenchmarkGateError(message)
+    # One CWE directory measures one rule. A finding from a different rule is
+    # about a different weakness and would otherwise be charged to this one.
+    reported = {
+        Path(result["path"])
+        for result in document["results"]
+        if str(result["check_id"]) == scored_rule
+    }
+    counts = {"tp": 0, "fp": 0, "fn": 0, "tn": 0}
+    for path in scanned:
+        truth = _sard_truth(path, typo_var, unassigned_var)
+        hit = path in reported
+        if truth == "vulnerable":
+            counts["tp" if hit else "fn"] += 1
+        else:
+            counts["fp" if hit else "tn"] += 1
+    return {"files_scanned": len(scanned), **counts}
+
+
 def _score_juliet_methods(document: dict, method_re: re.Pattern[str]) -> dict:
     """Score against Juliet's Bad and Good method naming.
 
@@ -727,7 +795,7 @@ def main() -> int:
                 if benchmark.get("rules_subdir")
                 else args.rules
             )
-            rule_cwes = _rule_cwes(benchmark_rules)
+            rule_cwes = _rule_cwes(benchmark_rules, benchmark.get("score_tier"))
             selected_cwes = sorted(
                 {cwe for values in rule_cwes.values() for cwe in values}
             )
@@ -816,6 +884,23 @@ def main() -> int:
                 actual = _score_codeql_markers(
                     first, neutral, str(benchmark["alert_query"])
                 )
+        elif benchmark_type == "sard-folders":
+            benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
+            source = checkout / str(benchmark["source_path"])
+            if not source.is_dir():
+                failures.append(f"{benchmark['name']}: source path missing: {source}")
+                continue
+            first = _scan(args.opengrep, benchmark_rules, source)
+            second = _scan(args.opengrep, benchmark_rules, source)
+            if _exact_findings(first, source) != _exact_findings(second, source):
+                failures.append(f"{benchmark['name']}: repeated findings differ")
+            actual = _score_sard_folders(
+                first,
+                source,
+                str(benchmark["typo_variable"]),
+                str(benchmark["unassigned_variable"]),
+                str(benchmark["scored_rule"]),
+            )
         elif benchmark_type == "juliet-methods":
             benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
             source = checkout / str(benchmark["source_path"])
@@ -923,6 +1008,14 @@ def main() -> int:
                 )
             continue
         print(f"{benchmark['name']}: {actual['files_scanned']} files")
+        if benchmark_type == "sard-folders":
+            precision = _ratio(actual["tp"], actual["tp"] + actual["fp"])
+            recall = _ratio(actual["tp"], actual["tp"] + actual["fn"])
+            print(
+                f"  TP={actual['tp']} FP={actual['fp']} FN={actual['fn']} "
+                f"TN={actual['tn']} precision={precision} recall={recall}"
+            )
+            continue
         if benchmark_type == "owasp-csv":
             for cwe, values in actual["metrics_by_cwe"].items():
                 precision = _ratio(values["tp"], values["tp"] + values["fp"])

@@ -432,12 +432,19 @@ back to `text`.
   (`pickle` and unsafe `yaml.load` forms), code injection via `eval`/`exec`,
   Flask, Django, SQLAlchemy, and JWT misuse. Taint rules also cover untrusted
   input reaching `subprocess` shell mode, `os.system`, and `os.popen`.
-  Another 50 focused Go, JavaScript/TypeScript, Java, C, C++, Rust, PHP, and C#
-  rules are marked experimental. Their seeded fixtures and pinned
-  real-project results are reproducible, but known-answer coverage, parser
-  limitations, and false-positive evidence still block broad language claims.
-  Use `--include-experimental` to run them. The output states the exact enabled
-  rule count for every language; no group is presented as general SAST coverage.
+  C#, Java, and Go also contribute default rules: C# request-taint rules for
+  SQL injection, OS command injection, and path traversal, plus weak hashing,
+  `BinaryFormatter` deserialization, accept-all certificate callbacks, and
+  hardcoded JWT keys; Java weak message digests, `Runtime.exec` on request
+  data, and accept-all hostname verifiers; Go weak hashing and disabled TLS
+  verification. Another 41 focused C, C++, JavaScript/TypeScript, PHP, Rust,
+  and remaining Java, Go, and C# rules are marked experimental. A rule runs by
+  default only where a labelled corpus measured its precision or where it
+  matches an unambiguous dangerous API. The rest stay opt-in because their
+  precision is unmeasured, below the bar, or bounded by parser and intrafile
+  taint limits. Use `--include-experimental` to run them. The output states the
+  exact enabled rule count for every language; no group is presented as general
+  SAST coverage.
   Pass `--rules` to use your own rules instead.
 - The CLI always gives Opengrep an explicit local rules path and disables its
   version check. It does not use Opengrep's `auto` configuration or download

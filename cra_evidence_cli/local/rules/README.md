@@ -4,9 +4,10 @@ A starter set of Opengrep rules for the `code-check` command.
 
 ## Scope
 
-These rules detect a focused set of high-signal patterns. The 43 Python rules
+These rules detect a focused set of high-signal patterns. 42 Python rules
 are enabled by default. Go, JavaScript/TypeScript, Java, C, C++, Rust, PHP, and
-C# contain 50 experimental rules and require `--include-experimental`.
+C# contain 50 experimental rules, and one Python rule is experimental; all 51
+require `--include-experimental`.
 Each rule lives in its own file under
 `<language>/<subcategory>/<rule-id>.yaml`. This tiering states the evidence
 boundary; it does not imply complete SAST coverage for any language.
@@ -38,10 +39,18 @@ execute a constant or internally generated string; it is not proof of injection.
 
 ### Go (`go/`)
 
-Experimental. These rules match syntax and do not infer security intent. In
-particular, the weak-hash rule also reports non-security checksums, the integer
-rule does not recognize every valid range-check spelling, and the lock rule is
-sensitive to statement layout. Those measured limitations block default use.
+Seven rules, two of them default. Weak hashing and `InsecureSkipVerify` were
+promoted on measured evidence: no false positive on the gosec sample cases, and
+on a review of 24,137 third-party Go files the TLS rule produced 7 findings and
+all 7 were genuine. Both match syntax and do not infer intent, so the weak-hash
+rule also reports a non-security checksum, and a TLS configuration guarded by a
+flag whose name signals a deliberate opt out is still reported. Five stay
+opt-in: the integer rule measures 71 percent precision on real code and does not
+recognise every valid range-check spelling, the lock rule produced 70 false
+positives out of 70 findings before a fix and now has no measured true positive
+at all, the HMAC timing rule found nothing in 111,383 files, and the HMAC reuse
+rule mostly describes code that panics rather than code that ships. A new shell
+command injection rule is opt-in pending corpus evidence.
 
 - MD5 or SHA-1 use that requires review for security intent (CWE-327)
 - `tls.Config` with `InsecureSkipVerify: true` (CWE-295)
@@ -50,6 +59,7 @@ sensitive to statement layout. Those measured limitations block default use.
 - `ParseInt`/`ParseUint`/`Atoi` result downcast to `int32`/`uint32` when
   the rule cannot establish a recognized safe range check (CWE-190)
 - Mismatched mutex lock/unlock pairs (CWE-667)
+- Process input reaching the command string of a shell invocation (CWE-78)
 
 The integer downcast rule recognizes a bounds check by its shape and position in
 the source, not by control flow. It does not verify that the check runs before
@@ -81,8 +91,15 @@ each carries an `origin` field in its metadata.
 
 ### Java (`java/`)
 
-Experimental: eight focused rules, not general Java SAST coverage. Each rule
-publishes its exact detection scope and engine limitations in its metadata.
+Eight focused rules, not general Java SAST coverage. Three run by default:
+weak message digests, `Runtime.exec` reached by request data, and hostname
+verifiers that accept every host. They were promoted on measured evidence, 100
+percent precision on OWASP Benchmark for CWE-328 and CWE-78 and probe evidence
+for the verifier. The other five stay opt-in: the SQL and path taint rules
+measure 77 and 75 percent precision on OWASP Benchmark, the XXE rule reports
+some hardened parsers, `readObject` is unsafe only for untrusted data and the
+rule has no source, and no labelled SSRF corpus exists. Each rule publishes its
+exact detection scope and engine limitations in its metadata.
 
 - Servlet request data reaching operating system command execution (CWE-78)
 - Servlet request data reaching JDBC query text (CWE-89)
@@ -223,10 +240,19 @@ clean PHP scan is not evidence that every local helper flow was analyzed.
 
 ### C# (`csharp/`)
 
-Experimental: eight focused rules. The bundled engine does not provide
-cross-file analysis for this pack. Request-source fixtures cover ASP.NET
-`FromQuery`, `FromBody`, and `FromRoute` parameters in addition to request
-indexers. Minimal API implicit binding and Razor model binding are not modeled.
+Eight focused rules, seven of them default. The request-taint rules for SQL
+injection, OS command injection, and path traversal were measured against the
+NIST Juliet C# suite: 378 findings, every one inside a `Bad` method and none in
+any `Good` method, across four CWE directories. Weak hashing scores 34 of 34 on
+Juliet CWE-328. `BinaryFormatter` deserialization, accept-all certificate
+callbacks, and hardcoded JWT signing keys are matched as unambiguous dangerous
+APIs. The SSRF rule stays opt-in because Juliet C# has no CWE-918 cases, so its
+precision is unmeasured. The bundled engine does not provide cross-file
+analysis for this pack, so a flow that crosses a method or file boundary is not
+followed. Request sources cover ASP.NET `FromQuery`, `FromBody`, and `FromRoute`
+parameters, request indexers, and the `System.Web` `QueryString`, `Params`, and
+`Cookies` idioms. Minimal API implicit binding and Razor model binding are not
+modeled.
 
 - TLS certificate callbacks that accept every certificate (CWE-295)
 - `BinaryFormatter.Deserialize()` usage (CWE-502)

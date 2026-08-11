@@ -14,10 +14,26 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/208.html
         - https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
+        - https://pkg.go.dev/crypto/hmac#Equal
       category: security
       technology:
         - go
       confidence: HIGH
+      scope: >
+        Reports a call to bytes.Equal on a value produced by Sum on a MAC that
+        hmac.New created earlier in the same statement sequence, either through
+        an intermediate variable or with the Sum call written inline as the
+        argument. Both argument positions are covered.
+      limitations: >
+        The construction, the Sum call, and the comparison have to sit in one
+        statement sequence, so a MAC built in one function and compared in
+        another is not matched, and neither is a comparison that sits outside
+        the block the MAC was built in. Only bytes.Equal is treated as the
+        variable-time comparison, so an equality check written with a loop, with
+        subtle.ConstantTimeCompare misused, or through a helper is not seen. The
+        rule does not judge whether the comparison result is observable to an
+        attacker, so a MAC check in code with no timing exposure is reported the
+        same way an authentication check is.
       license: MIT
       author: CRA Evidence
       origin: dgryski/semgrep-go rule use-hmac-equal, MIT

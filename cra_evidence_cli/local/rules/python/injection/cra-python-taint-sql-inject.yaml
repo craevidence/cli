@@ -2,9 +2,10 @@ rules:
   - id: cra-python-taint-sql-inject
     mode: taint
     message: >
-      Untrusted input reaches a SQL execute() call as part of the query string.
-      This allows SQL injection. Use parameterized queries: pass values as a
-      second argument to execute() rather than embedding them in the query string.
+      Untrusted input reaches a SQL query string that is handed to the database
+      driver. This allows SQL injection. Use parameterized queries: keep the
+      query text constant and pass values through the driver's parameter
+      argument rather than embedding them in the query string.
     severity: ERROR
     languages: [python]
     metadata:
@@ -20,7 +21,22 @@ rules:
       technology:
         - python
         - flask
+        - django
       confidence: HIGH
+      scope: >
+        Follows Flask request query, form, cookie, header, and body data, and
+        values read from input(), into the query-text argument of execute,
+        executemany, executescript, or a Django objects.raw call. Multi-value
+        accessors such as args.getlist and the raw query_string are sources as
+        well. Only the query text is a sink: a value passed through the driver's
+        parameter argument is not reported, because the driver binds it rather
+        than interpreting it as SQL.
+      limitations: >
+        Intrafile taint does not cross file boundaries, so a request value that a
+        helper in another module returns is not reported. Taint is lost through a
+        match statement and through string slicing, so a flow that passes either
+        of those is missed. A value written into a configparser option is followed
+        only when it is read back from the same section and option name.
       sanitizer_analysis:
         status: not-modeled
         reason: Numeric conversion cannot be identified safely when Python names can be rebound; use parameterized queries.
@@ -51,8 +67,34 @@ rules:
       - pattern: flask.request.values[...]
       - pattern: flask.request.headers[...]
       - pattern: flask.request.cookies[...]
+      - pattern: request.args.getlist(...)
+      - pattern: request.form.getlist(...)
+      - pattern: request.values.getlist(...)
+      - pattern: request.headers.getlist(...)
+      - pattern: flask.request.args.getlist(...)
+      - pattern: flask.request.form.getlist(...)
+      - pattern: flask.request.values.getlist(...)
+      - pattern: flask.request.headers.getlist(...)
+      - pattern: request.query_string
+      - pattern: flask.request.query_string
+      - pattern: request.get_json(...)
+      - pattern: flask.request.get_json(...)
       - pattern: input(...)
+    pattern-propagators:
+      # A value stored in a configparser option stays tainted when it is read
+      # back from the same section and the same option name. Binding $SEC and
+      # $K in both halves keeps a read of a different option untainted.
+      - pattern: |
+          $C.set($SEC, $K, $FROM)
+          ...
+          $TO = $C.get($SEC, $K, ...)
+        from: $FROM
+        to: $TO
     pattern-sinks:
       - patterns:
-          - pattern: $CUR.execute($QUERY)
+          - pattern-either:
+              - pattern: $CUR.execute($QUERY, ...)
+              - pattern: $CUR.executemany($QUERY, ...)
+              - pattern: $CUR.executescript($QUERY)
+              - pattern: $MODEL.objects.raw($QUERY, ...)
           - focus-metavariable: $QUERY

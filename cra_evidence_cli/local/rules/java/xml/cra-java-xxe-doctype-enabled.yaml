@@ -19,8 +19,16 @@ rules:
         Detects selected unsafe XML feature values and a locally constructed
         default DocumentBuilderFactory without a local DTD-disabling setting.
       limitations: >
-        Does not model parser configuration performed through helpers or other
-        methods and does not cover every Java XML parser API.
+        The DocumentBuilderFactory branch is an inference, not a fact of the
+        call: it reports a hardened factory whenever the hardening is not the
+        disallow-doctype-decl feature set to true in a statement chained
+        directly onto the parse call. Turning off external general entities,
+        external parameter entities, and external DTD loading instead, setting
+        the JAXP accessExternalDTD and accessExternalSchema properties, or
+        splitting newDocumentBuilder and parse into separate statements all
+        produce a finding on correct code. Parser configuration performed in
+        helpers or other methods is not modeled, and the rule does not cover
+        every Java XML parser API.
       license: MIT
       author: CRA Evidence
     languages: [java]

@@ -138,11 +138,13 @@ craevidence code-check . --product my-product --version 1.0.0 --upload
 ```
 
 `code-check` runs locally and uploads sanitized SARIF finding metadata, not
-source code. Its 43 default rules cover focused Python patterns. Another 50
-focused Go, JavaScript/TypeScript, Java, C, C++, Rust, PHP, and C# rules
-require `--include-experimental`; the command reports exact per-language rule
-counts. Experimental groups have not passed the evidence needed to claim broad
-language coverage. Neither command proves compliance.
+source code. Its 54 default rules cover focused Python, C#, Java, and Go
+patterns. Another 41 focused C, C++, JavaScript/TypeScript, PHP, Rust, and
+remaining Java, Go, and C# rules require `--include-experimental`; the command
+reports exact per-language rule counts. A rule runs by default only where a
+labelled corpus measured its precision or where it matches an unambiguous
+dangerous API; the rest stay opt-in. No group is general SAST coverage for its
+language. Neither command proves compliance.
 
 The default API URL is:
 

@@ -1,0 +1,162 @@
+rules:
+  - id: cra-python-flask-response-html-taint
+    message: >
+      HTTP request data is interpolated into the string a Flask view returns.
+      A view that returns a str produces a text/html response, so the value is
+      served as markup and can allow reflected XSS. Render the value through a
+      Jinja template so it is autoescaped, or escape it with markupsafe.escape
+      before building the string.
+    severity: ERROR
+    metadata:
+      tier: experimental
+      cwe: ["CWE-79: Improper Neutralization of Input During Web Page Generation"]
+      owasp: ["A03:2021 - Injection"]
+      references:
+        - https://cwe.mitre.org/data/definitions/79.html
+        - https://flask.palletsprojects.com/en/stable/quickstart/#about-responses
+        - https://flask.palletsprojects.com/en/stable/templating/
+        - https://markupsafe.palletsprojects.com/en/stable/escaping/
+      category: security
+      technology: [python, flask, html]
+      confidence: HIGH
+      scope: >
+        Detects request data reaching the return value of a function decorated
+        with a Flask route or errorhandler, through string operations inside a
+        single file.
+        Taint is carried through f-strings, concatenation, percent formatting,
+        str.format, and the common decode and unquote helpers. Returns of
+        redirect, jsonify, send_file, send_from_directory, and render_template
+        are excluded because those do not build an HTML body from the string.
+      limitations: >
+        Taint is not propagated through calls to functions defined outside the
+        scanned file, through slice expressions, through match statements, or
+        through container APIs such as configparser and dict round trips.
+        URL converter arguments of the view are not modelled as sources, and
+        neither is request.path, which for a registered route is fixed. On the
+        OWASP BenchmarkPython xss category the rule reports 15 of 31 true
+        cases with 1 false positive.
+      sanitizer_analysis:
+        status: modeled
+        reason: >
+          html.escape, markupsafe.escape, flask.escape, bleach.clean, and
+          project helpers whose name is an escaping or sanitizing verb stop the
+          flow. Escapers with unrelated names are not recognised.
+      license: MIT
+      author: CRA Evidence
+    languages: [python]
+    mode: taint
+    options:
+      taint_assume_safe_functions: true
+      taint_assume_safe_indexes: false
+    pattern-sources:
+      - pattern-either:
+          - pattern: flask.request.form
+          - pattern: flask.request.args
+          - pattern: flask.request.values
+          - pattern: flask.request.cookies
+          - pattern: flask.request.headers
+          - pattern: flask.request.data
+          - pattern: flask.request.json
+          - pattern: flask.request.get_json(...)
+          - pattern: flask.request.query_string
+          - pattern: flask.request.full_path
+          - pattern: flask.request.url
+          - pattern: flask.request.$CONTAINER.get(...)
+          - pattern: flask.request.$CONTAINER.getlist(...)
+          - pattern: flask.request.$CONTAINER.get_all(...)
+          - pattern: flask.request.$CONTAINER.keys(...)
+          - pattern: flask.request.$CONTAINER.values(...)
+    pattern-propagators:
+      - pattern: $DST = <... $SRC.split(...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $SRC.strip(...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $SRC.replace(...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $SRC.lower(...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $SRC.upper(...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $SRC.decode(...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $SRC.encode(...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $SEP.join($SRC) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... urllib.parse.unquote_plus($SRC, ...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... urllib.parse.unquote($SRC, ...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... base64.b64decode($SRC, ...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... base64.b64encode($SRC, ...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... str($SRC) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST = <... $FMT.format(..., $SRC, ...) ...>
+        from: $SRC
+        to: $DST
+      - pattern: $DST += <... $FMT.format(..., $SRC, ...) ...>
+        from: $SRC
+        to: $DST
+    pattern-sanitizers:
+      - pattern: html.escape(...)
+      - pattern: markupsafe.escape(...)
+      - pattern: flask.escape(...)
+      - pattern: bleach.clean(...)
+      - patterns:
+          - pattern: $ESCAPER(...)
+          - metavariable-regex:
+              metavariable: $ESCAPER
+              regex: (?i)^([A-Za-z_][A-Za-z_0-9]*\.)*(escape|escape_html|html_escape|escape_for_html|escapejs|sanitize|sanitize_html|clean_html|htmlspecialchars)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  @$APP.route(...)
+                  def $VIEW(...):
+                      ...
+              - pattern-inside: |
+                  @$APP.get(...)
+                  def $VIEW(...):
+                      ...
+              - pattern-inside: |
+                  @$APP.post(...)
+                  def $VIEW(...):
+                      ...
+              - pattern-inside: |
+                  @$APP.put(...)
+                  def $VIEW(...):
+                      ...
+              - pattern-inside: |
+                  @$APP.delete(...)
+                  def $VIEW(...):
+                      ...
+              - pattern-inside: |
+                  @$APP.patch(...)
+                  def $VIEW(...):
+                      ...
+              - pattern-inside: |
+                  @$APP.errorhandler(...)
+                  def $VIEW(...):
+                      ...
+          - pattern: return $BODY
+          - focus-metavariable: $BODY
+          - pattern-not: return flask.redirect(...)
+          - pattern-not: return flask.jsonify(...)
+          - pattern-not: return flask.send_file(...)
+          - pattern-not: return flask.send_from_directory(...)
+          - pattern-not: return flask.render_template(...)

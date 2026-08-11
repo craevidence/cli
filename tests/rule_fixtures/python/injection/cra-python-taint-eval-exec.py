@@ -129,3 +129,32 @@ def bad_eval_from_query_string():
     raw = request.query_string
     # ruleid: cra-python-taint-eval-exec
     exec(raw)
+
+
+# Bad: a value stored in a configparser option and read back from the same
+# section and option name is still tainted
+def bad_eval_configparser_same_key():
+    import configparser
+
+    param = request.form.get("expr")
+    conf = configparser.ConfigParser()
+    conf.add_section("section")
+    conf.set("section", "keyA", "a-Value")
+    conf.set("section", "keyB", param)
+    bar = conf.get("section", "keyB")
+    # ruleid: cra-python-taint-eval-exec
+    exec(bar)
+
+
+# Safe: a different option is read back, so the tainted value is not the one used
+def ok_eval_configparser_other_key():
+    import configparser
+
+    param = request.form.get("expr")
+    conf = configparser.ConfigParser()
+    conf.add_section("section")
+    conf.set("section", "keyA", "a-Value")
+    conf.set("section", "keyB", param)
+    bar = conf.get("section", "keyA")
+    # ok: cra-python-taint-eval-exec
+    exec(bar)

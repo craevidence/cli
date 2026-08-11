@@ -80,3 +80,55 @@ func okRLockRUnlock(mu *sync.RWMutex) {
 	mu.RLock()
 	defer mu.RUnlock()
 }
+
+// Safe: a write section closed explicitly, then a read section with a matching
+// deferred unlock. Read then upgrade to write and its mirror are ordinary Go.
+func okWriteSectionThenReadSection(mu *sync.RWMutex) {
+	mu.Lock()
+	mu.Unlock()
+
+	// ok: cra-go-wrong-lock-unlock
+	mu.RLock()
+	defer mu.RUnlock()
+}
+
+// Safe: a read section closed explicitly, then a write section.
+func okReadSectionThenWriteSection(mu *sync.RWMutex) {
+	mu.RLock()
+	mu.RUnlock()
+
+	// ok: cra-go-wrong-lock-unlock
+	mu.Lock()
+	defer mu.Unlock()
+}
+
+// Safe: the deferred read unlock belongs to a read section opened inside a
+// nested closure, not to the write section that already closed.
+func okClosureReadSectionAfterWriteSection(mu *sync.RWMutex) {
+	mu.Lock()
+	mu.Unlock()
+
+	func() {
+		// ok: cra-go-wrong-lock-unlock
+		mu.RLock()
+		defer mu.RUnlock()
+	}()
+}
+
+// A file lock whose Unlock releases whichever mode is held, so RLock pairs with
+// Unlock and there is no RUnlock method at all.
+type fileLock struct {
+	mu sync.RWMutex
+}
+
+func (l *fileLock) Lock()   { l.mu.Lock() }
+func (l *fileLock) RLock()  { l.mu.RLock() }
+func (l *fileLock) Unlock() { l.mu.Unlock() }
+
+// Safe: the receiver is not a sync mutex, so the sync pairing rule does not
+// apply to it.
+func okNonSyncLockerReadThenUnlock(l *fileLock) {
+	// ok: cra-go-wrong-lock-unlock
+	l.RLock()
+	defer l.Unlock()
+}

@@ -81,3 +81,88 @@ def bad_subscript_args_to_query(cursor):
     identifier = request.args["id"]
     # ruleid: cra-python-taint-sql-inject
     cursor.execute("SELECT * FROM items WHERE id = " + identifier)
+
+
+# Bad: the query text itself is tainted even though a value is bound separately
+def bad_sql_tainted_query_with_bind_param(cur):
+    column = request.args.get("sort")
+    # ruleid: cra-python-taint-sql-inject
+    cur.execute("SELECT " + column + " FROM users WHERE id = ?", (1,))
+
+
+# Bad: executemany builds its query text from a request value
+def bad_sql_executemany(cur):
+    table = request.args.get("table")
+    # ruleid: cra-python-taint-sql-inject
+    cur.executemany("INSERT INTO " + table + " (a) VALUES (?)", [(1,), (2,)])
+
+
+# Safe: executemany with a constant query and tainted values bound as parameters
+def ok_sql_executemany_parameterized(cur):
+    name = request.form.get("name")
+    # ok: cra-python-taint-sql-inject
+    cur.executemany("INSERT INTO users (name) VALUES (?)", [(name,)])
+
+
+# Bad: executescript runs the whole string as SQL
+def bad_sql_executescript(cur):
+    script = request.form.get("script")
+    # ruleid: cra-python-taint-sql-inject
+    cur.executescript(script)
+
+
+# Bad: a Django raw queryset with the value embedded in the query text
+def bad_sql_django_raw(person_model):
+    name = request.args.get("name")
+    # ruleid: cra-python-taint-sql-inject
+    return person_model.objects.raw("SELECT * FROM person WHERE name = '" + name + "'")
+
+
+# Safe: a Django raw queryset with the value passed as a parameter
+def ok_sql_django_raw_parameterized(person_model):
+    name = request.args.get("name")
+    # ok: cra-python-taint-sql-inject
+    return person_model.objects.raw("SELECT * FROM person WHERE name = %s", [name])
+
+
+# Bad: a multi-value accessor is a source
+def bad_sql_from_getlist(cur):
+    ids = request.args.getlist("id")
+    # ruleid: cra-python-taint-sql-inject
+    cur.execute("SELECT * FROM users WHERE id = " + ids[0])
+
+
+# Bad: the parsed JSON body is a source
+def bad_sql_from_get_json(cur):
+    body = request.get_json()
+    # ruleid: cra-python-taint-sql-inject
+    cur.execute("SELECT * FROM users WHERE name = '" + body["name"] + "'")
+
+
+# Bad: a value stored in a configparser option and read back from the same
+# section and option name is still tainted
+def bad_sql_configparser_same_key(cur):
+    import configparser
+
+    param = request.form.get("name")
+    conf = configparser.ConfigParser()
+    conf.add_section("section")
+    conf.set("section", "keyA", "a-Value")
+    conf.set("section", "keyB", param)
+    bar = conf.get("section", "keyB")
+    # ruleid: cra-python-taint-sql-inject
+    cur.execute("SELECT * FROM users WHERE name = '" + bar + "'")
+
+
+# Safe: a different option is read back, so the tainted value is not the one used
+def ok_sql_configparser_other_key(cur):
+    import configparser
+
+    param = request.form.get("name")
+    conf = configparser.ConfigParser()
+    conf.add_section("section")
+    conf.set("section", "keyA", "a-Value")
+    conf.set("section", "keyB", param)
+    bar = conf.get("section", "keyA")
+    # ok: cra-python-taint-sql-inject
+    cur.execute("SELECT * FROM users WHERE name = '" + bar + "'")

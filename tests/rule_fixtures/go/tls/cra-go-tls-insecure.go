@@ -89,3 +89,46 @@ func okUnrelatedStructPointer() *clientOptions {
 	opts.InsecureSkipVerify = true
 	return opts
 }
+
+// A minimal error value so the verification callback below can reject without
+// pulling another import into this fixture.
+type peerCertificateMissing struct{}
+
+func (peerCertificateMissing) Error() string { return "no peer certificate" }
+
+// Safe: the standard check is turned off but the configuration installs its own
+// certificate check in the same literal.
+func okInsecureSkipVerifyWithConnectionVerification() *tls.Config {
+	// ok: cra-go-tls-insecure
+	return &tls.Config{
+		MinVersion:         tls.VersionTLS12,
+		InsecureSkipVerify: true,
+		VerifyConnection: func(cs tls.ConnectionState) error {
+			if len(cs.PeerCertificates) == 0 {
+				return peerCertificateMissing{}
+			}
+			return nil
+		},
+	}
+}
+
+// Safe: the same, with the peer check taken from a pinned configuration and
+// installed on the value afterwards.
+func okInsecureSkipVerifyThenPeerVerification(pinned *tls.Config) *tls.Config {
+	conf := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true}
+	// ok: cra-go-tls-insecure
+	conf.VerifyPeerCertificate = pinned.VerifyPeerCertificate
+	return conf
+}
+
+// Safe: the field assignment form followed by a connection check.
+func okInsecureSkipVerifyThenConnectionCheck(conf *tls.Config) {
+	// ok: cra-go-tls-insecure
+	conf.InsecureSkipVerify = true
+	conf.VerifyConnection = func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return peerCertificateMissing{}
+		}
+		return nil
+	}
+}

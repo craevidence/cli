@@ -14,6 +14,27 @@ rules:
       category: security
       technology: [php, pdo, mysqli]
       confidence: HIGH
+      scope: >
+        Covers PDO and mysqli query, exec and prepare, the legacy mysql_query
+        extension removed in PHP 7, and pg_query. A query assembled in one
+        function and executed in another is not followed.
+      sanitizer_analysis:
+        status: partially-modeled
+        reason: >
+          Suppressed: a value coerced to a number or a boolean by intval,
+          floatval, doubleval, boolval, a cast, settype, arithmetic coercion,
+          or filter_var validating or stripping to a number, and PDO quote,
+          which adds the surrounding quotes itself. A value constrained to a
+          number cannot carry SQL syntax.
+          Deliberately NOT suppressed: mysql_real_escape_string,
+          mysqli_real_escape_string and real_escape_string. Escaping only
+          protects a value that is written inside quotes, and the rule cannot
+          see whether it is. Modelling them was measured and withdrawn: it
+          silenced 18 real injections of the shape
+          "SELECT * FROM student where id=" . mysql_real_escape_string($v),
+          where the value is unquoted and 1 OR 1=1 passes through untouched.
+          Suppressing them raised precision by one tenth of a point and cost
+          more than two points of recall.
       license: MIT
       author: CRA Evidence
     languages: [php]
@@ -32,7 +53,36 @@ rules:
     pattern-sanitizers:
       - pattern-either:
           - pattern: intval(...)
-          - pattern: filter_var(..., FILTER_VALIDATE_INT, ...)
+          - pattern: floatval(...)
+          - pattern: doubleval(...)
+          - pattern: boolval(...)
+          - pattern: (int)$VALUE
+          - pattern: (integer)$VALUE
+          - pattern: (float)$VALUE
+          - pattern: (double)$VALUE
+          - pattern: (bool)$VALUE
+          - pattern: (boolean)$VALUE
+          - pattern: $DB->quote(...)
+          - patterns:
+              - pattern: filter_var($VALUE, $FILTER, ...)
+              - metavariable-regex:
+                  metavariable: $FILTER
+                  regex: ^FILTER_(VALIDATE_(INT|FLOAT|BOOLEAN|BOOL)|SANITIZE_NUMBER_(INT|FLOAT))$
+      - patterns:
+          - pattern-either:
+              - pattern: $VALUE += 0
+              - pattern: $VALUE += 0.0
+              - pattern: $VALUE = $VALUE + 0
+              - pattern: $VALUE = $VALUE + 0.0
+          - focus-metavariable: $VALUE
+        by-side-effect: true
+      - patterns:
+          - pattern: settype($VALUE, $TYPE)
+          - metavariable-regex:
+              metavariable: $TYPE
+              regex: ^["'](int|integer|float|double|bool|boolean)["']$
+          - focus-metavariable: $VALUE
+        by-side-effect: true
     pattern-sinks:
       - pattern-either:
           - patterns:
@@ -46,6 +96,21 @@ rules:
               - focus-metavariable: $QUERY
           - patterns:
               - pattern: mysqli_query($DB, $QUERY)
+              - focus-metavariable: $QUERY
+          - patterns:
+              - pattern: mysqli_real_query($DB, $QUERY)
+              - focus-metavariable: $QUERY
+          - patterns:
+              - pattern: mysqli_multi_query($DB, $QUERY)
+              - focus-metavariable: $QUERY
+          - patterns:
+              - pattern: mysql_query($QUERY, ...)
+              - focus-metavariable: $QUERY
+          - patterns:
+              - pattern: pg_query($QUERY)
+              - focus-metavariable: $QUERY
+          - patterns:
+              - pattern: pg_query($DB, $QUERY)
               - focus-metavariable: $QUERY
           - patterns:
               - pattern: mysqli_prepare($DB, $QUERY)

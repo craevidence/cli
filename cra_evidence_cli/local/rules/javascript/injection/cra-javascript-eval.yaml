@@ -18,6 +18,16 @@ rules:
       technology:
         - javascript
       confidence: MEDIUM
+      scope: >
+        Reports a call to eval. The argument is not examined, so the finding
+        states that eval is used rather than that untrusted data reaches it.
+      limitations: >
+        A program that evaluates a string it generated itself is reported the
+        same as one that evaluates request data. That is not a defect that can
+        be narrowed away: every pattern that suppresses eval of a variable also
+        suppresses eval of untrusted input, which is the whole value of the
+        rule. This is why it stays opt-in. The member form, for example
+        $scope.$eval, is not matched, confirmed by probe.
       license: MIT
       author: CRA Evidence
     languages: [javascript, typescript]

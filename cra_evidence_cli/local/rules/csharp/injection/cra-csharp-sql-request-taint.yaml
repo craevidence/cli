@@ -5,7 +5,7 @@ rules:
       command with typed parameters instead of constructing SQL text.
     severity: ERROR
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command"]
       owasp: ["A03:2021 - Injection"]
       references:
@@ -14,6 +14,18 @@ rules:
       category: security
       technology: [csharp, dotnet, aspnet, ado.net]
       confidence: HIGH
+      scope: >
+        Tracks ASP.NET Core request collections, System.Web QueryString, Params,
+        Form, Headers and Cookies reads, and [FromQuery], [FromBody] and
+        [FromRoute] parameters into SqlCommand construction, CommandText plain
+        and compound assignment, ExecuteSqlRaw and FromSqlRaw. Params and
+        Cookies reads require a receiver named req or Request so that an
+        application type with the same property name is not treated as request
+        data.
+      limitations: >
+        Taint is followed within a single file. Flows that cross a method
+        boundary through a field, a helper class, or another file are not
+        reported.
       license: MIT
       author: CRA Evidence
     languages: [csharp]
@@ -23,6 +35,18 @@ rules:
           - pattern: $REQUEST.Query[$KEY]
           - pattern: $REQUEST.Form[$KEY]
           - pattern: $REQUEST.Headers[$KEY]
+          - pattern: $REQUEST.QueryString[$KEY]
+          - pattern: $REQUEST.QueryString.Get($KEY)
+          - pattern: $REQUEST.Form.Get($KEY)
+          - pattern: $REQUEST.Headers.Get($KEY)
+          - patterns:
+              - pattern-either:
+                  - pattern: $REQUEST.Params[$KEY]
+                  - pattern: $REQUEST.Params.Get($KEY)
+                  - pattern: $REQUEST.Cookies
+              - metavariable-regex:
+                  metavariable: $REQUEST
+                  regex: '(?i)^([\w.]+\.)?(req|request)$'
           - patterns:
               - pattern-inside: |
                   $RET $METHOD(..., [FromQuery] $TYPE $PARAM, ...) {
@@ -52,7 +76,9 @@ rules:
               - pattern: new SqlCommand($QUERY, ...)
               - focus-metavariable: $QUERY
           - patterns:
-              - pattern: $COMMAND.CommandText = $QUERY
+              - pattern-either:
+                  - pattern: $COMMAND.CommandText = $QUERY
+                  - pattern: $COMMAND.CommandText += $QUERY
               - focus-metavariable: $QUERY
           - patterns:
               - pattern: $DB.Database.ExecuteSqlRaw($QUERY, ...)

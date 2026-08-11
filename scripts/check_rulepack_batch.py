@@ -31,6 +31,15 @@ CROSS_RULE_OK_ALLOWLIST = {
         "cra-python-jwt-decode-missing-algorithms",
     ): "Disabling signature verification is independently unsafe.",
     (
+        "python/injection/cra-python-taint-sql-inject.py",
+        "cra-python-sql-injection",
+        "cra-python-taint-sql-inject",
+    ): (
+        "The taint rule correctly abstains because the value read back is the "
+        "safe key, while the pattern rule reports the concatenated query text "
+        "regardless of origin. Both verdicts are right for their own scope."
+    ),
+    (
         "python/sqlalchemy/cra-python-sqlalchemy-order-by-text-interpolation.py",
         "cra-python-sqlalchemy-text-interpolation",
         "cra-python-sqlalchemy-order-by-text-interpolation",

@@ -15,8 +15,17 @@ rules:
       technology: [php]
       confidence: VERY HIGH
       sanitizer_analysis:
-        status: not-modeled
-        reason: Safe command construction requires an allowlisted executable and separately validated arguments.
+        status: partially-modeled
+        reason: >
+          Suppressed: escapeshellarg and escapeshellcmd, a numeric cast written
+          as (int), (float) or (bool), settype to a numeric or boolean type,
+          intval, floatval, doubleval and boolval, and filter_var validating as
+          an integer, float or boolean, and filter_var stripping a value to a
+          number with FILTER_SANITIZE_NUMBER_INT or FILTER_SANITIZE_NUMBER_FLOAT. A value constrained to a number or a
+          boolean cannot carry shell metacharacters. Validation by regular
+          expression is deliberately NOT suppressed, because a pattern that
+          accepts everything is still a flaw and the rule cannot tell the two
+          apart. An allowlist comparison is not suppressed either.
       license: MIT
       author: CRA Evidence
     languages: [php]
@@ -32,6 +41,40 @@ rules:
               - metavariable-regex:
                   metavariable: $KEY
                   regex: ^["'](HTTP_[A-Z_]+|PATH_INFO|QUERY_STRING|REQUEST_URI|PHP_AUTH_USER|PHP_AUTH_PW)["']$
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: escapeshellarg(...)
+          - pattern: escapeshellcmd(...)
+          - pattern: intval(...)
+          - pattern: floatval(...)
+          - pattern: doubleval(...)
+          - pattern: boolval(...)
+          - pattern: (int)$VALUE
+          - pattern: (integer)$VALUE
+          - pattern: (float)$VALUE
+          - pattern: (double)$VALUE
+          - pattern: (bool)$VALUE
+          - pattern: (boolean)$VALUE
+          - patterns:
+              - pattern: filter_var($VALUE, $FILTER, ...)
+              - metavariable-regex:
+                  metavariable: $FILTER
+                  regex: ^FILTER_(VALIDATE_(INT|FLOAT|BOOLEAN|BOOL)|SANITIZE_NUMBER_(INT|FLOAT))$
+      - patterns:
+          - pattern-either:
+              - pattern: $VALUE += 0
+              - pattern: $VALUE += 0.0
+              - pattern: $VALUE = $VALUE + 0
+              - pattern: $VALUE = $VALUE + 0.0
+          - focus-metavariable: $VALUE
+        by-side-effect: true
+      - patterns:
+          - pattern: settype($VALUE, $TYPE)
+          - metavariable-regex:
+              metavariable: $TYPE
+              regex: ^["'](int|integer|float|double|bool|boolean)["']$
+          - focus-metavariable: $VALUE
+        by-side-effect: true
     pattern-sinks:
       - pattern-either:
           - patterns:

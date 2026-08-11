@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -10,6 +11,7 @@ from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
 from cra_evidence_cli.commands.code_check import (
+    _BUNDLED_RULES,
     _SAST_DEGRADED_EXIT_CODE,
     _SAST_EXIT_CODE,
     _UPLOAD_SIZE_LIMIT,
@@ -18,6 +20,7 @@ from cra_evidence_cli.commands.code_check import (
 )
 from cra_evidence_cli.config import CRAEvidenceConfig
 from cra_evidence_cli.exceptions import CRAEvidenceError
+from cra_evidence_cli.local.rules_pack import inspect_rule_pack
 from cra_evidence_cli.local.sast_scanner import (
     OPENGREP_INSTALL_HINT,
     SASTFinding,
@@ -306,14 +309,19 @@ def test_bundled_experimental_rules_are_opt_in(runner, tmp_path):
     assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
         "Opengrep scanned zero files"
     )
-    assert len(excluded) == 50
-    assert default_payload["rule_count"] == 43
+    assert len(excluded) == 41
+    assert default_payload["rule_count"] == 54
     assert default_payload["rule_tiers"] == {
-        "default_enabled": 43,
+        "default_enabled": 54,
         "experimental_enabled": 0,
-        "experimental_available": 50,
+        "experimental_available": 41,
     }
-    assert default_payload["rule_language_counts"] == {"python": 43}
+    assert default_payload["rule_language_counts"] == {
+        "csharp": 7,
+        "go": 2,
+        "java": 3,
+        "python": 42,
+    }
 
     experimental_report = _clean_report()
     with (
@@ -330,8 +338,8 @@ def test_bundled_experimental_rules_are_opt_in(runner, tmp_path):
     assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
         "Opengrep scanned zero files"
     )
-    assert experimental_payload["rule_count"] == 93
-    assert experimental_payload["rule_tiers"]["experimental_enabled"] == 50
+    assert experimental_payload["rule_count"] == 95
+    assert experimental_payload["rule_tiers"]["experimental_enabled"] == 41
 
 
 def test_zero_file_message_does_not_suggest_experimental_for_unrelated_files(
@@ -350,10 +358,15 @@ def test_zero_file_message_does_not_suggest_experimental_for_unrelated_files(
     )
 
 
-def test_zero_file_message_suggests_experimental_when_java_is_present(
+def test_zero_file_message_suggests_experimental_for_an_opt_in_language(
     runner, tmp_path
 ):
-    (tmp_path / "Example.java").write_text("class Example {}\n", encoding="utf-8")
+    """Rust has no default rule, so a Rust file must prompt for the opt-in flag.
+
+    The language named here has to be one the pack still covers with
+    experimental rules only. Java used to serve that purpose and no longer can.
+    """
+    (tmp_path / "example.rs").write_text("fn main() {}\n", encoding="utf-8")
     failed = _failed_report()
     failed.failure_reason = "Opengrep scanned zero files"
     with (
@@ -362,16 +375,44 @@ def test_zero_file_message_suggests_experimental_when_java_is_present(
     ):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
 
-    assert "Experimental rules for Go" in result.output
-    assert "Java" in result.output
+    assert "Experimental rules for" in result.output
+    assert "Rust" in result.output
     assert "--include-experimental" in result.output
 
 
-def test_polyglot_default_gate_fails_when_java_is_not_analysed(runner, tmp_path):
+def test_zero_file_message_never_names_a_language_with_a_default_rule(
+    runner, tmp_path
+):
+    """A promoted language must disappear from the opt-in message by itself."""
+    (tmp_path / "example.rs").write_text("fn main() {}\n", encoding="utf-8")
+    failed = _failed_report()
+    failed.failure_reason = "Opengrep scanned zero files"
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=failed),
+    ):
+        result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
+
+    inventory = inspect_rule_pack(_BUNDLED_RULES)
+    opt_in = set(inventory.experimental_only_languages)
+    assert "python" not in opt_in
+    for language, display in (("java", "Java"), ("go", "Go"), ("csharp", "C#")):
+        if language not in opt_in:
+            # A word boundary, because "Java" is a substring of "JavaScript"
+            # and "Go" of "Golang": a plain containment check reads as a
+            # failure whenever another listed language merely starts the same.
+            pattern = rf"\b{re.escape(display)}\b"
+            assert re.search(pattern, result.output) is None
+
+
+def test_polyglot_default_gate_fails_when_an_opt_in_language_is_not_analysed(
+    runner, tmp_path
+):
+    """The file left unanalysed must belong to a language with no default rule."""
     python_file = tmp_path / "app.py"
-    java_file = tmp_path / "Vuln.java"
+    rust_file = tmp_path / "vuln.rs"
     python_file.write_text("print('clean')\n", encoding="utf-8")
-    java_file.write_text("class Vuln {}\n", encoding="utf-8")
+    rust_file.write_text("fn main() {}\n", encoding="utf-8")
     report = _clean_report()
     report.files_scanned = 1
     report.scanned_paths = (str(python_file),)
@@ -391,11 +432,11 @@ def test_polyglot_default_gate_fails_when_java_is_not_analysed(runner, tmp_path)
     assert result.exit_code == _SAST_DEGRADED_EXIT_CODE
     assert payload["coverage_degraded"] is True
     assert payload["unanalysed_file_count"] == 1
-    assert payload["unanalysed_language_counts"] == {"Java": 1}
+    assert payload["unanalysed_language_counts"] == {"Rust": 1}
     assert payload["unanalysed_files"] == [
         {
-            "path": "Vuln.java",
-            "language": "Java",
+            "path": "vuln.rs",
+            "language": "Rust",
             "reason": "no_enabled_rules",
         }
     ]
@@ -1252,7 +1293,7 @@ def test_exclude_rule_passed_through(runner, tmp_path):
     assert result.exit_code == 0
     passed = run_scan_mock.call_args.kwargs["exclude_rules"]
     assert passed[0] == "cra-go-weak-hash"
-    assert len(passed[1:]) == 50
+    assert len(passed[1:]) == 41
 
 
 # --- upload must not silently succeed when the engine is absent ---

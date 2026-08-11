@@ -19,6 +19,25 @@ rules:
       technology:
         - javascript
       confidence: MEDIUM
+      scope: >
+        Reports process input reaching the command string of child_process
+        exec or execSync. The binding is recognised when it comes from a
+        require call, a destructured require with or without renaming, an ESM
+        import, or a TypeScript import-equals, in the same file.
+      limitations: >
+        Analysis is single file, so a binding re-exported through a local
+        helper module is not followed. A binding installed on globalThis and a
+        module obtained through a dynamic import expression are not matched,
+        both confirmed by probe. A call wrapped by promisify is not matched. A
+        command whose only interpolation is a conditional between two string
+        literals is constant in every branch, and reporting it is a false
+        positive: one such call was found in production code on a scan of three
+        real Node projects. A carve-out for that shape was written and then
+        rejected on measurement. Excluding a template that interpolates a
+        conditional between two string literals also silences a template that
+        interpolates such a conditional alongside an attacker controlled value,
+        in either order, which trades one false positive for two false
+        negatives. The finding therefore stands.
       license: MIT
       author: CRA Evidence
     languages: [javascript, typescript]

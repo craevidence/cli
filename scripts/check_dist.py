@@ -31,7 +31,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent
 RULES_ROOT = REPO_ROOT / "cra_evidence_cli" / "local" / "rules"
 
-EXPECTED_RULE_COUNT = 93
+EXPECTED_RULE_COUNT = 95
 ENGINE_BINARY_SUFFIX = "cra_evidence_cli/_engine/grype"
 OPENGREP_BINARY_SUFFIX = "cra_evidence_cli/_engine/opengrep"
 OPENGREP_LOCK_SUFFIX = "cra_evidence_cli/_engine/opengrep-release.json"

@@ -5,7 +5,7 @@ rules:
       platform hostname verifier so TLS peers are matched to the requested host.
     severity: WARNING
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-297: Improper Validation of Certificate with Host Mismatch"]
       owasp: ["A02:2021 - Cryptographic Failures"]
       references:
@@ -15,11 +15,20 @@ rules:
       technology: [java, tls]
       confidence: VERY HIGH
       scope: >
-        Detects supported inline and named HostnameVerifier implementations
-        whose verification result is the literal value true.
+        Detects a verifier that returns the literal value true for every host.
+        Two shapes are reported: a lambda whose whole body is true, passed to
+        setHostnameVerifier, setDefaultHostnameVerifier, or an OkHttp-style
+        hostnameVerifier builder call; and a verify(String, SSLSession) method
+        that ends in return true with no branch and no return false, declared
+        in an anonymous HostnameVerifier or in a class whose only declared
+        interface is HostnameVerifier.
       limitations: >
-        Does not evaluate helper-returned booleans, method references, or
-        verifier behavior distributed across methods or files.
+        A verify method that returns true from inside a branch is not
+        reported, because a branch can be a real host check. Does not evaluate
+        helper-returned booleans, constant expressions, method references,
+        block-bodied lambdas, or verifier behavior distributed across methods
+        or files, and does not recognize accept-all verifiers supplied by a
+        library, such as Apache HttpClient NoopHostnameVerifier.
       license: MIT
       author: CRA Evidence
     languages: [java]
@@ -29,42 +38,43 @@ rules:
       - pattern: HttpsURLConnection.setDefaultHostnameVerifier(($HOST, $SESSION) -> true)
       - pattern: javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier(($HOST, $SESSION) -> true)
       - patterns:
-          - pattern: return true;
-          - pattern-inside: |
-              new HostnameVerifier() {
+          - pattern-either:
+              - pattern: |
+                  public boolean verify(String $HOST, SSLSession $SESSION) {
+                    ...
+                    return true;
+                  }
+              - pattern: |
+                  public boolean verify(String $HOST, javax.net.ssl.SSLSession $SESSION) {
+                    ...
+                    return true;
+                  }
+          - pattern-not: |
+              public boolean verify(String $HOST, $TYPE $SESSION) {
                 ...
-                public boolean verify(String $HOST, SSLSession $SESSION) {
-                  ...
-                }
-                ...
-              }
-      - patterns:
-          - pattern: return true;
-          - pattern-inside: |
-              new javax.net.ssl.HostnameVerifier() {
-                ...
-                public boolean verify(String $HOST, javax.net.ssl.SSLSession $SESSION) {
-                  ...
-                }
+                if (...) { ... }
                 ...
               }
-      - patterns:
-          - pattern: return true;
-          - pattern-inside: |
-              class $CLASS implements HostnameVerifier {
+          - pattern-not: |
+              public boolean verify(String $HOST, $TYPE $SESSION) {
                 ...
-                public boolean verify(String $HOST, SSLSession $SESSION) {
-                  ...
-                }
+                return false;
                 ...
               }
-      - patterns:
-          - pattern: return true;
-          - pattern-inside: |
-              class $CLASS implements javax.net.ssl.HostnameVerifier {
-                ...
-                public boolean verify(String $HOST, javax.net.ssl.SSLSession $SESSION) {
-                  ...
-                }
-                ...
-              }
+          - pattern-either:
+              - pattern-inside: |
+                  new HostnameVerifier() {
+                    ...
+                  }
+              - pattern-inside: |
+                  new javax.net.ssl.HostnameVerifier() {
+                    ...
+                  }
+              - pattern-inside: |
+                  class $CLASS implements HostnameVerifier {
+                    ...
+                  }
+              - pattern-inside: |
+                  class $CLASS implements javax.net.ssl.HostnameVerifier {
+                    ...
+                  }

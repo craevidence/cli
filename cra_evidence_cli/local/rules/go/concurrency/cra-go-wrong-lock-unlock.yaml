@@ -15,44 +15,100 @@ rules:
       references:
         - https://cwe.mitre.org/data/definitions/667.html
         - https://owasp.org/Top10/A04_2021-Insecure_Design/
+        - https://pkg.go.dev/sync#RWMutex
       category: security
       technology:
         - go
       confidence: HIGH
+      scope: >
+        Reports an acquire and a deferred release of the same value that do not
+        pair, when that value is declared as sync.Mutex, sync.RWMutex, or a
+        pointer to either. A release of the same value between the acquire and
+        the deferred call closes the first section, and an acquire of the other
+        mode between them shows the deferred call belongs to that second
+        acquire, so neither shape is reported. The deferred release is matched
+        both as a direct call and inside a deferred closure.
+      limitations: >
+        A mutex embedded in a struct is not matched, because the receiver of the
+        call is then the struct rather than the mutex, and lock types outside
+        sync, including wrappers whose Unlock releases a read lock, are outside
+        this rule by the same test. Because any intervening release of the same
+        value suppresses the finding, a genuine mismatch that follows an
+        unrelated release in the same function is missed. Nothing here proves
+        the deferred call runs on the same path as the acquire.
       license: MIT
       author: CRA Evidence
       origin: dgryski/semgrep-go rule wrong-lock-unlock, MIT
     languages: [go]
-    pattern-either:
-      - pattern: |
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $M.Lock()
+              ...
+              defer $M.RUnlock()
+          - pattern: |
+              $M.RLock()
+              ...
+              defer $M.Unlock()
+          - pattern: |
+              $M.Lock()
+              ...
+              defer $M.Lock()
+          - pattern: |
+              $M.RLock()
+              ...
+              defer $M.RLock()
+          - pattern: |
+              $M.Lock()
+              ...
+              defer func() {
+                  ...
+                  $M.RUnlock()
+                  ...
+              }()
+          - pattern: |
+              $M.RLock()
+              ...
+              defer func() {
+                  ...
+                  $M.Unlock()
+                  ...
+              }()
+      # Read then upgrade to write, and its mirror, are ordinary correct Go. The
+      # release in the middle ends the first section, so the deferred call
+      # belongs to the second one and pairs with it.
+      - pattern-not: |
           $M.Lock()
+          ...
+          $M.Unlock()
+          ...
+      - pattern-not: |
+          $M.RLock()
+          ...
+          $M.RUnlock()
+          ...
+      # The same reasoning when the second section is opened rather than the
+      # first one closed, which is what a nested closure taking the other mode
+      # looks like from outside.
+      - pattern-not: |
+          $M.Lock()
+          ...
+          $M.RLock()
           ...
           defer $M.RUnlock()
-      - pattern: |
+      - pattern-not: |
           $M.RLock()
+          ...
+          $M.Lock()
           ...
           defer $M.Unlock()
-      - pattern: |
-          $M.Lock()
-          ...
-          defer $M.Lock()
-      - pattern: |
-          $M.RLock()
-          ...
-          defer $M.RLock()
-      - pattern: |
-          $M.Lock()
-          ...
-          defer func() {
-              ...
-              $M.RUnlock()
-              ...
-          }()
-      - pattern: |
-          $M.RLock()
-          ...
-          defer func() {
-              ...
-              $M.Unlock()
-              ...
-          }()
+      # Lock, RLock, Unlock and RUnlock are ordinary method names. Without this
+      # the rule reported lock wrappers whose Unlock deliberately releases a
+      # read lock and which have no RUnlock at all.
+      - metavariable-type:
+          metavariable: $M
+          types:
+            - sync.Mutex
+            - "*sync.Mutex"
+            - sync.RWMutex
+            - "*sync.RWMutex"

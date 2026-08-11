@@ -5,7 +5,7 @@ rules:
       directly and pass validated values through ArgumentList without a shell.
     severity: ERROR
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
       owasp: ["A03:2021 - Injection"]
       references:
@@ -14,6 +14,17 @@ rules:
       category: security
       technology: [csharp, dotnet, aspnet]
       confidence: HIGH
+      scope: >
+        Tracks ASP.NET Core request collections, System.Web QueryString, Params,
+        Form, Headers and Cookies reads, and [FromQuery], [FromBody] and
+        [FromRoute] parameters into Process.Start and ProcessStartInfo command
+        text and arguments. Params and Cookies reads require a receiver named
+        req or Request so that an application type with the same property name
+        is not treated as request data.
+      limitations: >
+        Taint is followed within a single file. Flows that cross a method
+        boundary through a field, a helper class, or another file are not
+        reported.
       sanitizer_analysis:
         status: modeled
         reason: A fixed executable with ArgumentList is modeled as a non-shell process invocation.
@@ -26,6 +37,18 @@ rules:
           - pattern: $REQUEST.Query[$KEY]
           - pattern: $REQUEST.Form[$KEY]
           - pattern: $REQUEST.Headers[$KEY]
+          - pattern: $REQUEST.QueryString[$KEY]
+          - pattern: $REQUEST.QueryString.Get($KEY)
+          - pattern: $REQUEST.Form.Get($KEY)
+          - pattern: $REQUEST.Headers.Get($KEY)
+          - patterns:
+              - pattern-either:
+                  - pattern: $REQUEST.Params[$KEY]
+                  - pattern: $REQUEST.Params.Get($KEY)
+                  - pattern: $REQUEST.Cookies
+              - metavariable-regex:
+                  metavariable: $REQUEST
+                  regex: '(?i)^([\w.]+\.)?(req|request)$'
           - patterns:
               - pattern-inside: |
                   $RET $METHOD(..., [FromQuery] $TYPE $PARAM, ...) {

@@ -1,6 +1,6 @@
 {
-  "files_scanned": 101,
-  "finding_count": 525,
+  "files_scanned": 103,
+  "finding_count": 576,
   "findings": [
     {
       "end": [
@@ -563,106 +563,158 @@
     },
     {
       "end": [
-        13,
+        14,
         37
       ],
       "path": "csharp/path/cra-csharp-file-request-taint.cs",
       "rule_id": "cra-csharp-file-request-taint",
       "severity": "ERROR",
       "start": [
-        13,
+        14,
         33
       ]
     },
     {
       "end": [
-        19,
+        20,
         38
       ],
       "path": "csharp/path/cra-csharp-file-request-taint.cs",
       "rule_id": "cra-csharp-file-request-taint",
       "severity": "ERROR",
       "start": [
-        19,
+        20,
         34
       ]
     },
     {
       "end": [
-        24,
+        25,
         37
       ],
       "path": "csharp/path/cra-csharp-file-request-taint.cs",
       "rule_id": "cra-csharp-file-request-taint",
       "severity": "ERROR",
       "start": [
-        24,
+        25,
         33
       ]
     },
     {
       "end": [
-        30,
+        31,
         31
       ],
       "path": "csharp/path/cra-csharp-file-request-taint.cs",
       "rule_id": "cra-csharp-file-request-taint",
       "severity": "ERROR",
       "start": [
-        30,
+        31,
         27
       ]
     },
     {
       "end": [
-        56,
+        57,
         47
       ],
       "path": "csharp/path/cra-csharp-file-request-taint.cs",
       "rule_id": "cra-csharp-file-request-taint",
       "severity": "ERROR",
       "start": [
-        56,
+        57,
         43
       ]
     },
     {
       "end": [
-        15,
+        67,
+        74
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        67,
+        46
+      ]
+    },
+    {
+      "end": [
+        75,
+        74
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        75,
+        46
+      ]
+    },
+    {
+      "end": [
+        83,
+        77
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        83,
+        37
+      ]
+    },
+    {
+      "end": [
+        16,
         50
       ],
       "path": "csharp/ssrf/cra-csharp-httpclient-request-taint.cs",
       "rule_id": "cra-csharp-httpclient-request-taint",
       "severity": "ERROR",
       "start": [
-        15,
+        16,
         44
       ]
     },
     {
       "end": [
-        21,
+        22,
         44
       ],
       "path": "csharp/ssrf/cra-csharp-httpclient-request-taint.cs",
       "rule_id": "cra-csharp-httpclient-request-taint",
       "severity": "ERROR",
       "start": [
-        21,
+        22,
         38
       ]
     },
     {
       "end": [
-        26,
+        27,
         40
       ],
       "path": "csharp/ssrf/cra-csharp-httpclient-request-taint.cs",
       "rule_id": "cra-csharp-httpclient-request-taint",
       "severity": "ERROR",
       "start": [
-        26,
+        27,
         34
+      ]
+    },
+    {
+      "end": [
+        38,
+        50
+      ],
+      "path": "csharp/ssrf/cra-csharp-httpclient-request-taint.cs",
+      "rule_id": "cra-csharp-httpclient-request-taint",
+      "severity": "ERROR",
+      "start": [
+        38,
+        44
       ]
     },
     {
@@ -680,119 +732,184 @@
     },
     {
       "end": [
-        13,
+        14,
         49
       ],
       "path": "csharp/injection/cra-csharp-process-request-taint.cs",
       "rule_id": "cra-csharp-process-request-taint",
       "severity": "ERROR",
       "start": [
-        13,
+        14,
         34
       ]
     },
     {
       "end": [
-        19,
+        20,
         68
       ],
       "path": "csharp/injection/cra-csharp-process-request-taint.cs",
       "rule_id": "cra-csharp-process-request-taint",
       "severity": "ERROR",
       "start": [
-        19,
+        20,
         53
       ]
     },
     {
       "end": [
-        24,
+        25,
         49
       ],
       "path": "csharp/injection/cra-csharp-process-request-taint.cs",
       "rule_id": "cra-csharp-process-request-taint",
       "severity": "ERROR",
       "start": [
-        24,
+        25,
         34
       ]
     },
     {
       "end": [
-        30,
+        31,
         30
       ],
       "path": "csharp/injection/cra-csharp-process-request-taint.cs",
       "rule_id": "cra-csharp-process-request-taint",
       "severity": "ERROR",
       "start": [
-        30,
+        31,
         23
       ]
     },
     {
       "end": [
-        36,
+        37,
         87
       ],
       "path": "csharp/injection/cra-csharp-process-request-taint.cs",
       "rule_id": "cra-csharp-process-request-taint",
       "severity": "ERROR",
       "start": [
-        36,
+        37,
         78
       ]
     },
     {
       "end": [
-        64,
+        65,
         28
       ],
       "path": "csharp/injection/cra-csharp-process-request-taint.cs",
       "rule_id": "cra-csharp-process-request-taint",
       "severity": "ERROR",
       "start": [
-        64,
+        65,
         23
       ]
     },
     {
       "end": [
-        15,
+        71,
+        30
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        71,
+        23
+      ]
+    },
+    {
+      "end": [
+        77,
+        52
+      ],
+      "path": "csharp/injection/cra-csharp-process-request-taint.cs",
+      "rule_id": "cra-csharp-process-request-taint",
+      "severity": "ERROR",
+      "start": [
+        77,
+        23
+      ]
+    },
+    {
+      "end": [
+        16,
         36
       ],
       "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
       "rule_id": "cra-csharp-sql-request-taint",
       "severity": "ERROR",
       "start": [
-        15,
+        16,
         31
       ]
     },
     {
       "end": [
-        21,
+        22,
         36
       ],
       "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
       "rule_id": "cra-csharp-sql-request-taint",
       "severity": "ERROR",
       "start": [
-        21,
+        22,
         31
       ]
     },
     {
       "end": [
-        27,
+        28,
         52
       ],
       "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
       "rule_id": "cra-csharp-sql-request-taint",
       "severity": "ERROR",
       "start": [
-        27,
+        28,
         47
+      ]
+    },
+    {
+      "end": [
+        61,
+        81
+      ],
+      "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
+      "rule_id": "cra-csharp-sql-request-taint",
+      "severity": "ERROR",
+      "start": [
+        61,
+        32
+      ]
+    },
+    {
+      "end": [
+        68,
+        80
+      ],
+      "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
+      "rule_id": "cra-csharp-sql-request-taint",
+      "severity": "ERROR",
+      "start": [
+        68,
+        31
+      ]
+    },
+    {
+      "end": [
+        76,
+        80
+      ],
+      "path": "csharp/injection/cra-csharp-sql-request-taint.cs",
+      "rule_id": "cra-csharp-sql-request-taint",
+      "severity": "ERROR",
+      "start": [
+        76,
+        31
       ]
     },
     {
@@ -1330,6 +1447,84 @@
     },
     {
       "end": [
+        13,
+        55
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        13,
+        34
+      ]
+    },
+    {
+      "end": [
+        19,
+        48
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        19,
+        41
+      ]
+    },
+    {
+      "end": [
+        25,
+        43
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        25,
+        34
+      ]
+    },
+    {
+      "end": [
+        30,
+        53
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        30,
+        35
+      ]
+    },
+    {
+      "end": [
+        35,
+        64
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        35,
+        39
+      ]
+    },
+    {
+      "end": [
+        41,
+        61
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        41,
+        46
+      ]
+    },
+    {
+      "end": [
         14,
         4
       ],
@@ -1603,54 +1798,67 @@
     },
     {
       "end": [
-        8,
-        20
+        9,
+        6
       ],
       "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
       "rule_id": "cra-java-hostname-verifier-accept-all",
       "severity": "WARNING",
       "start": [
-        8,
-        9
+        7,
+        5
       ]
     },
     {
       "end": [
-        15,
+        17,
+        6
+      ],
+      "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
+      "rule_id": "cra-java-hostname-verifier-accept-all",
+      "severity": "WARNING",
+      "start": [
+        14,
+        5
+      ]
+    },
+    {
+      "end": [
+        23,
         64
       ],
       "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
       "rule_id": "cra-java-hostname-verifier-accept-all",
       "severity": "WARNING",
       "start": [
-        15,
+        23,
         9
       ]
     },
     {
       "end": [
-        27,
+        35,
         83
       ],
       "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
       "rule_id": "cra-java-hostname-verifier-accept-all",
       "severity": "WARNING",
       "start": [
-        27,
+        35,
         9
       ]
     },
     {
       "end": [
-        34,
-        28
+        43,
+        14
       ],
       "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
       "rule_id": "cra-java-hostname-verifier-accept-all",
       "severity": "WARNING",
       "start": [
-        34,
-        17
+        41,
+        13
       ]
     },
     {
@@ -1668,53 +1876,144 @@
     },
     {
       "end": [
-        30,
+        45,
+        35
+      ],
+      "path": "java/deserialization/cra-java-objectinputstream-readobject.java",
+      "rule_id": "cra-java-objectinputstream-readobject",
+      "severity": "WARNING",
+      "start": [
+        45,
+        16
+      ]
+    },
+    {
+      "end": [
+        51,
         43
       ],
       "path": "java/deserialization/cra-java-objectinputstream-readobject.java",
       "rule_id": "cra-java-objectinputstream-readobject",
       "severity": "WARNING",
       "start": [
-        30,
+        51,
         24
       ]
     },
     {
       "end": [
-        12,
+        14,
         43
       ],
       "path": "java/injection/cra-java-runtime-exec-request.java",
       "rule_id": "cra-java-runtime-exec-request",
       "severity": "ERROR",
       "start": [
-        12,
+        14,
         9
       ]
     },
     {
       "end": [
-        18,
+        20,
         43
       ],
       "path": "java/injection/cra-java-runtime-exec-request.java",
       "rule_id": "cra-java-runtime-exec-request",
       "severity": "ERROR",
       "start": [
-        18,
+        20,
         9
       ]
     },
     {
       "end": [
-        34,
+        36,
         41
       ],
       "path": "java/injection/cra-java-runtime-exec-request.java",
       "rule_id": "cra-java-runtime-exec-request",
       "severity": "ERROR",
       "start": [
-        34,
+        36,
+        9
+      ]
+    },
+    {
+      "end": [
+        66,
+        84
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        66,
+        9
+      ]
+    },
+    {
+      "end": [
+        71,
+        90
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        71,
+        9
+      ]
+    },
+    {
+      "end": [
+        76,
+        94
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        76,
+        9
+      ]
+    },
+    {
+      "end": [
+        81,
+        67
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        81,
+        9
+      ]
+    },
+    {
+      "end": [
+        86,
+        79
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        86,
+        9
+      ]
+    },
+    {
+      "end": [
+        92,
+        48
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        91,
         9
       ]
     },
@@ -2292,14 +2591,14 @@
     },
     {
       "end": [
-        107,
+        110,
         54
       ],
       "path": "javascript/injection/cra-javascript-exec-injection.js",
       "rule_id": "cra-javascript-exec-injection",
       "severity": "ERROR",
       "start": [
-        107,
+        110,
         5
       ]
     },
@@ -2457,6 +2756,19 @@
       "start": [
         44,
         12
+      ]
+    },
+    {
+      "end": [
+        124,
+        24
+      ],
+      "path": "php/injection/cra-php-command-superglobal.php",
+      "rule_id": "cra-php-command-superglobal",
+      "severity": "ERROR",
+      "start": [
+        124,
+        16
       ]
     },
     {
@@ -2704,6 +3016,58 @@
       "start": [
         57,
         25
+      ]
+    },
+    {
+      "end": [
+        65,
+        56
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        65,
+        17
+      ]
+    },
+    {
+      "end": [
+        71,
+        71
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        71,
+        21
+      ]
+    },
+    {
+      "end": [
+        77,
+        68
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        77,
+        29
+      ]
+    },
+    {
+      "end": [
+        85,
+        58
+      ],
+      "path": "php/injection/cra-php-sql-superglobal-taint.php",
+      "rule_id": "cra-php-sql-superglobal-taint",
+      "severity": "ERROR",
+      "start": [
+        85,
+        17
       ]
     },
     {
@@ -4554,6 +4918,149 @@
     },
     {
       "end": [
+        25,
+        36
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        25,
+        12
+      ]
+    },
+    {
+      "end": [
+        34,
+        16
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        34,
+        12
+      ]
+    },
+    {
+      "end": [
+        41,
+        41
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        41,
+        12
+      ]
+    },
+    {
+      "end": [
+        48,
+        38
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        48,
+        12
+      ]
+    },
+    {
+      "end": [
+        57,
+        16
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        57,
+        12
+      ]
+    },
+    {
+      "end": [
+        64,
+        36
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        64,
+        12
+      ]
+    },
+    {
+      "end": [
+        73,
+        39
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        73,
+        12
+      ]
+    },
+    {
+      "end": [
+        81,
+        37
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        81,
+        12
+      ]
+    },
+    {
+      "end": [
+        88,
+        36
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        88,
+        12
+      ]
+    },
+    {
+      "end": [
+        95,
+        36
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        95,
+        12
+      ]
+    },
+    {
+      "end": [
+        101,
+        61
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        101,
+        12
+      ]
+    },
+    {
+      "end": [
         13,
         26
       ],
@@ -5030,6 +5537,58 @@
       "severity": "ERROR",
       "start": [
         83,
+        5
+      ]
+    },
+    {
+      "end": [
+        132,
+        60
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        132,
+        5
+      ]
+    },
+    {
+      "end": [
+        139,
+        75
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        139,
+        5
+      ]
+    },
+    {
+      "end": [
+        154,
+        66
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        154,
+        5
+      ]
+    },
+    {
+      "end": [
+        168,
+        66
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-sql-injection",
+      "severity": "ERROR",
+      "start": [
+        168,
         5
       ]
     },
@@ -5815,6 +6374,19 @@
     },
     {
       "end": [
+        146,
+        13
+      ],
+      "path": "python/injection/cra-python-taint-eval-exec.py",
+      "rule_id": "cra-python-taint-eval-exec",
+      "severity": "ERROR",
+      "start": [
+        146,
+        10
+      ]
+    },
+    {
+      "end": [
         20,
         22
       ],
@@ -5915,6 +6487,97 @@
       "start": [
         83,
         20
+      ]
+    },
+    {
+      "end": [
+        90,
+        64
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        90,
+        17
+      ]
+    },
+    {
+      "end": [
+        97,
+        63
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        97,
+        21
+      ]
+    },
+    {
+      "end": [
+        111,
+        29
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        111,
+        23
+      ]
+    },
+    {
+      "end": [
+        118,
+        87
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        118,
+        37
+      ]
+    },
+    {
+      "end": [
+        132,
+        59
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        132,
+        17
+      ]
+    },
+    {
+      "end": [
+        139,
+        74
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        139,
+        17
+      ]
+    },
+    {
+      "end": [
+        154,
+        65
+      ],
+      "path": "python/injection/cra-python-taint-sql-inject.py",
+      "rule_id": "cra-python-taint-sql-inject",
+      "severity": "ERROR",
+      "start": [
+        154,
+        17
       ]
     },
     {
@@ -6843,33 +7506,34 @@
     "cra-cpp-system-getenv-taint": 3,
     "cra-csharp-binaryformatter-deserialize": 5,
     "cra-csharp-certificate-callback-accept-all": 8,
-    "cra-csharp-file-request-taint": 5,
-    "cra-csharp-httpclient-request-taint": 3,
+    "cra-csharp-file-request-taint": 8,
+    "cra-csharp-httpclient-request-taint": 4,
     "cra-csharp-jwt-hardcoded-secret": 1,
-    "cra-csharp-process-request-taint": 6,
-    "cra-csharp-sql-request-taint": 3,
+    "cra-csharp-process-request-taint": 8,
+    "cra-csharp-sql-request-taint": 6,
     "cra-csharp-weak-hash": 11,
     "cra-go-hmac-reused-hash": 3,
     "cra-go-hmac-timing": 4,
     "cra-go-parseint-downcast": 23,
+    "cra-go-shell-command-injection": 6,
     "cra-go-tls-insecure": 4,
     "cra-go-weak-hash": 4,
     "cra-go-wrong-lock-unlock": 7,
     "cra-java-file-request-taint": 6,
-    "cra-java-hostname-verifier-accept-all": 4,
-    "cra-java-objectinputstream-readobject": 2,
-    "cra-java-runtime-exec-request": 3,
+    "cra-java-hostname-verifier-accept-all": 5,
+    "cra-java-objectinputstream-readobject": 3,
+    "cra-java-runtime-exec-request": 9,
     "cra-java-sql-request-taint": 5,
     "cra-java-url-request-taint": 3,
     "cra-java-weak-message-digest": 18,
     "cra-java-xxe-doctype-enabled": 4,
     "cra-javascript-eval": 3,
     "cra-javascript-exec-injection": 15,
-    "cra-php-command-superglobal": 9,
+    "cra-php-command-superglobal": 10,
     "cra-php-curl-url-superglobal-taint": 5,
     "cra-php-echo-superglobal-taint": 4,
     "cra-php-file-superglobal-taint": 5,
-    "cra-php-sql-superglobal-taint": 5,
+    "cra-php-sql-superglobal-taint": 9,
     "cra-php-superglobal-password-md5": 5,
     "cra-php-unserialize-superglobal": 4,
     "cra-python-django-allowed-hosts-wildcard": 2,
@@ -6896,6 +7560,7 @@
     "cra-python-flask-open-redirect": 8,
     "cra-python-flask-plaintext-password-compare": 7,
     "cra-python-flask-render-template-string-ssti": 5,
+    "cra-python-flask-response-html-taint": 11,
     "cra-python-flask-send-file-path-traversal": 5,
     "cra-python-flask-session-cookie-httponly-false": 2,
     "cra-python-flask-session-cookie-insecure-false": 5,
@@ -6905,14 +7570,14 @@
     "cra-python-jwt-decode-verify-disabled": 5,
     "cra-python-jwt-hardcoded-secret": 4,
     "cra-python-pickle-loads": 2,
-    "cra-python-sql-injection": 5,
+    "cra-python-sql-injection": 9,
     "cra-python-sqlalchemy-exec-driver-sql-interpolation": 5,
     "cra-python-sqlalchemy-literal-column-dynamic": 6,
     "cra-python-sqlalchemy-order-by-text-interpolation": 5,
     "cra-python-sqlalchemy-text-interpolation": 7,
     "cra-python-subprocess-shell": 23,
-    "cra-python-taint-eval-exec": 14,
-    "cra-python-taint-sql-inject": 8,
+    "cra-python-taint-eval-exec": 15,
+    "cra-python-taint-sql-inject": 15,
     "cra-python-taint-subprocess-shell": 18,
     "cra-python-yaml-load": 5,
     "cra-rust-file-env-taint": 14,
