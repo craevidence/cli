@@ -679,17 +679,17 @@ def test_cross_rule_annotations_are_bounded_and_canonical(tmp_path: Path) -> Non
         )
 
 
-def test_engine_identity_rejects_wrong_version(monkeypatch) -> None:
-    completed = type(
-        "Completed",
-        (),
-        {"returncode": 0, "stdout": "1.25.0\n", "stderr": ""},
-    )()
-    monkeypatch.setattr("scripts.rulepack_engine.subprocess.run", lambda *args, **kwargs: completed)
+def test_engine_identity_rejects_wrong_version(tmp_path: Path, monkeypatch) -> None:
+    # A real executable at an explicit path keeps this hermetic: the strict
+    # resolution step must succeed on any host, including one with no
+    # opengrep on PATH, so the version comparison is what fails.
+    binary = tmp_path / "opengrep"
+    binary.write_text("#!/bin/sh\necho 1.25.0\n", encoding="utf-8")
+    binary.chmod(0o755)
     monkeypatch.setattr("scripts.rulepack_engine._verified_asset", lambda binary: "test-asset")
 
     with pytest.raises(EngineIdentityError, match="expected Opengrep 1.26.0"):
-        verify_engine(Path("opengrep"))
+        verify_engine(binary)
 
 
 def test_engine_identity_resolves_default_binary_from_path(

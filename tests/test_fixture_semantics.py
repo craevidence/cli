@@ -250,7 +250,12 @@ def test_php_global_unserialize_binding_and_fixture_are_executable() -> None:
         "PHP allowed an application to redeclare the global unserialize function"
     )
     output = f"{redeclare.stdout}\n{redeclare.stderr}".lower()
-    assert "cannot redeclare function unserialize" in output
+    # PHP builds word this differently: "Cannot redeclare function
+    # unserialize()" (8.4 docker image) versus "Cannot redeclare
+    # unserialize()" (distribution builds). Assert the semantics, not one
+    # build's exact phrase.
+    assert "cannot redeclare" in output
+    assert "unserialize" in output
 
 
 def test_javascript_unsafe_integer_fixture_matches_binary64_runtime_values() -> None:
