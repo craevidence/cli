@@ -20,8 +20,8 @@
 #   scanner: Grype 0.116.1
 #   database: schema v6.1.9, built 2026-08-14T06:39:10Z
 #   image: built 2026-08-14 from this repository's Dockerfile with bases
-#     dhi.io/python:3.14-dev@sha256:4c0f2439fe118fa2b59b7276779654a8f0940b6c6d419e4e48bba7d902a31224
-#     and dhi.io/python:3.14@sha256:70dd4833ac657817f0abbd1b84b965bc4c190a2b2f348d53218689f8e7f1f681,
+#     dhi.io/python:3.14-dev@sha256:02173cae8b920c98ff9fab81eb1aefcadd229f158110553c6ed758dc935589dd
+#     and dhi.io/python:3.14@sha256:0536ccad57c9be08128bd2a6f0982570086ec943a88033f4f53f7adffe407903,
 #     with CRA Evidence Grype engine craevidence-v0.117.0-p2
 #   review date: 2026-08-14
 # Review at every release.
@@ -69,7 +69,7 @@ watchlist:
         - { id: CVE-2025-69720, severity: High, fix_state: wont-fix }
         - { id: CVE-2025-6141, severity: Medium, fix_state: wont-fix }
       note: "Debian marks these ncurses infocmp issues no-dsa or minor; no known code path in this image processes untrusted infocmp input."
-    - package: libuuid1 2.41-5+dhi3
+    - package: libuuid1 2.41.5-0+deb13u1
       advisories:
         - { id: CVE-2026-27456, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-3184, severity: Medium, fix_state: wont-fix }
