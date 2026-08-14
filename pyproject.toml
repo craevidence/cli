@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "craevidence"
-version = "4.2.0"
+version = "4.3.0"
 description = "CLI tool for CI/CD integration with CRA Evidence"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -68,7 +68,7 @@ where = ["."]
 include = ["cra_evidence_cli*"]
 
 [tool.setuptools.package-data]
-cra_evidence_cli = ["assessment/templates/*.yaml", "local/rules/**/*.yaml", "local/rules/LICENSE", "local/rules/README.md", "_engine/*"]
+cra_evidence_cli = ["assessment/templates/*.yaml", "local/*.cs", "local/*.java", "local/*.py", "local/rules/**/*.yaml", "local/rules/LICENSE", "local/rules/README.md", "local/semantic_evidence.schema.json", "local/java_semantic_evidence.schema.json", "local/csharp_semantic_evidence.schema.json", "local/rust_semantic_evidence.schema.json", "local/c_semantic_evidence.schema.json", "local/cpp_semantic_evidence.schema.json", "local/semantic-evidence-NOTICE", "_engine/*"]
 
 [tool.black]
 line-length = 100

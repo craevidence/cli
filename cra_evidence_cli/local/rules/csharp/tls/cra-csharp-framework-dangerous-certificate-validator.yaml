@@ -1,0 +1,54 @@
+rules:
+  - id: cra-csharp-framework-dangerous-certificate-validator
+    message: >
+      The resolved .NET HttpClientHandler disables certificate validation by
+      installing the framework's accept-any validator. Remove this assignment
+      and use the platform certificate validation policy.
+    severity: ERROR
+    metadata:
+      tier: default
+      semantic_evidence:
+        required: true
+        language: csharp
+        policy: csharp.framework-dangerous-certificate-validator
+        candidate_range: result
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.dangerousacceptanyservercertificatevalidator
+        - https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.servercertificatecustomvalidationcallback
+      category: security
+      technology: [csharp, dotnet, tls]
+      confidence: HIGH
+      scope: >
+        Generates candidates only for direct assignment of the written
+        DangerousAcceptAnyServerCertificateValidator property to the written
+        ServerCertificateCustomValidationCallback property. A finding is
+        emitted only when build-free Roslyn evidence resolves both properties
+        to the signed System.Net.Http framework assembly and exact
+        HttpClientHandler type.
+      limitations: >
+        Requires separately generated C# semantic evidence from the exact .NET
+        8.0.423 SDK profile. Missing dependencies, compiler errors, unsupported
+        SDKs, stale source, ambiguous ranges, application-owned lookalikes, and
+        missing evidence degrade coverage or suppress the candidate. Custom
+        accept-all lambdas, method groups, callback variables, compound
+        assignment, and other certificate APIs remain in the broader
+        experimental rule.
+      sanitizer_analysis:
+        status: not-applicable
+        reason: The matched framework validator is defined to accept every certificate.
+      license: MIT
+      author: CRA Evidence
+    languages: [csharp]
+    patterns:
+      - pattern-either:
+          - pattern: $HANDLER.ServerCertificateCustomValidationCallback = $CALLBACK
+          - pattern: ServerCertificateCustomValidationCallback = $CALLBACK
+      - metavariable-pattern:
+          metavariable: $CALLBACK
+          pattern-either:
+            - pattern: HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            - pattern: System.Net.Http.HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            - pattern: global::System.Net.Http.HttpClientHandler.DangerousAcceptAnyServerCertificateValidator

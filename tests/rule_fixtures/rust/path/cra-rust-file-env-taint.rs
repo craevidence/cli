@@ -25,7 +25,7 @@ fn good() {
     let _content = std::fs::read("/srv/app/config.toml");
 }
 
-fn good_canonical_containment() {
+fn reported_canonical_containment() {
     let base = std::fs::canonicalize("/srv/app/documents").unwrap();
     let requested = std::path::PathBuf::from(
         std::env::var("DOCUMENT_PATH").unwrap_or_default(),
@@ -34,7 +34,24 @@ fn good_canonical_containment() {
     if !path.starts_with(&base) {
         return;
     }
-    // ok: cra-rust-file-env-taint
+    // Correct containment, reported because containment is not modeled.
+    // ruleid: cra-rust-file-env-taint
+    let _content = std::fs::read(path);
+}
+
+fn bad_attacker_controlled_canonical_base() {
+    let base = std::fs::canonicalize(
+        std::env::var("DOCUMENT_ROOT").unwrap_or_default(),
+    )
+    .unwrap();
+    let path = std::fs::canonicalize(
+        std::env::var("DOCUMENT_PATH").unwrap_or_default(),
+    )
+    .unwrap();
+    if !path.starts_with(&base) {
+        return;
+    }
+    // ruleid: cra-rust-file-env-taint
     let _content = std::fs::read(path);
 }
 

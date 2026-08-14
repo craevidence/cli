@@ -5,7 +5,7 @@ rules:
       Replace it with a serializer that enforces an explicit data contract.
     severity: ERROR
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-502: Deserialization of Untrusted Data"]
       owasp: ["A08:2021 - Software and Data Integrity Failures"]
       references:
@@ -13,21 +13,24 @@ rules:
         - https://learn.microsoft.com/en-us/dotnet/standard/serialization/binaryformatter-security-guide
       category: security
       technology: [csharp, dotnet]
-      confidence: VERY HIGH
+      confidence: MEDIUM
       scope: >
         Detects a Deserialize call on a BinaryFormatter that is constructed
         inline or assigned to a local in the same function, including the
         target-typed new and object initializer spellings.
       limitations: >
-        Does not track formatters held in fields, received as parameters, or
-        constructed through a fully qualified type name, and does not follow
-        deserialization across files.
+        Does not track formatters held in fields or received as parameters, and
+        does not follow deserialization across files. Type names are matched as
+        written rather than resolved, so an application class named
+        BinaryFormatter is also reported.
       license: MIT
       author: CRA Evidence
     languages: [csharp]
     pattern-either:
       - pattern: new BinaryFormatter(...).Deserialize(...)
       - pattern: new BinaryFormatter(...) { ... }.Deserialize(...)
+      - pattern: new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter(...).Deserialize(...)
+      - pattern: new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter(...) { ... }.Deserialize(...)
       - patterns:
           - pattern: $FORMATTER.Deserialize(...)
           - pattern-either:

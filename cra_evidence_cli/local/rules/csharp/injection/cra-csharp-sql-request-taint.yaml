@@ -5,7 +5,7 @@ rules:
       command with typed parameters instead of constructing SQL text.
     severity: ERROR
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-89: Improper Neutralization of Special Elements used in an SQL Command"]
       owasp: ["A03:2021 - Injection"]
       references:
@@ -25,7 +25,9 @@ rules:
       limitations: >
         Taint is followed within a single file. Flows that cross a method
         boundary through a field, a helper class, or another file are not
-        reported.
+        reported. Request collection and database API names are matched as
+        written rather than resolved, so application classes exposing the same
+        member names can produce findings.
       license: MIT
       author: CRA Evidence
     languages: [csharp]

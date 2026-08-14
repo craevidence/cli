@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -18,6 +20,7 @@ from cra_evidence_cli.commands.code_check import (
     _sanitized_sarif,
     code_check,
 )
+from cra_evidence_cli.commands.code_evidence import code_evidence
 from cra_evidence_cli.config import CRAEvidenceConfig
 from cra_evidence_cli.exceptions import CRAEvidenceError
 from cra_evidence_cli.local.rules_pack import inspect_rule_pack
@@ -26,6 +29,7 @@ from cra_evidence_cli.local.sast_scanner import (
     SASTFinding,
     SASTReport,
 )
+from cra_evidence_cli.local.semantic_evidence import load_semantic_evidence
 
 _BINARY = "/usr/bin/opengrep"
 _OPENGREP_PATCH = "cra_evidence_cli.commands.code_check.opengrep_path"
@@ -101,6 +105,90 @@ def _degraded_report() -> SASTReport:
         {"level": "warn", "type": ["PartialParsing", []], "path": "broken.py"}
     ]
     return report
+
+
+def _semantic_candidate_report(source: str) -> SASTReport:
+    finding = SASTFinding(
+        rule_id="cra-csharp-framework-md5-create",
+        severity="warning",
+        file=source,
+        line=1,
+        start_column=1,
+        end_line=1,
+        end_column=13,
+        message="MD5 candidate",
+    )
+    result = {
+        "ruleId": finding.rule_id,
+        "message": {"text": finding.message},
+        "locations": [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": source},
+                    "region": {
+                        "startLine": 1,
+                        "startColumn": 1,
+                        "endLine": 1,
+                        "endColumn": 13,
+                    },
+                }
+            }
+        ],
+    }
+    return SASTReport(
+        engine_version="1.26.0",
+        rules_path="/rules",
+        rule_count=1,
+        findings=[finding],
+        scan_failed=False,
+        failure_reason=None,
+        sarif_raw={"version": "2.1.0", "runs": [{"results": [result]}]},
+        files_scanned=1,
+        scanned_paths=(source,),
+        language_counts={"C#": 1},
+    )
+
+
+def _rust_semantic_candidate_report(source: str, occurrence) -> SASTReport:
+    finding = SASTFinding(
+        rule_id="cra-rust-cratesio-reqwest-invalid-certs",
+        severity="error",
+        file=source,
+        line=occurrence.start_line,
+        start_column=occurrence.start_column,
+        end_line=occurrence.end_line,
+        end_column=occurrence.end_column,
+        message="Reqwest TLS verification candidate",
+    )
+    result = {
+        "ruleId": finding.rule_id,
+        "message": {"text": finding.message},
+        "locations": [
+            {
+                "physicalLocation": {
+                    "artifactLocation": {"uri": source},
+                    "region": {
+                        "startLine": occurrence.start_line,
+                        "startColumn": occurrence.start_column,
+                        "endLine": occurrence.end_line,
+                        "endColumn": occurrence.end_column,
+                    },
+                }
+            }
+        ],
+    }
+    return SASTReport(
+        engine_version="1.26.0",
+        rules_path="/rules",
+        rule_count=1,
+        findings=[finding],
+        scan_failed=False,
+        failure_reason=None,
+        sarif_raw={"version": "2.1.0", "runs": [{"results": [result]}]},
+        files_scanned=1,
+        scanned_paths=(source,),
+        language_counts={"Rust": 1},
+    )
 
 
 # --- binary-missing path ---
@@ -231,6 +319,460 @@ def test_degraded_scan_without_findings_cannot_pass_explicit_gate(runner, tmp_pa
     assert "Coverage degraded" in gated.output
 
 
+def test_missing_semantic_evidence_suppresses_candidate_and_fails_gate(
+    runner, tmp_path
+):
+    source = tmp_path / "Program.cs"
+    source.write_text("MD5.Create();\n", encoding="utf-8")
+    report = _semantic_candidate_report(str(source))
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [
+                str(tmp_path),
+                "--include-experimental",
+                "--fail-on",
+                "warning",
+            ],
+            obj=_make_obj("json"),
+        )
+
+    assert result.exit_code == _SAST_DEGRADED_EXIT_CODE
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == "craevidence.code_check.v2"
+    assert payload["finding_count"] == 0
+    assert payload["coverage_degraded"] is True
+    assert payload["semantic_evidence"] == {
+        "schema_version": "craevidence.semantic_summary.v1",
+        "candidate_count": 1,
+        "attested": 0,
+        "rejected": 0,
+        "unanalysed": 1,
+        "reason_counts": {"semantic_evidence_missing": 1},
+    }
+
+
+def test_bundled_semantic_rule_selected_by_path_remains_fail_closed(
+    runner, tmp_path
+):
+    source = tmp_path / "Program.cs"
+    source.write_text("MD5.Create();\n", encoding="utf-8")
+    rule = (
+        _BUNDLED_RULES
+        / "csharp"
+        / "crypto"
+        / "cra-csharp-framework-md5-create.yaml"
+    )
+    report = _semantic_candidate_report(str(source))
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [
+                str(tmp_path),
+                "--rules",
+                str(rule),
+                "--fail-on",
+                "warning",
+            ],
+            obj=_make_obj("json"),
+        )
+
+    assert result.exit_code == _SAST_DEGRADED_EXIT_CODE
+    payload = json.loads(result.output)
+    assert payload["finding_count"] == 0
+    assert payload["semantic_evidence"]["reason_counts"] == {
+        "semantic_evidence_missing": 1
+    }
+
+
+@pytest.mark.parametrize(
+    ("fixture_name", "expected_exit", "expected_findings", "expected_counts"),
+    [
+        (
+            "rust_reqwest_absolute_binding",
+            _SAST_EXIT_CODE,
+            1,
+            {"semantic_symbol_attested": 1},
+        ),
+        (
+            "rust_reqwest_self_alias",
+            0,
+            0,
+            {"semantic_symbol_not_attested": 1},
+        ),
+    ],
+)
+def test_rust_semantic_evidence_accepts_external_and_rejects_application_binding(
+    runner,
+    tmp_path,
+    fixture_name,
+    expected_exit,
+    expected_findings,
+    expected_counts,
+):
+    fixture = Path(__file__).parent / "semantic" / fixture_name
+    source = tmp_path / "source"
+    shutil.copytree(fixture, source)
+    output = tmp_path / "rust-evidence.json"
+    generated = runner.invoke(
+        code_evidence,
+        [str(source), "--language", "rust", "--output", str(output)],
+    )
+    assert generated.exit_code == 0, generated.output
+    evidence = load_semantic_evidence(output, source)
+    occurrence = evidence.occurrences[0]
+    source_file = source / occurrence.path
+    report = _rust_semantic_candidate_report(str(source_file), occurrence)
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [
+                str(source),
+                "--semantic-evidence",
+                str(output),
+                "--fail-on",
+                "error",
+            ],
+            obj=_make_obj("json"),
+        )
+
+    assert result.exit_code == expected_exit, result.output
+    payload = json.loads(result.output)
+    assert payload["finding_count"] == expected_findings
+    assert payload["semantic_evidence"]["reason_counts"] == expected_counts
+    assert payload["semantic_evidence"]["attested"] == expected_findings
+    assert payload["semantic_evidence"]["rejected"] == 1 - expected_findings
+    assert payload["semantic_evidence"]["unanalysed"] == 0
+
+
+def test_c_semantic_evidence_accepts_bounds_and_rejects_macro_redirect(
+    runner, tmp_path
+):
+    from cra_evidence_cli.local.c_semantic_analyzer import _library_path
+
+    try:
+        _library_path()
+    except (OSError, ValueError):
+        pytest.skip("exact libclang is unavailable")
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    fixture = Path(__file__).parent / "semantic" / "c_array_bounds_binding.c"
+    source = source_root / "main.c"
+    source.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    output = tmp_path / "c-evidence.json"
+    generated = runner.invoke(
+        code_evidence,
+        [str(source_root), "--language", "c", "--output", str(output)],
+    )
+    assert generated.exit_code == 0, generated.output
+    findings = [
+        SASTFinding(
+            rule_id="cra-c-fixed-array-literal-oob-write",
+            severity="error",
+            file=str(source),
+            line=line,
+            start_column=5,
+            end_line=line,
+            end_column=29,
+            message="fixed array candidate",
+        )
+        for line in (6, 13, 15)
+    ]
+    report = SASTReport(
+        engine_version="1.26.0",
+        rules_path=str(_BUNDLED_RULES),
+        rule_count=104,
+        findings=findings,
+        scan_failed=False,
+        failure_reason=None,
+        sarif_raw=None,
+    )
+    report.files_scanned = 1
+    report.language_counts = {"C": 1}
+    report.scanned_paths = [str(source)]
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [
+                str(source_root),
+                "--semantic-evidence",
+                str(output),
+                "--fail-on",
+                "error",
+            ],
+            obj=_make_obj("json"),
+        )
+
+    assert result.exit_code == _SAST_EXIT_CODE, result.output
+    payload = json.loads(result.output)
+    assert [item["line"] for item in payload["findings"]] == [6, 15]
+    assert payload["semantic_evidence"] == {
+        "schema_version": "craevidence.semantic_summary.v1",
+        "candidate_count": 3,
+        "attested": 2,
+        "rejected": 1,
+        "unanalysed": 0,
+        "reason_counts": {
+            "semantic_symbol_attested": 2,
+            "semantic_symbol_not_attested": 1,
+        },
+    }
+
+
+def test_cpp_semantic_evidence_accepts_bounds_and_rejects_inactive_candidates(
+    runner, tmp_path
+):
+    from cra_evidence_cli.local.c_semantic_analyzer import _library_path
+
+    try:
+        _library_path()
+    except (OSError, ValueError):
+        pytest.skip("exact libclang is unavailable")
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    fixture = Path(__file__).parent / "semantic" / "cpp_array_bounds_binding.cpp"
+    source = source_root / "main.cpp"
+    source.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
+    output = tmp_path / "cpp-evidence.json"
+    generated = runner.invoke(
+        code_evidence,
+        [str(source_root), "--language", "cpp", "--output", str(output)],
+    )
+    assert generated.exit_code == 0, generated.output
+    findings = [
+        SASTFinding(
+            rule_id="cra-cpp-fixed-array-literal-oob-write",
+            severity="error",
+            file=str(source),
+            line=line,
+            start_column=5,
+            end_line=line,
+            end_column=45,
+            message="fixed array candidate",
+        )
+        for line in (6, 13, 15, 21)
+    ]
+    report = SASTReport(
+        engine_version="1.26.0",
+        rules_path=str(_BUNDLED_RULES),
+        rule_count=104,
+        findings=findings,
+        scan_failed=False,
+        failure_reason=None,
+        sarif_raw=None,
+    )
+    report.files_scanned = 1
+    report.language_counts = {"C++": 1}
+    report.scanned_paths = [str(source)]
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [
+                str(source_root),
+                "--semantic-evidence",
+                str(output),
+                "--fail-on",
+                "error",
+            ],
+            obj=_make_obj("json"),
+        )
+
+    assert result.exit_code == _SAST_EXIT_CODE, result.output
+    payload = json.loads(result.output)
+    assert [item["line"] for item in payload["findings"]] == [6, 15]
+    assert payload["semantic_evidence"] == {
+        "schema_version": "craevidence.semantic_summary.v1",
+        "candidate_count": 4,
+        "attested": 2,
+        "rejected": 2,
+        "unanalysed": 0,
+        "reason_counts": {
+            "semantic_symbol_attested": 2,
+            "semantic_symbol_not_attested": 2,
+        },
+    }
+
+
+@pytest.mark.parametrize(
+    ("language", "suffix", "rule_id", "fixtures", "candidates", "retained"),
+    [
+        (
+            "c",
+            ".c",
+            "cra-c-printf-argv-format",
+            ("c_printf_argv_binding.c", "c_printf_application_homonym.c"),
+            (("c_printf_argv_binding.c", 10), ("c_printf_argv_binding.c", 13),
+             ("c_printf_argv_binding.c", 16),
+             ("c_printf_application_homonym.c", 8)),
+            (("c_printf_argv_binding.c", 10),),
+        ),
+        (
+            "cpp",
+            ".cpp",
+            "cra-cpp-printf-argv-format",
+            (
+                "cpp_printf_argv_binding.cpp",
+                "cpp_printf_application_homonym.cpp",
+                "cpp_printf_shadowed_parameter.cpp",
+            ),
+            (
+                ("cpp_printf_argv_binding.cpp", 10),
+                ("cpp_printf_argv_binding.cpp", 11),
+                ("cpp_printf_argv_binding.cpp", 14),
+                ("cpp_printf_argv_binding.cpp", 17),
+                ("cpp_printf_application_homonym.cpp", 8),
+                ("cpp_printf_shadowed_parameter.cpp", 5),
+            ),
+            (
+                ("cpp_printf_argv_binding.cpp", 10),
+                ("cpp_printf_argv_binding.cpp", 11),
+            ),
+        ),
+        (
+            "c",
+            ".c",
+            "cra-c-system-argv",
+            (
+                "c_system_argv_binding.c",
+                "c_system_application_homonym.c",
+                "c_system_wrong_scope.c",
+            ),
+            (
+                ("c_system_argv_binding.c", 10),
+                ("c_system_argv_binding.c", 13),
+                ("c_system_argv_binding.c", 16),
+                ("c_system_application_homonym.c", 8),
+                ("c_system_wrong_scope.c", 5),
+            ),
+            (("c_system_argv_binding.c", 10),),
+        ),
+        (
+            "cpp",
+            ".cpp",
+            "cra-cpp-system-argv",
+            (
+                "cpp_system_argv_binding.cpp",
+                "cpp_system_application_homonym.cpp",
+                "cpp_system_shadowed_parameter.cpp",
+            ),
+            (
+                ("cpp_system_argv_binding.cpp", 10),
+                ("cpp_system_argv_binding.cpp", 11),
+                ("cpp_system_argv_binding.cpp", 14),
+                ("cpp_system_argv_binding.cpp", 17),
+                ("cpp_system_application_homonym.cpp", 8),
+                ("cpp_system_shadowed_parameter.cpp", 5),
+            ),
+            (
+                ("cpp_system_argv_binding.cpp", 10),
+                ("cpp_system_argv_binding.cpp", 11),
+            ),
+        ),
+    ],
+)
+def test_c_family_direct_call_semantic_evidence_filters_unbound_candidates(
+    runner,
+    tmp_path,
+    language,
+    suffix,
+    rule_id,
+    fixtures,
+    candidates,
+    retained,
+):
+    from cra_evidence_cli.local.c_semantic_analyzer import _library_path
+
+    try:
+        _library_path()
+    except (OSError, ValueError):
+        pytest.skip("exact libclang is unavailable")
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    fixture_root = Path(__file__).parent / "semantic"
+    for name in fixtures:
+        (source_root / name).write_text(
+            (fixture_root / name).read_text(encoding="utf-8"), encoding="utf-8"
+        )
+    output = tmp_path / f"{language}-format-evidence.json"
+    generated = runner.invoke(
+        code_evidence,
+        [str(source_root), "--language", language, "--output", str(output)],
+    )
+    assert generated.exit_code == 0, generated.output
+    findings = [
+        SASTFinding(
+            rule_id=rule_id,
+            severity="error",
+            file=str(source_root / name),
+            line=line,
+            start_column=1,
+            end_line=line,
+            end_column=80,
+            message="format-string candidate",
+        )
+        for name, line in candidates
+    ]
+    report = SASTReport(
+        engine_version="1.26.0",
+        rules_path=str(_BUNDLED_RULES),
+        rule_count=104,
+        findings=findings,
+        scan_failed=False,
+        failure_reason=None,
+        sarif_raw=None,
+    )
+    report.files_scanned = len(fixtures)
+    report.language_counts = {language.upper(): len(fixtures)}
+    report.scanned_paths = [str(source_root / name) for name in fixtures]
+
+    with (
+        patch(_OPENGREP_PATCH, return_value=_BINARY),
+        patch(_RUN_SCAN_PATCH, return_value=report),
+    ):
+        result = runner.invoke(
+            code_check,
+            [
+                str(source_root),
+                "--include-experimental",
+                "--semantic-evidence",
+                str(output),
+                "--fail-on",
+                "error",
+            ],
+            obj=_make_obj("json"),
+        )
+
+    assert result.exit_code == _SAST_EXIT_CODE, result.output
+    payload = json.loads(result.output)
+    actual = tuple(
+        (Path(item["file"]).name, item["line"]) for item in payload["findings"]
+    )
+    assert actual == retained
+    assert payload["semantic_evidence"]["candidate_count"] == len(candidates)
+    assert payload["semantic_evidence"]["attested"] == len(retained)
+    assert payload["semantic_evidence"]["rejected"] == len(candidates) - len(retained)
+    assert payload["semantic_evidence"]["unanalysed"] == 0
+    assert all(Path(item).suffix == suffix for item in report.scanned_paths)
+
+
 def test_degraded_json_and_sarif_report_success_with_warning(runner, tmp_path):
     with (
         patch(_OPENGREP_PATCH, return_value=_BINARY),
@@ -309,18 +851,23 @@ def test_bundled_experimental_rules_are_opt_in(runner, tmp_path):
     assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
         "Opengrep scanned zero files"
     )
-    assert len(excluded) == 41
+    assert len(excluded) == 50
     assert default_payload["rule_count"] == 54
     assert default_payload["rule_tiers"] == {
         "default_enabled": 54,
         "experimental_enabled": 0,
-        "experimental_available": 41,
+        "experimental_available": 50,
     }
     assert default_payload["rule_language_counts"] == {
-        "csharp": 7,
-        "go": 2,
-        "java": 3,
+        "c": 3,
+        "cpp": 3,
+        "csharp": 1,
+        "go": 1,
+        "java": 1,
+        "javascript": 1,
+        "php": 1,
         "python": 42,
+        "rust": 1,
     }
 
     experimental_report = _clean_report()
@@ -338,8 +885,8 @@ def test_bundled_experimental_rules_are_opt_in(runner, tmp_path):
     assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
         "Opengrep scanned zero files"
     )
-    assert experimental_payload["rule_count"] == 95
-    assert experimental_payload["rule_tiers"]["experimental_enabled"] == 41
+    assert experimental_payload["rule_count"] == 104
+    assert experimental_payload["rule_tiers"]["experimental_enabled"] == 50
 
 
 def test_zero_file_message_does_not_suggest_experimental_for_unrelated_files(
@@ -358,26 +905,24 @@ def test_zero_file_message_does_not_suggest_experimental_for_unrelated_files(
     )
 
 
-def test_zero_file_message_suggests_experimental_for_an_opt_in_language(
+def test_zero_file_message_does_not_suggest_experimental_for_javascript(
     runner, tmp_path
 ):
-    """Rust has no default rule, so a Rust file must prompt for the opt-in flag.
-
-    The language named here has to be one the pack still covers with
-    experimental rules only. Java used to serve that purpose and no longer can.
-    """
-    (tmp_path / "example.rs").write_text("fn main() {}\n", encoding="utf-8")
+    """JavaScript has a default rule and must not prompt for the opt-in flag."""
+    (tmp_path / "example.js").write_text("console.log('ok');\n", encoding="utf-8")
     failed = _failed_report()
     failed.failure_reason = "Opengrep scanned zero files"
     with (
         patch(_OPENGREP_PATCH, return_value=_BINARY),
-        patch(_RUN_SCAN_PATCH, return_value=failed),
+        patch(_RUN_SCAN_PATCH, return_value=failed) as run_scan_mock,
     ):
         result = runner.invoke(code_check, [str(tmp_path)], obj=_make_obj("text"))
 
-    assert "Experimental rules for" in result.output
-    assert "Rust" in result.output
-    assert "--include-experimental" in result.output
+    assert run_scan_mock.call_args.kwargs["zero_files_reason"] == (
+        "Opengrep scanned zero files"
+    )
+    assert "Experimental rules for" not in result.output
+    assert "--include-experimental" not in result.output
 
 
 def test_zero_file_message_never_names_a_language_with_a_default_rule(
@@ -396,7 +941,16 @@ def test_zero_file_message_never_names_a_language_with_a_default_rule(
     inventory = inspect_rule_pack(_BUNDLED_RULES)
     opt_in = set(inventory.experimental_only_languages)
     assert "python" not in opt_in
-    for language, display in (("java", "Java"), ("go", "Go"), ("csharp", "C#")):
+    for language, display in (
+        ("java", "Java"),
+        ("go", "Go"),
+        ("csharp", "C#"),
+        ("javascript", "JavaScript"),
+        ("php", "PHP"),
+        ("c", "C"),
+        ("cpp", "C++"),
+        ("rust", "Rust"),
+    ):
         if language not in opt_in:
             # A word boundary, because "Java" is a substring of "JavaScript"
             # and "Go" of "Golang": a plain containment check reads as a
@@ -405,14 +959,14 @@ def test_zero_file_message_never_names_a_language_with_a_default_rule(
             assert re.search(pattern, result.output) is None
 
 
-def test_polyglot_default_gate_fails_when_an_opt_in_language_is_not_analysed(
+def test_polyglot_default_gate_fails_when_javascript_is_not_selected(
     runner, tmp_path
 ):
-    """The file left unanalysed must belong to a language with no default rule."""
+    """A JavaScript file omitted by the engine degrades default coverage."""
     python_file = tmp_path / "app.py"
-    rust_file = tmp_path / "vuln.rs"
+    javascript_file = tmp_path / "vuln.js"
     python_file.write_text("print('clean')\n", encoding="utf-8")
-    rust_file.write_text("fn main() {}\n", encoding="utf-8")
+    javascript_file.write_text("console.log('ok');\n", encoding="utf-8")
     report = _clean_report()
     report.files_scanned = 1
     report.scanned_paths = (str(python_file),)
@@ -432,12 +986,12 @@ def test_polyglot_default_gate_fails_when_an_opt_in_language_is_not_analysed(
     assert result.exit_code == _SAST_DEGRADED_EXIT_CODE
     assert payload["coverage_degraded"] is True
     assert payload["unanalysed_file_count"] == 1
-    assert payload["unanalysed_language_counts"] == {"Rust": 1}
+    assert payload["unanalysed_language_counts"] == {"JavaScript": 1}
     assert payload["unanalysed_files"] == [
         {
-            "path": "vuln.rs",
-            "language": "Rust",
-            "reason": "no_enabled_rules",
+            "path": "vuln.js",
+            "language": "JavaScript",
+            "reason": "engine_not_selected",
         }
     ]
 
@@ -1293,7 +1847,7 @@ def test_exclude_rule_passed_through(runner, tmp_path):
     assert result.exit_code == 0
     passed = run_scan_mock.call_args.kwargs["exclude_rules"]
     assert passed[0] == "cra-go-weak-hash"
-    assert len(passed[1:]) == 41
+    assert len(passed[1:]) == 50
 
 
 # --- upload must not silently succeed when the engine is absent ---

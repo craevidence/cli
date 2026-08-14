@@ -16,6 +16,11 @@ class Decoder {
         return new BinaryFormatter().Deserialize(input);
     }
 
+    object BadFullyQualified(Stream input) {
+        // ruleid: cra-csharp-binaryformatter-deserialize
+        return new System.Runtime.Serialization.Formatters.Binary.BinaryFormatter().Deserialize(input);
+    }
+
     object BadTargetTypedNew(Stream input) {
         BinaryFormatter formatter = new();
         // ruleid: cra-csharp-binaryformatter-deserialize

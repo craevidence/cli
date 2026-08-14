@@ -5,7 +5,7 @@ rules:
       function with a fixed executable and a validated argument vector.
     severity: ERROR
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
       owasp: ["A03:2021 - Injection"]
       references:
@@ -14,6 +14,21 @@ rules:
       category: security
       technology: [cpp]
       confidence: VERY HIGH
+      semantic_evidence:
+        required: true
+        language: cpp
+        policy: cpp.system-main-argv-command
+        candidate_range: result
+      scope: >
+        Reports a direct system or std::system shell call in global main when
+        the exact second parameter of that main declaration is indexed and
+        supplied as the complete command argument.
+      limitations: >
+        Requires separately generated build-free libclang evidence. Missing,
+        stale, compiler-failed, inactive, macro-redirected, application-owned,
+        or ambiguous candidates cannot produce a finding. Local aliases,
+        helper flows, constructed commands, other process APIs, and non-main
+        entry conventions remain outside this rule.
       license: MIT
       author: CRA Evidence
     languages: [cpp]

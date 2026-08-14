@@ -41,6 +41,26 @@ func badFlagIntoShellWithContext(ctx context.Context) error {
 	return exec.CommandContext(ctx, "sh", "-c", "ping "+*target).Run()
 }
 
+func badEnvWrapperIntoShell() error {
+	// ruleid: cra-go-shell-command-injection
+	return exec.Command("/usr/bin/env", "sh", "-c", os.Getenv("USER_CMD")).Run()
+}
+
+func badBusyboxWrapperIntoShell() error {
+	// ruleid: cra-go-shell-command-injection
+	return exec.Command("busybox", "sh", "-c", os.Getenv("USER_CMD")).Run()
+}
+
+func badUppercaseWindowsShell() error {
+	// ruleid: cra-go-shell-command-injection
+	return exec.Command("CMD.EXE", "/C", os.Getenv("USER_CMD")).Run()
+}
+
+func badPowerShellCaseVariant() error {
+	// ruleid: cra-go-shell-command-injection
+	return exec.Command("powershell.exe", "-command", os.Getenv("USER_CMD")).Run()
+}
+
 // A value passed as a separate argument is never interpreted by a shell.
 func okSeparateArgument(r *http.Request) error {
 	// ok: cra-go-shell-command-injection

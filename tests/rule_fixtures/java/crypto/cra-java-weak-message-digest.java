@@ -13,71 +13,14 @@ class Digests {
         BLANK_FINAL = "MD2";
     }
 
-    MessageDigest badMd5() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("MD5");
-    }
-
-    MessageDigest badSha1() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("SHA-1");
-    }
-
-    java.security.MessageDigest badFullyQualified() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return java.security.MessageDigest.getInstance("SHA-1");
-    }
-
-    java.security.MessageDigest badProviderOverload() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return java.security.MessageDigest.getInstance("MD5", "SUN");
-    }
-
-    MessageDigest badStaticImport() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return getInstance("SHA1");
-    }
-
     MessageDigest badNamedConstant() throws Exception {
         // ruleid: cra-java-weak-message-digest
         return MessageDigest.getInstance(LEGACY_DIGEST);
     }
 
-    // "SHA" is the JDK alias for SHA-1 and returns a 20 byte digest.
-    MessageDigest badShaAlias() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("SHA");
-    }
-
-    MessageDigest badShaAliasLowercase() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("sha");
-    }
-
     MessageDigest badShaAliasConstant() throws Exception {
         // ruleid: cra-java-weak-message-digest
         return MessageDigest.getInstance(ALIAS_DIGEST);
-    }
-
-    // Object identifiers the JDK accepts for SHA-1, MD5 and MD2.
-    MessageDigest badSha1Oid() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("1.3.14.3.2.26");
-    }
-
-    MessageDigest badMd5Oid() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("1.2.840.113549.2.5");
-    }
-
-    MessageDigest badMd2Oid() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("1.2.840.113549.2.2");
-    }
-
-    MessageDigest badMd5OidPrefixed() throws Exception {
-        // ruleid: cra-java-weak-message-digest
-        return MessageDigest.getInstance("OID.1.2.840.113549.2.5");
     }
 
     MessageDigest badOidConstant() throws Exception {

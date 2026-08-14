@@ -27,6 +27,8 @@ rules:
         str.format, and the common decode and unquote helpers. Returns of
         redirect, jsonify, send_file, send_from_directory, and render_template
         are excluded because those do not build an HTML body from the string.
+        Dictionary and list returns are excluded because Flask serializes them
+        as JSON responses.
       limitations: >
         Taint is not propagated through calls to functions defined outside the
         scanned file, through slice expressions, through match statements, or
@@ -38,9 +40,10 @@ rules:
       sanitizer_analysis:
         status: modeled
         reason: >
-          html.escape, markupsafe.escape, flask.escape, bleach.clean, and
-          project helpers whose name is an escaping or sanitizing verb stop the
-          flow. Escapers with unrelated names are not recognised.
+          Only the qualified html.escape, markupsafe.escape, flask.escape, and
+          bleach.clean APIs stop the flow. A project helper is not trusted from
+          its name because a function named sanitize may return its input
+          unchanged.
       license: MIT
       author: CRA Evidence
     languages: [python]
@@ -112,16 +115,14 @@ rules:
       - pattern: $DST += <... $FMT.format(..., $SRC, ...) ...>
         from: $SRC
         to: $DST
+      - pattern: $DST = <... $HELPER($SRC, ...) ...>
+        from: $SRC
+        to: $DST
     pattern-sanitizers:
       - pattern: html.escape(...)
       - pattern: markupsafe.escape(...)
       - pattern: flask.escape(...)
       - pattern: bleach.clean(...)
-      - patterns:
-          - pattern: $ESCAPER(...)
-          - metavariable-regex:
-              metavariable: $ESCAPER
-              regex: (?i)^([A-Za-z_][A-Za-z_0-9]*\.)*(escape|escape_html|html_escape|escape_for_html|escapejs|sanitize|sanitize_html|clean_html|htmlspecialchars)$
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -156,7 +157,12 @@ rules:
           - pattern: return $BODY
           - focus-metavariable: $BODY
           - pattern-not: return flask.redirect(...)
+          - pattern-not: return redirect(...)
+          - pattern-not: return flask.redirect(...), ...
+          - pattern-not: return redirect(...), ...
           - pattern-not: return flask.jsonify(...)
           - pattern-not: return flask.send_file(...)
           - pattern-not: return flask.send_from_directory(...)
           - pattern-not: return flask.render_template(...)
+          - pattern-not: return {...}
+          - pattern-not: return [...]

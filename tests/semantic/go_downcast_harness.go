@@ -2,7 +2,6 @@ package integer
 
 import (
 	"fmt"
-	"math/big"
 )
 
 var inputs = []string{
@@ -17,61 +16,77 @@ type probe struct {
 	u32  func(string) uint32
 }
 
-// wraps reports whether got is the low-32-bit reinterpretation of want, which
-// is what a silent truncating conversion produces. A clamped or rejected value
-// is not a wraparound.
-func wrapsI32(want *big.Int, got int32) bool {
-	m := new(big.Int).And(want, big.NewInt(0xFFFFFFFF))
-	v := m.Int64()
-	if v >= 1<<31 {
-		v -= 1 << 32
+var conversionObserved bool
+var conversionTruncated bool
+
+func traceI32(value any) int32 {
+	conversionObserved = true
+	switch v := value.(type) {
+	case int:
+		conversionTruncated = conversionTruncated || int64(v) < -1<<31 || int64(v) > 1<<31-1
+		return int32(v)
+	case int64:
+		conversionTruncated = conversionTruncated || v < -1<<31 || v > 1<<31-1
+		return int32(v)
+	case uint64:
+		conversionTruncated = conversionTruncated || v > 1<<31-1
+		return int32(v)
+	default:
+		panic("unsupported int32 conversion input")
 	}
-	return int64(got) == v && (!want.IsInt64() || want.Int64() != int64(got))
 }
 
-func wrapsU32(want *big.Int, got uint32) bool {
-	m := new(big.Int).And(want, big.NewInt(0xFFFFFFFF))
-	return uint64(got) == m.Uint64() && (!want.IsInt64() || want.Int64() != int64(got))
+func traceU32(value any) uint32 {
+	conversionObserved = true
+	switch v := value.(type) {
+	case int:
+		conversionTruncated = conversionTruncated || v < 0 || uint64(v) > 1<<32-1
+		return uint32(v)
+	case int64:
+		conversionTruncated = conversionTruncated || v < 0 || uint64(v) > 1<<32-1
+		return uint32(v)
+	case uint64:
+		conversionTruncated = conversionTruncated || v > 1<<32-1
+		return uint32(v)
+	default:
+		panic("unsupported uint32 conversion input")
+	}
 }
 
-func callI32(f func(string) int32, s string) (v int32, panicked bool) {
+func callI32(f func(string) int32, s string) (v int32, panicked bool, truncated bool) {
+	conversionObserved = false
+	conversionTruncated = false
 	defer func() {
 		if r := recover(); r != nil {
 			panicked = true
 		}
+		truncated = conversionObserved && conversionTruncated
 	}()
-	return f(s), false
+	return f(s), false, conversionObserved && conversionTruncated
 }
 
-func callU32(f func(string) uint32, s string) (v uint32, panicked bool) {
+func callU32(f func(string) uint32, s string) (v uint32, panicked bool, truncated bool) {
+	conversionObserved = false
+	conversionTruncated = false
 	defer func() {
 		if r := recover(); r != nil {
 			panicked = true
 		}
+		truncated = conversionObserved && conversionTruncated
 	}()
-	return f(s), false
+	return f(s), false, conversionObserved && conversionTruncated
 }
 
 func truncates(p probe) (bool, string, int64) {
 	for _, s := range inputs {
-		want, ok := new(big.Int).SetString(s, 10)
-		if !ok {
-			continue
-		}
 		if p.i32 != nil {
-			got, panicked := callI32(p.i32, s)
-			if panicked || got == 0 {
-				continue
-			}
-			if wrapsI32(want, got) {
+			got, panicked, truncated := callI32(p.i32, s)
+			if !panicked && truncated {
 				return true, s, int64(got)
 			}
 		} else {
-			got, panicked := callU32(p.u32, s)
-			if panicked || got == 0 {
-				continue
-			}
-			if wrapsU32(want, got) {
+			got, panicked, truncated := callU32(p.u32, s)
+			if !panicked && truncated {
 				return true, s, int64(got)
 			}
 		}

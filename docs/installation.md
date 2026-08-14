@@ -66,6 +66,14 @@ engine provides the same CLI behavior, but it is not the hardened production
 image: the public base includes a shell and a package manager, and the labels
 record that fact.
 
+Both container variants include the exact Debian 13 libclang 18.1.8 frontend
+libraries and headers used by `code-evidence --language c|cpp`. The final DHI
+image does not include a compiler driver, linker, shell, or package manager.
+The public fallback retains the shell and package manager supplied by its base,
+as its labels state. The frontend package identities and Debian copyright
+notices are stored under `/licenses/semantic`, and the package records are
+included in the runtime inventory for SBOM and vulnerability scanners.
+
 ## From Source
 
 Install the Python package in editable mode:

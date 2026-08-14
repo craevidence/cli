@@ -1,0 +1,51 @@
+rules:
+  - id: cra-rust-cratesio-reqwest-invalid-certs
+    message: >
+      The pinned crates.io reqwest ClientBuilder is configured to accept invalid
+      TLS certificates or hostnames. Remove this setting and use certificate and
+      hostname verification.
+    severity: ERROR
+    metadata:
+      tier: default
+      cwe: ["CWE-295: Improper Certificate Validation"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://doc.rust-lang.org/reference/paths.html#path-qualifiers
+        - https://doc.rust-lang.org/reference/items/extern-crates.html
+        - https://docs.rs/reqwest/0.12.24/reqwest/struct.ClientBuilder.html#method.danger_accept_invalid_certs
+        - https://crates.io/crates/reqwest/0.12.24
+      category: security
+      technology: [rust, reqwest]
+      confidence: VERY HIGH
+      license: MIT
+      author: CRA Evidence
+      semantic_evidence:
+        required: true
+        language: rust
+        policy: rust.cratesio-reqwest-invalid-certs
+        candidate_range: result
+      limitations: >
+        Requires code-evidence for one non-workspace Cargo package using Rust
+        edition 2018, 2021, or 2024 and pinned crates.io reqwest 0.12.24. Only a
+        direct literal true call immediately following an absolute reqwest
+        ClientBuilder constructor is covered. Relative paths, aliases,
+        intermediate calls, variables, workspaces, overrides, project Cargo
+        configuration, other reqwest versions, and unsupported manifests
+        degrade or remain outside this rule. The broader method-name rule stays
+        experimental.
+    languages: [rust]
+    patterns:
+      - pattern-either:
+          - pattern: reqwest::Client::builder().danger_accept_invalid_certs(true)
+          - pattern: reqwest::Client::builder().danger_accept_invalid_hostnames(true)
+          - pattern: reqwest::ClientBuilder::new().danger_accept_invalid_certs(true)
+          - pattern: reqwest::ClientBuilder::new().danger_accept_invalid_hostnames(true)
+          - pattern: reqwest::blocking::Client::builder().danger_accept_invalid_certs(true)
+          - pattern: reqwest::blocking::Client::builder().danger_accept_invalid_hostnames(true)
+          - pattern: reqwest::blocking::ClientBuilder::new().danger_accept_invalid_certs(true)
+          - pattern: reqwest::blocking::ClientBuilder::new().danger_accept_invalid_hostnames(true)
+      - pattern-regex: '(?m)(?<!:)::\s*reqwest\s*::\s*(?:Client\s*::\s*builder\s*\(\s*\)|ClientBuilder\s*::\s*new\s*\(\s*\)|blocking\s*::\s*Client\s*::\s*builder\s*\(\s*\)|blocking\s*::\s*ClientBuilder\s*::\s*new\s*\(\s*\))\s*\.\s*danger_accept_invalid_(?:certs|hostnames)\s*\(\s*true\s*\)'
+      - pattern-not-inside: |
+          mod tests {
+              ...
+          }

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://craevidence.com/schemas/semantic-evidence-v1.json",
+  "title": "CRA Evidence semantic evidence envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "language",
+    "adapter",
+    "isolation",
+    "source",
+    "build",
+    "indexes"
+  ],
+  "properties": {
+    "schema_version": {"const": "craevidence.semantic_evidence.v1"},
+    "language": {"const": "csharp"},
+    "adapter": {
+      "type": "object",
+      "required": [
+        "profile",
+        "package_sha512",
+        "executable_version",
+        "commit",
+        "image_manifest",
+        "sdk_version",
+        "arguments"
+      ],
+      "properties": {
+        "profile": {"const": "scip-dotnet-0.2.14-dotnet-8.0.423"},
+        "package_sha512": {"type": "string"},
+        "executable_version": {"type": "string"},
+        "commit": {"type": "string"},
+        "image_manifest": {"type": "string"},
+        "sdk_version": {"type": "string"},
+        "arguments": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      },
+      "additionalProperties": false
+    },
+    "isolation": {
+      "type": "object",
+      "required": [
+        "network",
+        "source_read_only",
+        "root_read_only",
+        "capabilities_dropped",
+        "no_new_privileges",
+        "project_hooks"
+      ],
+      "properties": {
+        "network": {"const": "none"},
+        "source_read_only": {"const": true},
+        "root_read_only": {"const": true},
+        "capabilities_dropped": {"const": true},
+        "no_new_privileges": {"const": true},
+        "project_hooks": {"const": "contained"}
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["tree_sha256", "files"],
+      "properties": {
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "mode", "sha256"],
+            "properties": {
+              "path": {"type": "string"},
+              "mode": {"type": "integer"},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "build": {
+      "type": "object",
+      "required": ["profile", "profile_sha256", "projects"],
+      "properties": {
+        "profile": {
+          "type": "object",
+          "required": [
+            "configuration",
+            "target_framework",
+            "platform",
+            "define_constants",
+            "project_paths"
+          ],
+          "properties": {
+            "configuration": {"type": "string"},
+            "target_framework": {"type": "string"},
+            "platform": {"type": "string"},
+            "define_constants": {
+              "type": "array",
+              "items": {"type": "string"}
+            },
+            "project_paths": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {"type": "string"}
+            }
+          },
+          "additionalProperties": false
+        },
+        "profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "projects": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["path", "restore_exit_code", "build_exit_code", "workspace_failure_count"],
+            "properties": {
+              "path": {"type": "string"},
+              "restore_exit_code": {"const": 0},
+              "build_exit_code": {"const": 0},
+              "workspace_failure_count": {"const": 0}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "indexes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["path", "sha256"],
+        "properties": {
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

@@ -5,7 +5,7 @@ rules:
       format such as "%s" and pass untrusted text as a value argument.
     severity: ERROR
     metadata:
-      tier: experimental
+      tier: default
       cwe: ["CWE-134: Use of Externally-Controlled Format String"]
       owasp: ["A03:2021 - Injection"]
       references:
@@ -14,6 +14,21 @@ rules:
       category: security
       technology: [c]
       confidence: VERY HIGH
+      semantic_evidence:
+        required: true
+        language: c
+        policy: c.printf-main-argv-format
+        candidate_range: result
+      scope: >
+        Reports a direct system printf call in global main when the exact
+        second parameter of that main declaration is indexed and supplied as
+        the complete format argument.
+      limitations: >
+        Requires separately generated build-free libclang evidence. Missing,
+        stale, compiler-failed, inactive, macro-redirected, application-owned,
+        or ambiguous candidates cannot produce a finding. Local aliases,
+        helper flows, other printf-family APIs, and non-main entry conventions
+        remain outside this rule.
       license: MIT
       author: CRA Evidence
     languages: [c]

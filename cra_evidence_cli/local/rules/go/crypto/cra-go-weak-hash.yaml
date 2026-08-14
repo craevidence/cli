@@ -7,7 +7,7 @@ rules:
       intentional. Use SHA-256 or stronger for security-sensitive hashing.
     severity: WARNING
     metadata:
-      tier: default
+      tier: experimental
       cwe:
         - "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
       owasp:

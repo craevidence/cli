@@ -1,0 +1,10 @@
+The semantic evidence reader interoperates with the Sourcegraph SCIP protocol.
+SCIP is licensed under the Apache License 2.0.
+
+Source: https://github.com/sourcegraph/scip
+License: https://github.com/sourcegraph/scip/blob/main/LICENSE
+
+The CRA Evidence implementation uses independently written, constrained
+protobuf decoding for the SCIP metadata, document, occurrence, range and symbol
+fields consumed by its evidence policies. It does not bundle an SCIP indexer or
+the upstream generated protocol implementation.

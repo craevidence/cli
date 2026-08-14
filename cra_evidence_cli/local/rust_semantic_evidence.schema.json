@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://craevidence.com/schemas/rust-semantic-evidence-v1.json",
+  "title": "CRA Evidence Rust semantic evidence envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "language", "adapter", "isolation", "source", "analysis"],
+  "properties": {
+    "schema_version": {"const": "craevidence.rust_semantic_evidence.v1"},
+    "language": {"const": "rust"},
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "analyzer_sha256", "package_name", "package_version", "package_source", "package_checksum"],
+      "properties": {
+        "profile": {"const": "rust-cratesio-absolute-binding-v1"},
+        "analyzer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "package_name": {"const": "reqwest"},
+        "package_version": {"const": "0.12.24"},
+        "package_source": {"const": "registry+https://github.com/rust-lang/crates.io-index"},
+        "package_checksum": {"const": "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f"}
+      }
+    },
+    "isolation": {
+      "const": {
+        "cargo_executed": false,
+        "compiler_executed": false,
+        "build_scripts_executed": false,
+        "proc_macros_executed": false,
+        "target_code_executed": false,
+        "network_required": false,
+        "provenance_source": "static-manifest-lock-and-pinned-checksum"
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tree_sha256", "files"],
+      "properties": {
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "files": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "mode", "sha256"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "mode": {"type": "integer", "minimum": 0, "maximum": 4095},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            }
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "profile_sha256", "occurrences"],
+      "properties": {
+        "profile": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["edition", "manifest_path", "lock_path", "root_package_name", "root_package_version", "dependency_requirement"],
+          "properties": {
+            "edition": {"enum": ["2018", "2021", "2024"]},
+            "manifest_path": {"const": "Cargo.toml"},
+            "lock_path": {"const": "Cargo.lock"},
+            "root_package_name": {"type": "string", "minLength": 1},
+            "root_package_version": {"type": "string", "minLength": 1},
+            "dependency_requirement": {"type": "string", "minLength": 1}
+          }
+        },
+        "profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "occurrences": {
+          "type": "array",
+          "maxItems": 2000000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "start_line", "start_column", "end_line", "end_column", "crate_name", "package_name", "package_version", "package_source", "package_checksum", "binding", "method"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "start_line": {"type": "integer", "minimum": 1},
+              "start_column": {"type": "integer", "minimum": 1},
+              "end_line": {"type": "integer", "minimum": 1},
+              "end_column": {"type": "integer", "minimum": 1},
+              "crate_name": {"const": "reqwest"},
+              "package_name": {"type": "string", "minLength": 1},
+              "package_version": {"type": "string", "minLength": 1},
+              "package_source": {"enum": ["registry+https://github.com/rust-lang/crates.io-index", "local-current-crate"]},
+              "package_checksum": {"type": "string"},
+              "binding": {"enum": ["absolute-extern-prelude", "application-extern-alias"]},
+              "method": {"enum": ["danger_accept_invalid_certs", "danger_accept_invalid_hostnames"]}
+            }
+          }
+        }
+      }
+    }
+  }
+}

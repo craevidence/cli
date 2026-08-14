@@ -14,6 +14,13 @@ rules:
       category: security
       technology: [php]
       confidence: VERY HIGH
+      scope: >
+        Reviews unqualified unserialize calls receiving HTTP request data.
+      limitations: >
+        Inside a namespace, an unqualified call can resolve to an
+        application-defined function with the same name. This broader rule
+        therefore remains experimental. The separate default rule covers only
+        PHP's literal fully qualified global function spelling.
       sanitizer_analysis:
         status: not-modeled
         reason: Untrusted serialized PHP objects have no generally safe sanitizer before deserialization.

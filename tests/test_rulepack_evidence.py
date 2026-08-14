@@ -22,6 +22,205 @@ REAL_PROJECTS = Path(__file__).parent / "rulepack_real_projects.json"
 BENCHMARKS = Path(__file__).parent / "rulepack_benchmarks.json"
 
 
+def test_non_python_default_rules_have_fail_closed_evidence() -> None:
+    from cra_evidence_cli.local.rules_pack import PACK_VERSION, inspect_rule_pack
+
+    manifest = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
+    real_manifest = json.loads(REAL_PROJECTS.read_text(encoding="utf-8"))
+    inventory = inspect_rule_pack(REPO_ROOT / "cra_evidence_cli" / "local" / "rules")
+    entries = manifest["default_tier_evidence"]
+    benchmarks_by_name = {benchmark["name"]: benchmark for benchmark in manifest["benchmarks"]}
+
+    expected = {
+        rule_id
+        for rule_id, tier in inventory.rule_tiers.items()
+        if tier == "default" and inventory.rule_languages[rule_id] != "python"
+    }
+    recorded = {entry["rule_id"] for entry in entries}
+    assert recorded == expected
+    assert len(recorded) == len(entries)
+
+    real_projects = {project["name"] for project in real_manifest["projects"]}
+    for entry in entries:
+        assert entry["pack_version"] == PACK_VERSION
+        assert entry["terminal_decision"] == "default"
+        assert entry["evidence_route"] in {"A", "B"}
+        assert entry["real_project_lane"] in real_projects
+        assert entry["real_project_evidence"]
+
+        if entry["evidence_route"] == "A":
+            assert entry["precision"] >= 0.9
+            assert entry["detected_positive_count"] > 0
+            assert entry["safe_case_count"] > 0
+            intrinsic = entry.get("ownership_model") == "language-intrinsic"
+            if intrinsic:
+                assert entry["compiling_homonym_status"] == (
+                    "not applicable: no identifier or API binding"
+                )
+                assert entry["compiling_homonym_fixtures"] == []
+            else:
+                assert entry["compiling_homonym_status"] == "no findings"
+            assert entry["benchmark_lanes"]
+            for lane in entry["benchmark_lanes"]:
+                assert lane in benchmarks_by_name
+            assert entry["semantic_benchmark"]
+            fixtures = entry["compiling_homonym_fixtures"]
+            for fixture in fixtures:
+                assert (REPO_ROOT / fixture).is_file()
+            for semantic_test in entry["semantic_tests"]:
+                test_path, test_name = semantic_test.split("::", maxsplit=1)
+                semantic_source = (REPO_ROOT / test_path).read_text(encoding="utf-8")
+                assert f"def {test_name}(" in semantic_source
+            companion = entry.get("companion_rule")
+            if companion is not None:
+                assert inventory.rule_tiers[companion] == "experimental"
+            continue
+
+        fixtures = entry["compiling_homonym_fixtures"]
+        assert fixtures
+        assert entry["binding_basis"]
+        for fixture in fixtures:
+            assert (REPO_ROOT / fixture).is_file()
+        test_path, test_name = entry["semantic_test"].split("::", maxsplit=1)
+        semantic_source = (REPO_ROOT / test_path).read_text(encoding="utf-8")
+        assert f"def {test_name}(" in semantic_source
+        if entry["rule_id"] == "cra-csharp-framework-dangerous-certificate-validator":
+            assert entry["semantic_producer"] == "code-evidence --language csharp"
+            assert entry["sdk_version"] == "8.0.423"
+            assert entry["reference_pack_version"] == "8.0.29"
+            assert "PublicKeyToken=b03f5f7f11d50a3a" in entry["framework_assembly"]
+            assert entry["binding_references"] == [
+                "https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.dangerousacceptanyservercertificatevalidator",
+                "https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.servercertificatecustomvalidationcallback",
+            ]
+            assert (REPO_ROOT / entry["analyzer_asset"]).is_file()
+            assert (REPO_ROOT / entry["schema_asset"]).is_file()
+        if entry["rule_id"] == "cra-rust-cratesio-reqwest-invalid-certs":
+            assert entry["semantic_producer"] == "code-evidence --language rust"
+            assert entry["compiler_version"] == "rustc 1.88.0 (6b00bc388 2025-06-23)"
+            assert re.fullmatch(r"rust@sha256:[0-9a-f]{64}", entry["compiler_image"])
+            assert entry["package_name"] == "reqwest"
+            assert entry["package_version"] == "0.12.24"
+            assert entry["package_source"] == (
+                "registry+https://github.com/rust-lang/crates.io-index"
+            )
+            assert re.fullmatch(r"[0-9a-f]{64}", entry["package_checksum"])
+            assert entry["broad_benchmark_lane"] == "codeql-rust-cwe295"
+            assert entry["broad_benchmark_rule"] == "cra-rust-reqwest-invalid-certs"
+            assert entry["narrow_benchmark_findings"] == 0
+            assert "no locations are credited" in entry["benchmark_attribution"]
+            for field in (
+                "analyzer_asset",
+                "schema_asset",
+                "compiling_positive_fixture",
+                "compiler_dependency_fixture",
+            ):
+                assert (REPO_ROOT / entry[field]).is_file()
+        if entry["rule_id"] == "cra-c-fixed-array-literal-oob-write":
+            assert entry["semantic_producer"] == "code-evidence --language c"
+            assert entry["compiler_frontend"] == (
+                "Ubuntu clang version 18.1.3 (1ubuntu1)"
+            )
+            assert re.fullmatch(r"[0-9a-f]{64}", entry["compiler_library_sha256"])
+            assert entry["compiler_profile"] == (
+                "libclang-18-c17-security-evidence-v2"
+            )
+            assert entry["container_compiler_frontend"] == (
+                "Debian clang version 18.1.8 (18+b1)"
+            )
+            assert entry["container_compiler_library_sha256_by_arch"] == {
+                "amd64": "4b9b5073e3dad198b23589a81ce317b0224b36cfa5776305b48d138a53bf2e1d",
+                "arm64": "939adf9a6d00fd3ed53c7cecace983f885431d4e9c61a9dc01999517c64b27dd",
+            }
+            assert entry["container_resource_headers_sha256_by_arch"] == {
+                "amd64": "9ecfc31a5e9b723c6ad8e62fce9839907cc0cdaf44b68a37ece1dc9a55ab51c8",
+                "arm64": "8343b19f446ea7d62767fa342753ba8c1b535ec6973ee8b17182822bba656b67",
+            }
+            assert entry["container_compiler_profile"] == (
+                "libclang-18.1.8-debian13-c17-security-evidence-v2"
+            )
+            origin_path, origin_test = entry["diagnostic_origin_test"].split(
+                "::", maxsplit=1
+            )
+            origin_source = (REPO_ROOT / origin_path).read_text(encoding="utf-8")
+            assert f"def {origin_test}(" in origin_source
+            assert (REPO_ROOT / entry["analyzer_asset"]).is_file()
+            assert (REPO_ROOT / entry["schema_asset"]).is_file()
+        if entry["rule_id"] == "cra-cpp-fixed-array-literal-oob-write":
+            assert entry["semantic_producer"] == "code-evidence --language cpp"
+            assert entry["compiler_frontend"] == (
+                "Ubuntu clang version 18.1.3 (1ubuntu1)"
+            )
+            assert re.fullmatch(r"[0-9a-f]{64}", entry["compiler_library_sha256"])
+            assert entry["compiler_profile"] == (
+                "libclang-18-cpp17-security-evidence-v2"
+            )
+            assert entry["container_compiler_frontend"] == (
+                "Debian clang version 18.1.8 (18+b1)"
+            )
+            assert entry["container_compiler_library_sha256_by_arch"] == {
+                "amd64": "4b9b5073e3dad198b23589a81ce317b0224b36cfa5776305b48d138a53bf2e1d",
+                "arm64": "939adf9a6d00fd3ed53c7cecace983f885431d4e9c61a9dc01999517c64b27dd",
+            }
+            assert entry["container_resource_headers_sha256_by_arch"] == {
+                "amd64": "02371ccb4f079176c8f92152e50769067facb335bca9381b1662c9f9d0f71985",
+                "arm64": "264f66375eebe65d080ac48c5931c59841e9c06eaa504b5abd0ce7ceb4de43ce",
+            }
+            assert entry["container_compiler_profile"] == (
+                "libclang-18.1.8-debian13-cpp17-security-evidence-v2"
+            )
+            origin_path, origin_test = entry["diagnostic_origin_test"].split(
+                "::", maxsplit=1
+            )
+            origin_source = (REPO_ROOT / origin_path).read_text(encoding="utf-8")
+            assert f"def {origin_test}(" in origin_source
+            assert (REPO_ROOT / entry["analyzer_asset"]).is_file()
+            assert (REPO_ROOT / entry["schema_asset"]).is_file()
+        if entry["rule_id"] in {
+            "cra-c-printf-argv-format",
+            "cra-c-system-argv",
+            "cra-cpp-printf-argv-format",
+            "cra-cpp-system-argv",
+        }:
+            language = "c" if entry["rule_id"].startswith("cra-c-") else "cpp"
+            standard = "c17" if language == "c" else "cpp17"
+            assert entry["semantic_producer"] == f"code-evidence --language {language}"
+            assert entry["compiler_frontend"] == (
+                "Ubuntu clang version 18.1.3 (1ubuntu1)"
+            )
+            assert re.fullmatch(r"[0-9a-f]{64}", entry["compiler_library_sha256"])
+            assert entry["compiler_profile"] == (
+                f"libclang-18-{standard}-security-evidence-v2"
+            )
+            assert entry["container_compiler_frontend"] == (
+                "Debian clang version 18.1.8 (18+b1)"
+            )
+            assert entry["container_compiler_profile"] == (
+                f"libclang-18.1.8-debian13-{standard}-security-evidence-v2"
+            )
+            for field in (
+                "analyzer_asset",
+                "schema_asset",
+                "compiling_positive_fixture",
+            ):
+                assert (REPO_ROOT / entry[field]).is_file()
+            end_to_end_path, end_to_end_test = entry["end_to_end_test"].split(
+                "::", maxsplit=1
+            )
+            end_to_end_source = (REPO_ROOT / end_to_end_path).read_text(
+                encoding="utf-8"
+            )
+            assert f"def {end_to_end_test}(" in end_to_end_source
+        runtime_probes = entry.get("runtime_probe_files", [])
+        for runtime_probe in runtime_probes:
+            assert (REPO_ROOT / runtime_probe).is_file()
+        if runtime_probes:
+            assert re.fullmatch(r"php@sha256:[0-9a-f]{64}", entry["runtime_image"])
+        companion = entry.get("companion_rule")
+        if companion is not None:
+            assert inventory.rule_tiers[companion] == "experimental"
+
+
 def test_real_project_manifest_pins_unique_licensed_revisions() -> None:
     manifest = json.loads(REAL_PROJECTS.read_text(encoding="utf-8"))
     projects = manifest["projects"]
@@ -51,9 +250,7 @@ def test_real_project_manifest_pins_unique_licensed_revisions() -> None:
 
 def test_real_project_error_kind_handles_pinned_engine_shapes() -> None:
     assert real_projects._error_kind({"type": "Syntax error"}) == "Syntax error"
-    assert real_projects._error_kind({"type": ["PartialParsing", []]}) == (
-        "PartialParsing"
-    )
+    assert real_projects._error_kind({"type": ["PartialParsing", []]}) == ("PartialParsing")
     assert real_projects._error_kind({"type": []}) == "Unknown"
 
 
@@ -223,6 +420,198 @@ def test_benchmark_score_rejects_cross_category_finding() -> None:
         )
 
 
+def test_benchmark_cwe_aliases_are_bound_to_reviewed_corpus_pairs() -> None:
+    assert benchmarks._reviewed_cwe_aliases("owasp-benchmark-python", {"94": 95}) == {94: 95}
+    with pytest.raises(benchmarks.BenchmarkGateError, match="unreviewed CWE aliases"):
+        benchmarks._reviewed_cwe_aliases("another-corpus", {"94": 95})
+
+
+def test_juliet_method_score_ignores_findings_from_other_rules(tmp_path: Path) -> None:
+    source = tmp_path / "Case.cs"
+    source.write_text(
+        "public void Bad()\n{\n    Sink();\n}\npublic void Good()\n{\n    Sink();\n}\n",
+        encoding="utf-8",
+    )
+    document = {
+        "results": [
+            {
+                "check_id": "measured-rule",
+                "path": str(source),
+                "start": {"line": 3},
+            },
+            {
+                "check_id": "unrelated-rule",
+                "path": str(source),
+                "start": {"line": 7},
+            },
+        ]
+    }
+
+    assert benchmarks._score_juliet_methods(
+        document, benchmarks.CSHARP_METHOD_RE, "measured-rule"
+    ) == {
+        "files_with_bad_finding": 1,
+        "findings_in_good_methods": 0,
+        "findings_not_attributed": 0,
+    }
+
+
+def test_preprocessed_juliet_score_ignores_other_rules(tmp_path: Path) -> None:
+    source = tmp_path / "case.c"
+    source.write_text(
+        "void case_bad()\n{\n    mktemp(buffer);\n}\nvoid good_case()\n{\n    mktemp(buffer);\n}\n",
+        encoding="utf-8",
+    )
+    document = {
+        "results": [
+            {
+                "check_id": "measured-rule",
+                "path": str(source),
+                "start": {"line": 3},
+            },
+            {
+                "check_id": "unrelated-rule",
+                "path": str(source),
+                "start": {"line": 7},
+            },
+        ]
+    }
+
+    assert benchmarks._score_juliet_preprocessed(document, 1, 0, "measured-rule") == {
+        "preprocessed_files": 1,
+        "skipped_files": 0,
+        "files_with_bad_finding": 1,
+        "findings_in_good_on_insecure_call": 0,
+        "findings_in_good_on_secure_call": 0,
+    }
+
+
+def test_codeql_score_enforces_rule_ownership_and_one_to_one_spans(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "query"
+    source.mkdir()
+    case = source / "Case.java"
+    case.write_text(
+        "first(); // $ hasQuery\nsecond(); // $ hasQuery\nsafe(); // GOOD\n",
+        encoding="utf-8",
+    )
+    document = {
+        "results": [
+            {
+                "check_id": "measured-rule",
+                "path": str(case),
+                "start": {"line": 1},
+                "end": {"line": 3},
+            },
+            {
+                "check_id": "unrelated-rule",
+                "path": str(case),
+                "start": {"line": 2},
+                "end": {"line": 2},
+            },
+        ]
+    }
+
+    assert benchmarks._score_codeql_markers(document, source, "hasQuery", "measured-rule") == {
+        "alert_lines": 2,
+        "alert_lines_covered": 1,
+        "good_lines": 1,
+        "good_lines_reported": 1,
+        "findings_scored": 1,
+    }
+
+
+def test_codeql_score_does_not_merge_duplicate_basenames(tmp_path: Path) -> None:
+    source = tmp_path / "query"
+    first = source / "first" / "Case.java"
+    second = source / "second" / "Case.java"
+    first.parent.mkdir(parents=True)
+    second.parent.mkdir(parents=True)
+    first.write_text("first(); // $ hasQuery\n", encoding="utf-8")
+    second.write_text("second(); // $ hasQuery\n", encoding="utf-8")
+    document = {
+        "results": [
+            {
+                "check_id": "measured-rule",
+                "path": str(first),
+                "start": {"line": 1},
+                "end": {"line": 1},
+            }
+        ]
+    }
+
+    score = benchmarks._score_codeql_markers(document, source, "hasQuery", "measured-rule")
+
+    assert score["alert_lines"] == 2
+    assert score["alert_lines_covered"] == 1
+
+
+def test_sard_truth_uses_exact_variables_and_plain_assignment(tmp_path: Path) -> None:
+    safe = tmp_path / "safe" / "case.php"
+    safe.parent.mkdir()
+    safe.write_text("MODIFICATIONS.*/\n$tained_suffix = $tainted;\n", encoding="utf-8")
+    assert benchmarks._sard_truth(safe, "$tained", "$sanitized") == "safe"
+
+    comparison = tmp_path / "unsafe" / "comparison.php"
+    comparison.parent.mkdir()
+    comparison.write_text(
+        "MODIFICATIONS.*/\nif ($sanitized == 'allowed') {}\n$tainted = $sanitized;\n",
+        encoding="utf-8",
+    )
+    assert benchmarks._sard_truth(comparison, "$tained", "$sanitized") == "safe"
+
+    assigned = comparison.with_name("assigned.php")
+    assigned.write_text(
+        "MODIFICATIONS.*/\n$sanitized = clean($tainted);\n$tainted = $sanitized;\n",
+        encoding="utf-8",
+    )
+    assert benchmarks._sard_truth(assigned, "$tained", "$sanitized") == "vulnerable"
+
+
+def test_gosec_score_credits_only_the_declared_rule(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(benchmarks, "_gosec_cases", lambda path: [(["package p"], 1)])
+    monkeypatch.setattr(benchmarks, "_rule_cwes", lambda rules: {"measured-rule": {109}})
+    monkeypatch.setattr(
+        benchmarks,
+        "_scan",
+        lambda binary, rules, target: {"results": [{"check_id": "other-rule"}]},
+    )
+
+    assert benchmarks._score_gosec(
+        Path("opengrep"),
+        Path("rules"),
+        tmp_path,
+        {"G109": "sample.go"},
+        {"G109": "measured-rule"},
+        tmp_path / "work",
+    ) == {
+        "cases_total": 1,
+        "by_rule": {"G109": {"cases": 1, "vulnerable": 1, "detected": 0, "fp_on_safe": 0}},
+    }
+
+    with pytest.raises(benchmarks.BenchmarkGateError, match="ownership differ"):
+        benchmarks._score_gosec(
+            Path("opengrep"),
+            Path("rules"),
+            tmp_path,
+            {"G109": "sample.go"},
+            {},
+            tmp_path / "other-work",
+        )
+
+    monkeypatch.setattr(benchmarks, "_rule_cwes", lambda rules: {})
+    with pytest.raises(benchmarks.BenchmarkGateError, match="not present"):
+        benchmarks._score_gosec(
+            Path("opengrep"),
+            Path("rules"),
+            tmp_path,
+            {"G109": "sample.go"},
+            {"G109": "missing-rule"},
+            tmp_path / "missing-work",
+        )
+
+
 def test_benchmark_rejects_unidentified_finding_path() -> None:
     with pytest.raises(benchmarks.BenchmarkGateError, match="no BenchmarkTest"):
         benchmarks._normalized_findings(
@@ -235,11 +624,7 @@ def test_cross_rule_annotations_cover_multiline_and_ignore_ruleid_laundering(
 ) -> None:
     fixture = tmp_path / "fixture.py"
     fixture.write_text(
-        "# ok: safe-rule\n"
-        "# ruleid: unrelated-positive\n"
-        "dangerous_call(\n"
-        "    user_input,\n"
-        ")\n",
+        "# ok: safe-rule\n# ruleid: unrelated-positive\ndangerous_call(\n    user_input,\n)\n",
         encoding="utf-8",
     )
 
@@ -267,14 +652,10 @@ def test_cross_rule_annotations_are_bounded_and_canonical(tmp_path: Path) -> Non
     fixture = tmp_path / "other-rule.py"
     fixture.write_text(
         "# ok: unexpected-rule\n"
-        "safe_call()\n"
-        + "\n" * batch.MAX_ANNOTATION_DISTANCE
-        + "dangerous_call()\n",
+        "safe_call()\n" + "\n" * batch.MAX_ANNOTATION_DISTANCE + "dangerous_call()\n",
         encoding="utf-8",
     )
-    ok_ids, _, marker_line = batch._annotations_for_line(
-        fixture, batch.MAX_ANNOTATION_DISTANCE + 3
-    )
+    ok_ids, _, marker_line = batch._annotations_for_line(fixture, batch.MAX_ANNOTATION_DISTANCE + 3)
     assert ok_ids == set()
     assert marker_line is None
 
@@ -304,12 +685,8 @@ def test_engine_identity_rejects_wrong_version(monkeypatch) -> None:
         (),
         {"returncode": 0, "stdout": "1.25.0\n", "stderr": ""},
     )()
-    monkeypatch.setattr(
-        "scripts.rulepack_engine.subprocess.run", lambda *args, **kwargs: completed
-    )
-    monkeypatch.setattr(
-        "scripts.rulepack_engine._verified_asset", lambda binary: "test-asset"
-    )
+    monkeypatch.setattr("scripts.rulepack_engine.subprocess.run", lambda *args, **kwargs: completed)
+    monkeypatch.setattr("scripts.rulepack_engine._verified_asset", lambda binary: "test-asset")
 
     with pytest.raises(EngineIdentityError, match="expected Opengrep 1.26.0"):
         verify_engine(Path("opengrep"))
@@ -324,9 +701,7 @@ def test_engine_identity_rejects_version_spoofing_wrapper(tmp_path: Path, monkey
         (),
         {"returncode": 0, "stdout": "1.26.0\n", "stderr": ""},
     )()
-    monkeypatch.setattr(
-        "scripts.rulepack_engine.subprocess.run", lambda *args, **kwargs: completed
-    )
+    monkeypatch.setattr("scripts.rulepack_engine.subprocess.run", lambda *args, **kwargs: completed)
 
     with pytest.raises(EngineIdentityError, match="SHA-256"):
         verify_engine(wrapper)
@@ -334,6 +709,10 @@ def test_engine_identity_rejects_version_spoofing_wrapper(tmp_path: Path, monkey
 
 def test_benchmark_manifest_records_denominators_and_blocker() -> None:
     manifest = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
+    for entry in manifest["benchmarks"]:
+        assert isinstance(entry["promotion_ready"], bool)
+        if not entry["promotion_ready"]:
+            assert entry["promotion_blocker"]
     benchmark = manifest["benchmarks"][0]
     assert re.fullmatch(r"[0-9a-f]{40}", benchmark["commit"])
     assert benchmark["directory"] == "owasp-java"
@@ -347,12 +726,40 @@ def test_benchmark_manifest_records_denominators_and_blocker() -> None:
     assert denominator["cases"] == 2740
     assert denominator["vulnerable_cases"] == 1415
     assert denominator["scored_cases"] + denominator["excluded_cases"] == 2740
-    assert (
-        denominator["scored_vulnerable_cases"]
-        + denominator["excluded_vulnerable_cases"]
-        == 1415
-    )
+    assert denominator["scored_vulnerable_cases"] + denominator["excluded_vulnerable_cases"] == 1415
     assert sum(denominator["excluded_categories"].values()) == 755
+
+
+def test_eslint_rule_tester_parser_preserves_official_labels(tmp_path: Path) -> None:
+    source = tmp_path / "no-loss-of-precision.js"
+    source.write_text(
+        "ruleTester.run(\"no-loss-of-precision\", rule, {\n"
+        "  valid: [\n"
+        "    \"const safe = 1;\",\n"
+        "    { code: \"const exact = 2;\" },\n"
+        "  ],\n"
+        "  invalid: [\n"
+        "    { code: \"const unsafe = 9007199254740993;\" },\n"
+        "  ],\n"
+        "});\n"
+        "ruleTester.run(\"no-loss-of-precision\", rule, {\n"
+        "  valid: [\n"
+        "    \"const typed: number = 1;\",\n"
+        "  ],\n"
+        "  invalid: [\n"
+        "    { code: \"const typed: number = 9007199254740993;\" },\n"
+        "  ],\n"
+        "});\n",
+        encoding="utf-8",
+    )
+
+    assert benchmarks._eslint_rule_tester_cases(source) == [
+        ("const safe = 1;", False, "js"),
+        ("const exact = 2;", False, "js"),
+        ("const unsafe = 9007199254740993;", True, "js"),
+        ("const typed: number = 1;", False, "ts"),
+        ("const typed: number = 9007199254740993;", True, "ts"),
+    ]
 
 
 def test_benchmark_denominator_records_excluded_categories() -> None:
@@ -377,12 +784,8 @@ def test_benchmark_denominator_records_excluded_categories() -> None:
 def test_corpus_fetch_rejects_duplicate_directories(tmp_path: Path) -> None:
     real = tmp_path / "real.json"
     benchmark = tmp_path / "benchmark.json"
-    real.write_text(
-        json.dumps({"projects": [{"directory": "same"}]}), encoding="utf-8"
-    )
-    benchmark.write_text(
-        json.dumps({"benchmarks": [{"directory": "same"}]}), encoding="utf-8"
-    )
+    real.write_text(json.dumps({"projects": [{"directory": "same"}]}), encoding="utf-8")
+    benchmark.write_text(json.dumps({"benchmarks": [{"directory": "same"}]}), encoding="utf-8")
 
     with pytest.raises(fetch_corpora.CorpusFetchError, match="must be unique"):
         fetch_corpora._entries(real, benchmark)
@@ -425,10 +828,7 @@ def test_corpus_download_rejects_non_https_url(tmp_path: Path) -> None:
 def test_corpus_fetch_repairs_only_pinned_manifest_line(tmp_path: Path) -> None:
     source = tmp_path / "manifest.xml"
     source.write_text(
-        "<container>\n"
-        "  <testcase></testcase>\n"
-        "  </testcase>\n"
-        "</container>\n",
+        "<container>\n  <testcase></testcase>\n  </testcase>\n</container>\n",
         encoding="utf-8",
     )
     repaired = "<container>\n  <testcase></testcase>\n</container>\n"
@@ -450,9 +850,7 @@ def test_corpus_fetch_repairs_only_pinned_manifest_line(tmp_path: Path) -> None:
 
 def test_benchmark_manifest_pins_juliet_archive_and_repair() -> None:
     manifest = json.loads(BENCHMARKS.read_text(encoding="utf-8"))
-    juliet = next(
-        item for item in manifest["benchmarks"] if item["name"] == "nist-juliet-java-1.3"
-    )
+    juliet = next(item for item in manifest["benchmarks"] if item["name"] == "nist-juliet-java-1.3")
     assert juliet["source_type"] == "archive"
     assert re.fullmatch(r"[0-9a-f]{64}", juliet["archive_sha256"])
     assert juliet["archive_bytes"] == 76798417

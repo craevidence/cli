@@ -111,9 +111,13 @@ class SASTFinding:
     message: str
     cwe_list: list[str] = field(default_factory=list)
     fingerprint: str | None = None
+    start_column: int | None = None
+    end_line: int | None = None
+    end_column: int | None = None
+    semantic_evidence: dict | None = None
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "rule_id": self.rule_id,
             "severity": self.severity,
             "file": self.file,
@@ -122,6 +126,9 @@ class SASTFinding:
             "cwe_list": self.cwe_list,
             "fingerprint": self.fingerprint,
         }
+        if self.semantic_evidence is not None:
+            result["semantic_evidence"] = self.semantic_evidence
+        return result
 
 
 @dataclass
@@ -149,6 +156,7 @@ class SASTReport:
     scanned_paths: tuple[str, ...] = ()
     skipped_paths: tuple[str, ...] = ()
     unanalysed_files: list[dict] = field(default_factory=list)
+    semantic_evidence_summary: dict | None = None
 
     def findings_at_or_above(self, level: str) -> list[SASTFinding]:
         threshold = _LEVEL_ORDER.get(level.lower(), 1)
@@ -259,6 +267,9 @@ def _parse_sarif(sarif: dict) -> list[SASTFinding]:
 
         file_uri = artifact.get("uri") or ""
         line = region.get("startLine")
+        start_column = region.get("startColumn")
+        end_line = region.get("endLine")
+        end_column = region.get("endColumn")
 
         fingerprints = result.get("fingerprints") or {}
         fingerprint = fingerprints.get("matchBasedId/v1")
@@ -282,6 +293,9 @@ def _parse_sarif(sarif: dict) -> list[SASTFinding]:
                 message=message,
                 cwe_list=cwe_list,
                 fingerprint=fingerprint,
+                start_column=start_column,
+                end_line=end_line,
+                end_column=end_column,
             )
         )
 

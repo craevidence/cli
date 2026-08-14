@@ -9,6 +9,14 @@ import (
 	"strings"
 )
 
+type returningOS struct{}
+
+func (returningOS) Exit(int) {}
+
+type returningLogger struct{}
+
+func (returningLogger) Fatal(...any) {}
+
 // Branch 1: ParseInt 64 -> int32 without bounds check
 func badParseIntToInt32(s string) int32 {
 	// ruleid: cra-go-parseint-downcast
@@ -310,25 +318,48 @@ func okRejectWithContinue(s string) uint32 {
 	return out
 }
 
-// Safe: the guard ends the process. This case takes a second parameter so the
-// executable probe table skips it; calling it would end the test run.
-func okRejectWithProcessExit(s string, code int) uint32 {
+// Correct but reported: name matching cannot prove this is the real os package.
+// This case takes a second parameter so the executable probe table skips it;
+// calling it would end the test run.
+func reportedRejectWithProcessExit(s string, code int) uint32 {
+	// ruleid: cra-go-parseint-downcast
 	v, _ := strconv.ParseUint(s, 10, 64)
 	if v > math.MaxUint32 {
 		os.Exit(code)
 	}
-	// ok: cra-go-parseint-downcast
 	return uint32(v)
 }
 
-// Safe: log.Fatalf ends the process too. Second parameter for the same reason.
-func okRejectWithFatalLog(s string, field string) uint32 {
+// Correct but reported for the same selector-resolution reason.
+func reportedRejectWithFatalLog(s string, field string) uint32 {
+	// ruleid: cra-go-parseint-downcast
 	v, _ := strconv.ParseUint(s, 10, 64)
 	if v > math.MaxUint32 {
 		log.Fatalf("%s out of uint32 range", field)
 	}
-	// ok: cra-go-parseint-downcast
 	return uint32(v)
+}
+
+// Bad: the local os value has a returning Exit method, so the cast still runs.
+func badShadowedOSExit(s string) int32 {
+	os := returningOS{}
+	// ruleid: cra-go-parseint-downcast
+	v, _ := strconv.ParseInt(s, 10, 64)
+	if v < math.MinInt32 || v > math.MaxInt32 {
+		os.Exit(1)
+	}
+	return int32(v)
+}
+
+// Bad: the local log value has a returning Fatal method too.
+func badShadowedLogFatal(s string) int32 {
+	log := returningLogger{}
+	// ruleid: cra-go-parseint-downcast
+	v, _ := strconv.ParseInt(s, 10, 64)
+	if v < math.MinInt32 || v > math.MaxInt32 {
+		log.Fatal("range")
+	}
+	return int32(v)
 }
 
 // Safe: parse with bitSize 32 so strconv enforces the range

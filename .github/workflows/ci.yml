@@ -362,7 +362,21 @@ jobs:
             craevidence:${{ steps.version.outputs.version }} -c '
           import json
           from pathlib import Path
+          from cra_evidence_cli.local.c_semantic_analyzer import inspect_c_frontend
           root = Path("/licenses")
+          semantic_packages = (
+              "libclang-common-18-dev",
+              "libstdc++-14-dev",
+              "libc6-dev",
+              "linux-libc-dev",
+              "libclang1-18",
+              "libllvm18",
+              "libedit2",
+              "libxml2",
+              "libz3-4",
+              "libbsd0",
+              "libmd0",
+          )
           required = (
               root / "grype/LICENSE",
               root / "grype/NOTICE",
@@ -370,6 +384,10 @@ jobs:
               root / "opengrep/COPYRIGHT",
               root / "opengrep/NOTICE",
               root / "opengrep/NATIVE-DEPENDENCIES.json",
+              root / "semantic/NOTICE",
+              root / "semantic/PACKAGES",
+              root / "semantic/DPKG-STATUS",
+              *(root / f"semantic/{package}-copyright" for package in semantic_packages),
           )
           if any(not path.is_file() or path.stat().st_size == 0 for path in required):
               raise SystemExit("required licence material is missing or empty")
@@ -379,6 +397,21 @@ jobs:
           inventory = json.loads((root / "opengrep/NATIVE-DEPENDENCIES.json").read_text())
           if len(inventory) != 1 or any(not libraries for libraries in inventory.values()):
               raise SystemExit("Opengrep native dependency inventory is empty")
+          package_lines = (root / "semantic/PACKAGES").read_text().splitlines()
+          if {line.split(" ", 1)[0] for line in package_lines} != set(semantic_packages):
+              raise SystemExit("semantic frontend package inventory is incomplete")
+          dpkg_status = Path("/var/lib/dpkg/status").read_text()
+          if any(f"Package: {package}\n" not in dpkg_status for package in semantic_packages):
+              raise SystemExit("semantic frontend package is missing from the runtime inventory")
+          c_profile = inspect_c_frontend("c")
+          cpp_profile = inspect_c_frontend("cpp")
+          if c_profile["profile"] != "libclang-18.1.8-debian13-c17-security-evidence-v2":
+              raise SystemExit("unexpected C semantic frontend profile")
+          if cpp_profile["profile"] != "libclang-18.1.8-debian13-cpp17-security-evidence-v2":
+              raise SystemExit("unexpected C++ semantic frontend profile")
+          forbidden = ("/usr/bin/clang", "/usr/bin/clang-18", "/usr/bin/gcc", "/usr/bin/g++", "/usr/bin/ld")
+          if any(Path(path).exists() for path in forbidden):
+              raise SystemExit("semantic runtime unexpectedly contains a compiler driver or linker")
           '
 
       # Security gate: fail the build if HIGH/CRITICAL vulnerabilities with a
@@ -713,6 +746,15 @@ jobs:
           else
             gh release upload "${RELEASE_TAG}" "${source}"
           fi
+
+      # The release Dockerfile executes target-architecture binaries during
+      # both image stages, so an amd64 runner needs arm64 binfmt support before
+      # Buildx can produce the declared arm64 image.
+      - name: Set up QEMU for ARM64
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
+        with:
+          image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c  # v4.2.0

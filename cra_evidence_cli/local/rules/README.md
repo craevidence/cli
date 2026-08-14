@@ -4,10 +4,17 @@ A starter set of Opengrep rules for the `code-check` command.
 
 ## Scope
 
-These rules detect a focused set of high-signal patterns. 42 Python rules
-are enabled by default. Go, JavaScript/TypeScript, Java, C, C++, Rust, PHP, and
-C# contain 50 experimental rules, and one Python rule is experimental; all 51
-require `--include-experimental`.
+These rules detect a focused set of high-signal patterns. The 54 default rules
+are 42 Python rules, one import-bound Go TLS rule, one compiler-attested Java
+weak-digest rule, and one PHP rule limited to the fully qualified global
+`\unserialize` spelling with a focused HTTP-derived first argument, plus one
+Roslyn-attested C# framework certificate-validation rule, one
+crates.io-bound Rust reqwest TLS rule, plus distinct libclang-attested C and C++
+fixed-array out-of-bounds write, `printf` format-string and system-shell rules,
+and one language-intrinsic JavaScript and TypeScript unsafe-integer rule.
+Another 50
+rules across C, C++, C#, Go, Java, JavaScript/TypeScript, PHP, Python, and Rust require
+`--include-experimental`.
 Each rule lives in its own file under
 `<language>/<subcategory>/<rule-id>.yaml`. This tiering states the evidence
 boundary; it does not imply complete SAST coverage for any language.
@@ -31,29 +38,48 @@ These rules use Opengrep taint mode to follow untrusted input (Flask
 
 ### JavaScript / TypeScript (`javascript/`)
 
-Experimental. The broad `eval()` review rule is warning-level because a call can
-execute a constant or internally generated string; it is not proof of injection.
+One default rule reports assigned odd integer literals above
+`9007199254740991` when their odd value proves that an IEEE-754 binary64
+`Number` cannot represent them exactly. It is intentionally incomplete: even
+unrepresentable values, fractional and exponent forms, and literals in other
+expression contexts remain outside its scope. ESLint's pinned
+`no-loss-of-precision` labels measure 24 true positives, zero false positives,
+22 false negatives, and 79 true negatives for this narrow rule.
 
-- `eval()` called with any argument
+The two broader rules remain experimental. The `eval()` review rule is
+warning-level because a call can execute a constant or internally generated
+string; it is not proof of injection.
+
+- Odd assigned integer literals outside the binary64 safe range (default,
+  CWE-681)
+- `eval()` called with any argument (experimental)
 - `child_process.exec` / `execSync` called with a concatenated command string
+  (experimental)
 
 ### Go (`go/`)
 
-Seven rules, two of them default. Weak hashing and `InsecureSkipVerify` were
-promoted on measured evidence: no false positive on the gosec sample cases, and
-on a review of 24,137 third-party Go files the TLS rule produced 7 findings and
-all 7 were genuine. Both match syntax and do not infer intent, so the weak-hash
-rule also reports a non-security checksum, and a TLS configuration guarded by a
-flag whose name signals a deliberate opt out is still reported. Five stay
-opt-in: the integer rule measures 71 percent precision on real code and does not
-recognise every valid range-check spelling, the lock rule produced 70 false
-positives out of 70 findings before a fix and now has no measured true positive
-at all, the HMAC timing rule found nothing in 111,383 files, and the HMAC reuse
-rule mostly describes code that panics rather than code that ships. A new shell
-command injection rule is opt-in pending corpus evidence.
+One default rule reports an inline `crypto/tls.Config` passed directly to
+`tls.Dial` or `tls.DialWithDialer` when `InsecureSkipVerify` is the literal
+`true` and neither custom verification callback is present. Its qualifier is
+bound to the exact `crypto/tls` import, including aliases. Compiling Go 1.22.2
+probes show that an application package exposing the same `tls.Config` and
+`tls.Dial` names is not reported, even when the file also imports `crypto/tls`.
+
+Seven broader rules remain experimental. The gosec samples exercise the weak-hash, TLS,
+integer, and shell rules, but do not provide a precision denominator for every
+rule. The integer rule measures 71 percent precision on the pinned real-code
+corpus and does not recognise every valid range-check spelling. The lock rule
+has no measured true positive, the HMAC timing rule found nothing in 111,383
+files, and the HMAC reuse rule mostly describes code that panics rather than
+code that ships. Weak-hash and TLS calls are also matched by written package
+name rather than resolved import path, so third-party packages with the same
+qualifier can produce findings. These limits keep those seven opt-in.
 
 - MD5 or SHA-1 use that requires review for security intent (CWE-327)
-- `tls.Config` with `InsecureSkipVerify: true` (CWE-295)
+- Direct import-bound `crypto/tls` dial with verification disabled and no
+  custom callback (default, CWE-295)
+- Broader `tls.Config` construction, callback, and assignment review
+  (experimental, CWE-295)
 - HMAC output compared with `bytes.Equal()` -- timing side-channel (CWE-208)
 - `hmac.New()` receiving a closure that returns a shared hash instance (CWE-327)
 - `ParseInt`/`ParseUint`/`Atoi` result downcast to `int32`/`uint32` when
@@ -91,15 +117,17 @@ each carries an `origin` field in its metadata.
 
 ### Java (`java/`)
 
-Eight focused rules, not general Java SAST coverage. Three run by default:
-weak message digests, `Runtime.exec` reached by request data, and hostname
-verifiers that accept every host. They were promoted on measured evidence, 100
-percent precision on OWASP Benchmark for CWE-328 and CWE-78 and probe evidence
-for the verifier. The other five stay opt-in: the SQL and path taint rules
-measure 77 and 75 percent precision on OWASP Benchmark, the XXE rule reports
-some hardened parsers, `readObject` is unsafe only for untrusted data and the
-rule has no source, and no labelled SSRF corpus exists. Each rule publishes its
-exact detection scope and engine limitations in its metadata.
+One default semantic rule and eight experimental rules, not general Java SAST
+coverage. The SQL and path
+taint rules measure 77 and 75 percent precision on OWASP Benchmark. The XXE
+rule reports some hardened parsers, `readObject` is unsafe only for untrusted
+data and the rule has no source, and no labelled SSRF corpus exists. The broad
+weak-digest and command-injection rules match receiver types as written.
+Application classes with the same API names can therefore produce candidates,
+and request data returned through a helper method is followed only within the
+same file. Hostname verifier names have the same type-resolution limit. These
+limits keep those eight rules opt-in. Each rule publishes its exact detection
+scope and engine limitations in its metadata.
 
 - Servlet request data reaching operating system command execution (CWE-78)
 - Servlet request data reaching JDBC query text (CWE-89)
@@ -107,8 +135,10 @@ exact detection scope and engine limitations in its metadata.
 - Servlet request data controlling outbound URLs (CWE-918)
 - Native Java object deserialization (CWE-502)
 - XML parser settings that permit DTDs or external entities (CWE-611)
-- MD2, MD5, or SHA-1 message digests selected by a literal or same-class static-final
-  algorithm name (CWE-328)
+- MD2, MD5, or SHA-1 message digests selected by a literal and resolved by the
+  compiler to the JDK API (default, CWE-328)
+- Broader literal and same-class static-final weak-digest selection
+  (experimental, CWE-328)
 - TLS hostname verifiers that accept every hostname (CWE-297)
 
 On OWASP Benchmark Java commit `007786f86b965a9ea8e4a7613baa5f90adbbd611`,
@@ -136,13 +166,21 @@ produce these case-recall results:
 |---|---:|---:|---:|
 | Command injection | 42 of 444 | 9.5% | 40 of 42 |
 | SQL injection | 210 of 2,220 | 9.5% | 152 of 210 |
-| Weak message digest | 51 of 51 | 100.0% | 51 of 51 |
+| Compiler-attested JDK weak digest | 51 of 51 | 100.0% | 51 of 51 |
+| Broad weak message digest companion | 0 of 51 | 0.0% | 0 of 0 |
 
-Juliet files contain both good and bad methods, so these figures measure case
-recall and location corroboration, not standalone precision or true negatives.
-The message-digest rule also does not resolve external constants, concatenated
-strings, or runtime configuration, and it cannot infer whether a checksum has
-security significance. These limits keep all eight Java rules experimental.
+The permanent semantic lane compiles the 51 CWE-328 cases plus three exact
+support sources without executing a build. It resolves 147 calls to the
+top-level `java.security.MessageDigest` type in module `java.base`, attests all
+51 weak candidates, and observes 96 strong-literal controls with no finding.
+The independent OWASP lane measures the narrow candidate at 89 true positives,
+0 false positives, 40 false negatives, and 107 true negatives. Compiling
+application-owned shadow fixtures are rejected, and the pinned Spring
+Petclinic lane has 30 selected Java files with no finding or parser error. This
+evidence supports the narrow default rule. It does not support the broad
+companion, which still cannot resolve external constants, concatenated strings,
+or runtime configuration or infer whether a checksum has security significance.
+Those limits keep the remaining eight Java rules experimental.
 Rules with known safe-case findings or no independent precision measurement are
 warning-level. The command-injection rule remains error-level because OWASP
 measures no false positives in its 126 applicable cases, although its low recall
@@ -150,12 +188,34 @@ still prevents default coverage.
 
 ### C and C++ (`c/`, `cpp/`)
 
-Experimental: six rules per language, not general memory-safety or C/C++ SAST
-coverage.
+Three narrow C rules and three narrow C++ rules are enabled by default. One per
+language reports only a direct assignment
+through a non-negative decimal literal index that the source pattern places at
+or beyond a literal `uint8_t` array bound and the exact libclang 18.1.3 C17 or
+C++17 frontend also diagnoses at that source range. The compiler evidence resolves active
+preprocessing, including a tested macro redirect that makes the raw candidate
+safe. The languages use distinct evidence schemas and profiles. They use fixed options and hashed GCC and Ubuntu system-header roots and do not
+run a build system, linker, plugin, or target binary. Missing libclang,
+unsupported includes, compiler errors, stale source, and ambiguous ranges
+degrade coverage. This is focused literal-bound coverage, not general C or C++
+memory safety. The second rule per language reports only an active direct
+system `printf` call in global `main` when the complete format argument is an
+indexed use of that declaration's own second parameter. The C++ rule accepts
+both `printf` and `std::printf`. Compiler binding rejects application-owned
+homonyms, macro redirects, inactive code, wrong scopes, and shadowed
+parameters. These rules do not cover aliases, helper flows, other
+`printf`-family APIs, or non-main entry conventions.
 
-- Command-line arguments passed directly to `system()` (CWE-78)
+The third rule per language reports a direct system-shell call only when its
+complete command argument is an indexed use of global `main`'s own second
+parameter. C++ accepts both `system` and `std::system`. It rejects the same
+application homonym, macro, inactive-code, scope, and parameter-shadow cases.
+Constructed commands, aliases, helper flows, environment sources, and other
+process APIs remain outside this default rule.
+
+Four broader C rules and four broader C++ rules are experimental:
+
 - Environment values reaching `system()` within one file (CWE-78)
-- Command-line arguments used directly as `printf` format strings (CWE-134)
 - Command-line arguments copied with `strcpy()` (CWE-120)
 - Predictable temporary filename APIs (CWE-377)
 - Disabled cURL certificate or hostname verification (CWE-295)
@@ -182,14 +242,16 @@ category often still call the same name generator and fix the problem by adding
 O_EXCL to the later open, so the suite's safe cases are safe on a different axis
 than the one this rule reports on, and cannot supply a precision denominator.
 
-The engine does not evaluate preprocessor conditionals, so these rules report
+The engine does not evaluate preprocessor conditionals, so the remaining
+experimental rules report
 code that the compiler would discard. A `system(argv[1])` call inside `#if 0`
 or an `#ifdef` whose macro is never defined is reported the same as live code.
 Treat a finding in a conditionally compiled block as a finding about the source
 text, not about the build you ship, and confirm against your own build
 configuration before acting on it.
 
-Pinned curl and fmt scans produce no findings, but Opengrep reports partial
+The narrow default C rules produce no raw candidates in the pinned curl scope.
+Pinned full-pack curl and fmt scans produce no findings, but Opengrep reports partial
 parsing in 31 curl C files and four fmt C++ headers. These coverage gaps block
 promotion and are recorded in `tests/rulepack_real_projects.json`. The fmt scan
 selects only 19 of 72 tracked C/C++ files: 53 files under `test/` are excluded
@@ -199,7 +261,18 @@ rules do not model.
 
 ### Rust (`rust/`)
 
-Experimental: seven focused rules. Calls inside user-defined macros may not be
+One narrow default rule reports a literal `true` passed directly to reqwest
+0.12.24 certificate or hostname verification disablement, but only for a
+leading absolute extern-prelude path attested by `code-evidence --language
+rust`. The static producer accepts one non-workspace Rust 2018, 2021, or 2024
+package whose normal dependency and lock record bind the exact crates.io
+reqwest package and checksum. It does not execute Cargo, rustc, build scripts,
+proc macros, target code, or the network. Application-owned extern aliases,
+relative paths, intermediate builder calls, variables, workspaces, dependency
+overrides, Cargo configuration, other versions, and malformed or stale
+evidence are rejected or reported as degraded coverage.
+
+Seven broader focused rules remain experimental. Calls inside user-defined macros may not be
 visible to Opengrep. The fixtures cover an MD5 constructor alias, multi-statement
 command builders, SQLx scalar queries, Tokio filesystem calls, Reqwest POST
 destinations, base64 JWT keys, and invalid-hostname settings. The two structural
@@ -210,7 +283,9 @@ secrets and TLS overrides.
 Axum's RFC-mandated WebSocket handshake, so the broader spelling is withheld until
 the rule can distinguish protocol compatibility hashing from security hashing.
 
-- Reqwest clients configured to accept invalid TLS certificates (CWE-295)
+- Absolute, crates.io-bound Reqwest clients configured to accept invalid TLS
+  certificates or hostnames (default, CWE-295)
+- Broader Reqwest method-name TLS configuration (experimental, CWE-295)
 - Process arguments passed to `sh -c` or `bash -c` (CWE-78)
 - Process input reaching SQLx query text (CWE-89)
 - Process input reaching filesystem reads (CWE-22)
@@ -220,11 +295,28 @@ the rule can distinguish protocol compatibility hashing from security hashing.
 
 ### PHP (`php/`)
 
-Experimental: seven focused rules. Opengrep 1.26.0 warns that intrafile taint may
+Default: one narrow rule reports a literal, fully qualified global
+`\unserialize` call when its simple first argument or indexed first argument is
+derived from `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`, or a reviewed
+client-controlled `$_SERVER` key. PHP runtime probes distinguish the global
+built-in from an application-owned namespaced homonym and show that the global
+function cannot be redeclared. The rule intentionally omits unqualified,
+namespace-relative, imported-alias, dynamic-callable, multiline, concatenated,
+function-call-argument, and generated forms. A clean result therefore does not
+exclude unsafe deserialization outside this exact scope.
+
+Experimental: seven broader focused rules. Opengrep 1.26.0 warns that intrafile taint may
 be limited to intraprocedural analysis for PHP. Dynamic dispatch, variable
 variables, `call_user_func` indirection, and template syntax outside PHP parsing
-are not covered. The pack has no labelled PHP corpus from which to claim recall
-or precision.
+are not covered. The pinned SARD PHP corpus supplies labelled command and SQL
+cases, but its generated directory labels require two mechanical corrections:
+a misspelled sanitizer target remains vulnerable, while assignment from an
+unassigned variable kills taint. The scorer records those corrections and the
+raw denominators. It measures 117 true positives, 198 false positives, and 507
+false negatives for command injection, and 153 true positives, 549 false
+positives, and 663 false negatives for SQL injection. These results block
+promotion. The gate does not execute the PHP programs, so runtime-specific
+behavior remains unverified.
 
 - HTTP superglobals flowing to command execution functions within one file (CWE-78)
 - HTTP superglobals flowing to `unserialize()` within one file (CWE-502)
@@ -240,19 +332,28 @@ clean PHP scan is not evidence that every local helper flow was analyzed.
 
 ### C# (`csharp/`)
 
-Eight focused rules, seven of them default. The request-taint rules for SQL
+One default semantic rule and nine experimental rules. The default rule is
+limited to direct assignment of the framework's cached accept-any delegate to
+the framework `HttpClientHandler` certificate callback. It requires a
+`code-evidence --language csharp` envelope that resolves both properties to
+signed `System.Net.Http` version 8.0.0.0 with public-key token
+`b03f5f7f11d50a3a`. A recorded application owner is rejected; a missing or
+ambiguous range degrades coverage.
+
+The request-taint rules for SQL
 injection, OS command injection, and path traversal were measured against the
 NIST Juliet C# suite: 378 findings, every one inside a `Bad` method and none in
 any `Good` method, across four CWE directories. Weak hashing scores 34 of 34 on
-Juliet CWE-328. `BinaryFormatter` deserialization, accept-all certificate
-callbacks, and hardcoded JWT signing keys are matched as unambiguous dangerous
-APIs. The SSRF rule stays opt-in because Juliet C# has no CWE-918 cases, so its
-precision is unmeasured. The bundled engine does not provide cross-file
-analysis for this pack, so a flow that crosses a method or file boundary is not
-followed. Request sources cover ASP.NET `FromQuery`, `FromBody`, and `FromRoute`
-parameters, request indexers, and the `System.Web` `QueryString`, `Params`, and
-`Cookies` idioms. Minimal API implicit binding and Razor model binding are not
-modeled.
+Juliet CWE-328. Those corpus findings are now credited only to each benchmark's
+declared rule. They establish useful case evidence but do not resolve application
+types. Neutral application classes named like framework and runtime APIs produce
+findings for the weak-hash, deserialization, request-taint, JWT, and certificate
+rules. The SSRF rule has no Juliet CWE-918 cases. These limits keep those nine
+rules opt-in. The bundled engine does not provide cross-file analysis for this pack,
+so a flow that crosses a method or file boundary is not followed. Request
+sources cover ASP.NET `FromQuery`, `FromBody`, and `FromRoute` parameters,
+request indexers, and the `System.Web` `QueryString`, `Params`, and `Cookies`
+idioms. Minimal API implicit binding and Razor model binding are not modeled.
 
 - TLS certificate callbacks that accept every certificate (CWE-295)
 - `BinaryFormatter.Deserialize()` usage (CWE-502)
@@ -261,6 +362,10 @@ modeled.
 - ASP.NET request data reaching filesystem reads or writes (CWE-22)
 - ASP.NET request data controlling HttpClient or WebRequest destinations (CWE-918)
 - MD5 or SHA-1 hash construction (CWE-328)
+- Framework-owned `MD5.Create` resolved through an external semantic-evidence
+  envelope (CWE-328)
+- Framework-owned assignment of `DangerousAcceptAnyServerCertificateValidator`
+  to `ServerCertificateCustomValidationCallback` (default, CWE-295)
 - Literal symmetric JWT keys (CWE-798)
 
 Dapper query extensions and archive-entry zip-slip flows need separate rules and

@@ -1,0 +1,57 @@
+rules:
+  - id: cra-javascript-odd-unsafe-integer-literal
+    message: >
+      This odd integer literal is outside JavaScript's safe integer range and
+      loses precision when converted to Number. Use a BigInt literal with an
+      `n` suffix, or preserve the value as a string if arithmetic is not needed.
+    severity: ERROR
+    metadata:
+      tier: default
+      cwe:
+        - "CWE-681: Incorrect Conversion between Numeric Types"
+      owasp:
+        - "A04:2021 - Insecure Design"
+      references:
+        - https://cwe.mitre.org/data/definitions/681.html
+        - https://eslint.org/docs/latest/rules/no-loss-of-precision
+        - https://tc39.es/ecma262/#sec-number.max_safe_integer
+      category: security
+      technology:
+        - javascript
+        - typescript
+      confidence: HIGH
+      scope: >
+        Reports a base-2, base-8, base-10, or base-16 odd integer literal whose
+        magnitude is greater than 9007199254740991 when it is assigned to a
+        variable or property. Every such integer is unrepresentable as an exact
+        IEEE-754 binary64 Number because representable integers above the safe
+        boundary are even.
+      limitations: >
+        This intentionally sufficient rule does not attempt complete numeric
+        precision analysis. It does not report even unrepresentable integers,
+        fractional or exponent notation, or literals used only in object and
+        array elements, arguments, return statements, or other expressions.
+        BigInt literals and strings are outside the rule and remain exact.
+      license: MIT
+      author: CRA Evidence
+    languages: [javascript, typescript]
+    patterns:
+      - pattern-regex: '(?i)(?:[0-9][0-9_]{15,}|0[xob][0-9a-f_]{14,})'
+      - pattern-either:
+          - patterns:
+              - pattern: $TARGET = $NUMBER
+              - metavariable-regex:
+                  metavariable: $NUMBER
+                  regex: '^(?:[0-9][0-9_]*[13579]|0[xX][0-9a-fA-F_]*[13579bBdDfF]|0[bB][01_]*1|0[oO][0-7_]*[1357])$'
+              - metavariable-comparison:
+                  metavariable: $NUMBER
+                  comparison: $NUMBER > 9007199254740991
+          - patterns:
+              - pattern: $TARGET = -$NUMBER
+              - metavariable-regex:
+                  metavariable: $NUMBER
+                  regex: '^(?:[0-9][0-9_]*[13579]|0[xX][0-9a-fA-F_]*[13579bBdDfF]|0[bB][01_]*1|0[oO][0-7_]*[1357])$'
+              - metavariable-comparison:
+                  metavariable: $NUMBER
+                  comparison: $NUMBER > 9007199254740991
+      - focus-metavariable: $NUMBER

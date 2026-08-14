@@ -138,13 +138,55 @@ craevidence code-check . --product my-product --version 1.0.0 --upload
 ```
 
 `code-check` runs locally and uploads sanitized SARIF finding metadata, not
-source code. Its 54 default rules cover focused Python, C#, Java, and Go
-patterns. Another 41 focused C, C++, JavaScript/TypeScript, PHP, Rust, and
-remaining Java, Go, and C# rules require `--include-experimental`; the command
-reports exact per-language rule counts. A rule runs by default only where a
-labelled corpus measured its precision or where it matches an unambiguous
-dangerous API; the rest stay opt-in. No group is general SAST coverage for its
-language. Neither command proves compliance.
+source code. Its 54 default rules cover focused Python patterns, direct Go
+`crypto/tls` dial calls that disable verification without a custom callback,
+compiler-attested JDK weak-digest calls, and fully qualified PHP global
+`\unserialize` calls whose first argument is derived from a reviewed HTTP
+superglobal source. The default C# rule reports the exact framework accept-any
+certificate-validator assignment only after Roslyn resolves both properties to
+the signed `System.Net.Http.HttpClientHandler` type. The default Rust rule
+requires static evidence that an absolute extern-prelude path is bound to the
+exact crates.io reqwest 0.12.24 package before it reports literal TLS
+verification disablement. The default C rule requires an exact supported
+libclang C17 array-bounds diagnostic before reporting a direct decimal-literal
+write outside a fixed `uint8_t` array. A second C default reports a system
+`printf` call in global `main` only when libclang binds the whole format
+argument to that declaration's own `argv` parameter. A third C default applies
+the same binding to a direct system-shell command. The C++ defaults enforce
+the same three boundaries through their own libclang C++17 evidence profile
+and also cover the `std::printf` and `std::system` spellings. The default
+JavaScript and TypeScript rule reports assigned odd integer literals above the
+exact binary64 safe-integer boundary. Another 50 rules
+across C, C++, C#, Go, Java, JavaScript/TypeScript, PHP, Python, and Rust require
+`--include-experimental`; the command reports exact per-language rule counts.
+Broader rules remain opt-in where corpus precision, parser coverage, type
+resolution, namespace binding, or intrafile dataflow is insufficient for
+default use. No group is general SAST coverage for its language. Neither
+command proves compliance.
+
+Semantic-required C, C++, C#, Java, and Rust candidates consume a versioned
+`--semantic-evidence` envelope. For Java, `code-evidence` uses the local JDK
+compiler API with an empty class path, no annotation processing, and no Gradle
+or Maven execution. For C#, it requires .NET SDK 8.0.423 and compiles the
+shipped analyzer directly against the trusted net8.0 reference pack without a
+project, restore, MSBuild, generator, plugin, or target-code execution. Missing,
+ambiguous, stale, or invalid evidence reports degraded coverage instead of a
+clean result. The narrow Java and C# rules are enabled by default; their broader
+companions remain experimental. The CLI container includes neither a JDK nor a
+.NET SDK. It consumes an envelope generated from the unchanged source tree by
+a compatible host or CI job. The Rust producer needs no Rust toolchain: it
+reads one non-workspace Cargo package, validates the manifest and lockfile
+against the pinned crates.io package checksum, and does not execute Cargo,
+rustc, build scripts, proc macros, target code, or network requests. The C and
+C++ producers load an exact hashed libclang frontend with separate fixed C17
+and C++17 options and hashed system-header roots. Native installs support the
+pinned Ubuntu 18.1.3 profile. The CLI container also includes pinned Debian 13
+libclang 18.1.8 frontend libraries and headers, so it can generate and consume
+its own C and C++ envelopes without a compiler driver or linker. Envelopes are
+accepted only when the consumer has the same exact library, profile, options,
+and header hashes. The producers do not run a build system, linker, plugin, or
+target binary. Unsupported includes, compiler errors, stale source, profile
+mismatch, and a missing exact frontend fail closed.
 
 The default API URL is:
 

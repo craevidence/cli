@@ -442,13 +442,95 @@ def test_runtime_inventory_supports_mixed_tiers_within_one_language(tmp_path) ->
     assert inventory.selection(include_experimental=True) == (1, 1, {"java": 2})
 
 
+def test_runtime_inventory_exposes_only_declared_semantic_policies() -> None:
+    from cra_evidence_cli.local.rules_pack import SemanticRulePolicy, inspect_rule_pack
+
+    inventory = inspect_rule_pack(RULES_ROOT)
+
+    assert inventory.semantic_policies == {
+        "cra-c-fixed-array-literal-oob-write": SemanticRulePolicy(
+            language="c",
+            policy="c.fixed-array-literal-oob-write",
+            candidate_range="result",
+        ),
+        "cra-c-printf-argv-format": SemanticRulePolicy(
+            language="c",
+            policy="c.printf-main-argv-format",
+            candidate_range="result",
+        ),
+        "cra-c-system-argv": SemanticRulePolicy(
+            language="c",
+            policy="c.system-main-argv-command",
+            candidate_range="result",
+        ),
+        "cra-cpp-fixed-array-literal-oob-write": SemanticRulePolicy(
+            language="cpp",
+            policy="cpp.fixed-array-literal-oob-write",
+            candidate_range="result",
+        ),
+        "cra-cpp-printf-argv-format": SemanticRulePolicy(
+            language="cpp",
+            policy="cpp.printf-main-argv-format",
+            candidate_range="result",
+        ),
+        "cra-cpp-system-argv": SemanticRulePolicy(
+            language="cpp",
+            policy="cpp.system-main-argv-command",
+            candidate_range="result",
+        ),
+        "cra-csharp-framework-dangerous-certificate-validator": SemanticRulePolicy(
+            language="csharp",
+            policy="csharp.framework-dangerous-certificate-validator",
+            candidate_range="result",
+        ),
+        "cra-csharp-framework-md5-create": SemanticRulePolicy(
+            language="csharp",
+            policy="csharp.framework-md5-create",
+            candidate_range="result",
+        ),
+        "cra-java-jdk-weak-message-digest-literal": SemanticRulePolicy(
+            language="java",
+            policy="java.jdk-message-digest-get-instance",
+            candidate_range="result",
+        ),
+        "cra-rust-cratesio-reqwest-invalid-certs": SemanticRulePolicy(
+            language="rust",
+            policy="rust.cratesio-reqwest-invalid-certs",
+            candidate_range="result",
+        ),
+    }
+
+
+def test_runtime_inventory_rejects_semantic_language_mismatch(tmp_path) -> None:
+    from cra_evidence_cli.local.rules_pack import inspect_rule_pack
+
+    rule = tmp_path / "csharp" / "crypto" / "invalid.yaml"
+    rule.parent.mkdir(parents=True)
+    rule.write_text(
+        "rules:\n"
+        "  - id: invalid\n"
+        "    languages: [csharp]\n"
+        "    metadata:\n"
+        "      tier: experimental\n"
+        "      semantic_evidence:\n"
+        "        required: true\n"
+        "        language: java\n"
+        "        policy: csharp.framework-md5-create\n"
+        "        candidate_range: result\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="invalid bundled semantic evidence policy"):
+        inspect_rule_pack(tmp_path)
+
+
 def test_java_rules_publish_scope_and_limitations() -> None:
     java_rules = [
         _load_rule(path)["rules"][0]
         for path in _rule_files
         if path.relative_to(RULES_ROOT).parts[0] == "java"
     ]
-    assert len(java_rules) == 8
+    assert len(java_rules) == 9
     for rule in java_rules:
         metadata = rule["metadata"]
         assert len(str(metadata.get("scope") or "").split()) >= 10, rule["id"]

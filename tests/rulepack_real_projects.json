@@ -29,17 +29,17 @@
       "license_file": "COPYING",
       "scan_path": "lib",
       "tracked_source_files": 386,
-      "known_engine_exclusions": "The declared lib scope contains 386 tracked C source and header files; all are selected, with 31 partial-parse reports.",
-      "capability_overlap": "The corpus contains cURL TLS option handling but no declared system sink. Zero findings do not measure the command, format, copy, or temporary-file rules.",
+      "known_engine_exclusions": "The declared lib scope contains 386 tracked C source and header files; all are selected, with 48 partial-parse reports. The uint8_t array rule makes 17 additional files relevant to Opengrep's parser compared with the experimental-only C pack.",
+      "capability_overlap": "The corpus contains cURL TLS option handling and uint8_t fixed arrays but no literal out-of-bounds candidate accepted by the new default rule. Zero findings provide parser and false-positive evidence for that rule, not recall evidence; they do not measure the command, format, copy, or temporary-file rules.",
       "expected": {
         "files_scanned": 386,
         "findings_by_rule": {},
         "engine_errors_by_kind": {
-          "PartialParsing": 31
+          "PartialParsing": 48
         }
       },
       "parse_coverage_complete": false,
-      "coverage_blocker": "Pinned Opengrep reports partial parsing in 31 production source files."
+      "coverage_blocker": "Pinned Opengrep reports partial parsing in 48 production source files; 17 are newly reached by the uint8_t array rule's target prefilter."
     },
     {
       "name": "fmt",
@@ -50,17 +50,17 @@
       "license_file": "LICENSE",
       "scan_path": ".",
       "tracked_source_files": 72,
-      "known_engine_exclusions": "Fifty-three C or C++ files under test are excluded by the engine; only 19 files under include and src are selected.",
-      "capability_overlap": "The selected library implementation has no command-line argv entry point or declared system sink. This is parser and false-positive evidence only.",
+      "known_engine_exclusions": "Fifty-three C or C++ files under test are excluded by the engine; only 19 files under include and src are selected. Five selected public headers partially parse; color.h is newly reached by the uint8_t array rule's target prefilter.",
+      "capability_overlap": "The selected library implementation has no command-line argv entry point, declared system sink, or literal out-of-bounds candidate accepted by the new default rule. This is parser and false-positive evidence only.",
       "expected": {
         "files_scanned": 19,
         "findings_by_rule": {},
         "engine_errors_by_kind": {
-          "PartialParsing": 4
+          "PartialParsing": 5
         }
       },
       "parse_coverage_complete": false,
-      "coverage_blocker": "Pinned Opengrep reports partial parsing in four public headers."
+      "coverage_blocker": "Pinned Opengrep reports partial parsing in five public headers; color.h is the one additional file reached by the uint8_t array rule."
     },
     {
       "name": "axum",
@@ -72,7 +72,7 @@
       "scan_path": ".",
       "tracked_source_files": 300,
       "known_engine_exclusions": "One hundred twenty-eight Rust files under tests directories are excluded by the engine; 172 are selected.",
-      "capability_overlap": "One finding is expected and was reviewed: axum/src/extract/ws.rs builds the WebSocket accept value with Sha1::default() and the RFC 6455 GUID. SHA-1 is mandated there by the protocol, so the finding is a correct syntactic match and is not actionable. It is the same class of non-actionable result that blocks promotion for the Java digest rule, and it is recorded rather than suppressed because suppressing it would hide the rule's real signal-to-noise on production code.",
+      "capability_overlap": "One finding is expected and was reviewed: axum/src/extract/ws.rs builds the WebSocket accept value with Sha1::default() and the RFC 6455 GUID. SHA-1 is mandated there by the protocol, so the finding is a correct syntactic match and is not actionable. It is recorded rather than suppressed because suppressing it would hide the broad weak-digest rule's real signal-to-noise on production code. The narrow default reqwest rule produces no candidate in this checkout; this is compatibility evidence, not a safe denominator.",
       "expected": {
         "files_scanned": 172,
         "findings_by_rule": {
@@ -148,7 +148,7 @@
       "scan_path": ".",
       "tracked_source_files": 78,
       "known_engine_exclusions": "The engine selects 54 Go files and omits test files from its target set.",
-      "capability_overlap": "The selected files exercise ordinary Go syntax but do not provide known-answer cases for the six experimental Go rules.",
+      "capability_overlap": "The selected files exercise ordinary Go syntax but contain no direct crypto/tls Dial call or known-answer case. They provide parser and false-positive evidence for the one default and seven experimental Go rules, not recall evidence.",
       "expected": {
         "files_scanned": 54,
         "findings_by_rule": {},
@@ -166,7 +166,7 @@
       "scan_path": ".",
       "tracked_source_files": 359,
       "known_engine_exclusions": "The engine selects 356 JavaScript and TypeScript files and reports one partial parse in prepared-router.ts.",
-      "capability_overlap": "One internal eval call is reported by the broad experimental eval rule. It is a reviewed false-positive signal, not proof of exploitability.",
+      "capability_overlap": "One internal eval call is reported by the broad experimental eval rule. The default unsafe-integer rule has no candidate in this checkout. This is parser and false-positive evidence for that narrow rule, not recall evidence.",
       "expected": {
         "files_scanned": 356,
         "findings_by_rule": {

@@ -5,7 +5,7 @@ rules:
       executable and validated arguments without invoking a command shell.
     severity: ERROR
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
       owasp: ["A03:2021 - Injection"]
       references:
@@ -20,9 +20,9 @@ rules:
         Request data is servlet getParameter, getHeader, and getQueryString,
         plus Spring handler parameters annotated @RequestParam, @PathVariable,
         or @RequestBody. A command sequence whose first element is a string
-        literal is reported only when that literal names a command shell,
-        because the program is then fixed and the request data is command text
-        rather than an argument.
+        literal is reported only when that literal names a command shell or a
+        fixed env or BusyBox wrapper that immediately invokes a shell, because
+        the request data is then command text rather than a separate argument.
       limitations: >
         Does not provide interfile analysis and can miss field-mediated or
         otherwise unsupported intrafile flows. Other Spring binding
@@ -30,8 +30,11 @@ rules:
         and @RequestPart, are not sources. Request data placed in an argument
         position after a fixed non-shell program is not reported, so argument
         injection against that program is out of scope. Shell programs are
-        recognized by literal name, so a shell reached through a variable or a
-        multi-argument ProcessBuilder constructor is not reported.
+        recognized by literal name, so a shell reached through a variable is
+        not reported. Runtime and ProcessBuilder receiver names are matched as
+        written rather than resolved, so application classes with the same API
+        shape can produce findings. Taint returned through a helper method is
+        followed only when the helper is defined in the same file.
       sanitizer_analysis:
         status: not-modeled
         reason: The remediation replaces the command sink with a fixed executable and validated arguments, which the rule recognizes as a shape rather than as a sanitizer call.
@@ -78,4 +81,33 @@ rules:
               - pattern: Runtime.getRuntime().exec(new String[] {$PROGRAM, ...}, ...)
           - metavariable-regex:
               metavariable: $PROGRAM
-              regex: '^"(?:[A-Za-z]:)?(?:[\\/A-Za-z0-9_.-]*[\\/])?(?:sh|bash|zsh|ksh|dash|csh|tcsh|fish|cmd|powershell|pwsh)(?:\.exe)?"$'
+              regex: '(?i)^"(?:[A-Za-z]:)?(?:[\\/A-Za-z0-9_.-]*[\\/])?(?:sh|bash|zsh|ksh|dash|csh|tcsh|fish|cmd|powershell|pwsh)(?:\.exe)?"$'
+      - patterns:
+          - pattern-either:
+              - pattern: new ProcessBuilder($PROGRAM, $SWITCH, $CMD, ...)
+              - pattern: new java.lang.ProcessBuilder($PROGRAM, $SWITCH, $CMD, ...)
+          - metavariable-regex:
+              metavariable: $PROGRAM
+              regex: '(?i)^"(?:[A-Za-z]:)?(?:[\\/A-Za-z0-9_.-]*[\\/])?(?:sh|bash|zsh|ksh|dash|csh|tcsh|fish|cmd|powershell|pwsh)(?:\.exe)?"$'
+          - metavariable-regex:
+              metavariable: $SWITCH
+              regex: '(?i)^"(?:-c|-command|/c)"$'
+          - focus-metavariable: $CMD
+      - patterns:
+          - pattern-either:
+              - pattern: new ProcessBuilder(List.of($WRAPPER, $SHELL, $SWITCH, $CMD, ...))
+              - pattern: new ProcessBuilder(java.util.List.of($WRAPPER, $SHELL, $SWITCH, $CMD, ...))
+              - pattern: new ProcessBuilder(Arrays.asList($WRAPPER, $SHELL, $SWITCH, $CMD, ...))
+              - pattern: new ProcessBuilder(java.util.Arrays.asList($WRAPPER, $SHELL, $SWITCH, $CMD, ...))
+              - pattern: new ProcessBuilder(new String[] {$WRAPPER, $SHELL, $SWITCH, $CMD, ...})
+              - pattern: Runtime.getRuntime().exec(new String[] {$WRAPPER, $SHELL, $SWITCH, $CMD, ...}, ...)
+          - metavariable-regex:
+              metavariable: $WRAPPER
+              regex: '(?i)^"(?:[A-Za-z]:)?(?:[\\/A-Za-z0-9_.-]*[\\/])?(?:env|busybox)(?:\.exe)?"$'
+          - metavariable-regex:
+              metavariable: $SHELL
+              regex: '(?i)^"(?:sh|bash|zsh|ksh|dash|csh|tcsh|fish|cmd|powershell|pwsh)(?:\.exe)?"$'
+          - metavariable-regex:
+              metavariable: $SWITCH
+              regex: '(?i)^"(?:-c|-command|/c)"$'
+          - focus-metavariable: $CMD

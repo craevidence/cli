@@ -17,6 +17,18 @@ class AcceptAllAfterLogging implements HostnameVerifier {
     }
 }
 
+class AcceptAllAfterConditionalLogging implements HostnameVerifier {
+    private final boolean debug = true;
+
+    // ruleid: cra-java-hostname-verifier-accept-all
+    public boolean verify(String hostname, SSLSession session) {
+        if (debug) {
+            System.out.println(hostname);
+        }
+        return true;
+    }
+}
+
 class TlsClient {
     void bad(HttpsURLConnection connection) {
         // ruleid: cra-java-hostname-verifier-accept-all

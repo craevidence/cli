@@ -31,7 +31,20 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).parent.parent
 RULES_ROOT = REPO_ROOT / "cra_evidence_cli" / "local" / "rules"
 
-EXPECTED_RULE_COUNT = 95
+EXPECTED_RULE_COUNT = 104
+SEMANTIC_ASSET_SUFFIXES = (
+    "cra_evidence_cli/local/csharp_symbol_analyzer.cs",
+    "cra_evidence_cli/local/java_symbol_analyzer.java",
+    "cra_evidence_cli/local/rust_semantic_analyzer.py",
+    "cra_evidence_cli/local/c_semantic_analyzer.py",
+    "cra_evidence_cli/local/semantic_evidence.schema.json",
+    "cra_evidence_cli/local/java_semantic_evidence.schema.json",
+    "cra_evidence_cli/local/csharp_semantic_evidence.schema.json",
+    "cra_evidence_cli/local/rust_semantic_evidence.schema.json",
+    "cra_evidence_cli/local/c_semantic_evidence.schema.json",
+    "cra_evidence_cli/local/cpp_semantic_evidence.schema.json",
+    "cra_evidence_cli/local/semantic-evidence-NOTICE",
+)
 ENGINE_BINARY_SUFFIX = "cra_evidence_cli/_engine/grype"
 OPENGREP_BINARY_SUFFIX = "cra_evidence_cli/_engine/opengrep"
 OPENGREP_LOCK_SUFFIX = "cra_evidence_cli/_engine/opengrep-release.json"
@@ -139,6 +152,21 @@ def _check(artifact_label: str, names: list[str]) -> list[str]:
             f"{artifact_label}: expected one Opengrep release lock, found {lock_entries}"
         )
 
+    errors.extend(_check_semantic_assets(artifact_label, names))
+
+    return errors
+
+
+def _check_semantic_assets(artifact_label: str, names: list[str]) -> list[str]:
+    errors: list[str] = []
+    normalized = [name.replace("\\", "/") for name in names]
+    for suffix in SEMANTIC_ASSET_SUFFIXES:
+        matching = [name for name in normalized if name.endswith(suffix)]
+        if len(matching) != 1:
+            errors.append(
+                f"{artifact_label}: expected one semantic evidence asset "
+                f"{suffix}, found {matching}"
+            )
     return errors
 
 

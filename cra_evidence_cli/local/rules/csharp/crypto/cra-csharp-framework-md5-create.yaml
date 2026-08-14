@@ -1,0 +1,39 @@
+rules:
+  - id: cra-csharp-framework-md5-create
+    message: >
+      The resolved .NET framework API creates an MD5 digest implementation.
+      MD5 is collision-prone. Use SHA-256 or a stronger digest for integrity,
+      and a password-specific KDF for passwords.
+    severity: WARNING
+    metadata:
+      tier: experimental
+      semantic_evidence:
+        required: true
+        language: csharp
+        policy: csharp.framework-md5-create
+        candidate_range: result
+      cwe: ["CWE-328: Use of Weak Hash"]
+      owasp: ["A02:2021 - Cryptographic Failures"]
+      references:
+        - https://cwe.mitre.org/data/definitions/328.html
+        - https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.md5.create
+      category: security
+      technology: [csharp, dotnet, cryptography]
+      confidence: HIGH
+      scope: >
+        Generates candidates for direct MD5.Create calls and fully qualified
+        System.Security.Cryptography.MD5.Create calls. A candidate is emitted
+        only when supplied semantic evidence resolves the Create occurrence to
+        the pinned System.Security.Cryptography framework symbol.
+      limitations: >
+        Requires a separately generated evidence envelope from the pinned,
+        isolated C# semantic adapter. Missing, stale, partial, ambiguous, or
+        build-failed evidence degrades coverage and cannot produce a finding.
+        Other MD5 APIs remain in the broader experimental weak-hash rule.
+      license: MIT
+      author: CRA Evidence
+    languages: [csharp]
+    pattern-either:
+      - pattern: MD5.Create()
+      - pattern: System.Security.Cryptography.MD5.Create()
+      - pattern: global::System.Security.Cryptography.MD5.Create()

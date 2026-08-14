@@ -15,6 +15,7 @@ import json
 import shutil
 import subprocess
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import click
@@ -29,6 +30,11 @@ from cra_evidence_cli.local.sast_scanner import (
     SASTReport,
     opengrep_path,
     run_scan,
+)
+from cra_evidence_cli.local.semantic_evidence import (
+    SemanticEvidenceError,
+    expected_symbol,
+    load_semantic_evidence,
 )
 from cra_evidence_cli.repo_config import resolve_identity
 
@@ -82,6 +88,7 @@ def _default_zero_files_reason(inventory) -> str:
         "No files matched the enabled default rules. Experimental rules for "
         f"{listed} are disabled; use --include-experimental to enable them."
     )
+
 
 _IGNORED_DIRECTORY_NAMES = frozenset(
     {
@@ -286,9 +293,7 @@ def _unanalysed_language_counts(report: SASTReport) -> dict[str, int]:
 
 
 def _coverage_degraded(report: SASTReport) -> bool:
-    return bool(
-        not report.scan_failed and (report.engine_errors or report.unanalysed_files)
-    )
+    return bool(not report.scan_failed and (report.engine_errors or report.unanalysed_files))
 
 
 def _mark_unanalysed_coverage(report: SASTReport) -> None:
@@ -328,6 +333,215 @@ def _replace_failure_reason(report: SASTReport, reason: str) -> None:
                     notification["message"] = {"text": reason}
 
 
+def _finding_relative_path(finding, scan_root: Path) -> str:
+    root = scan_root.resolve()
+    base = root.parent if root.is_file() else root
+    raw = Path(finding.file.removeprefix("file://"))
+    candidates = [raw] if raw.is_absolute() else [(Path.cwd() / raw).resolve(), base / raw]
+    for candidate in candidates:
+        try:
+            return candidate.resolve().relative_to(base).as_posix()
+        except ValueError:
+            continue
+    reason_code = "candidate_path_mismatch"
+    message = "candidate path is outside the semantic evidence source root"
+    raise SemanticEvidenceError(reason_code, message)
+
+
+def _finding_identity(finding) -> tuple:
+    return (
+        finding.rule_id,
+        finding.file,
+        finding.line,
+        finding.start_column,
+        finding.end_line,
+        finding.end_column,
+    )
+
+
+def _sarif_result_identity(result: dict) -> tuple:
+    locations = result.get("locations") or [{}]
+    location = locations[0] if locations else {}
+    physical = location.get("physicalLocation") or {}
+    artifact = physical.get("artifactLocation") or {}
+    region = physical.get("region") or {}
+    return (
+        result.get("ruleId") or "",
+        artifact.get("uri") or "",
+        region.get("startLine"),
+        region.get("startColumn"),
+        region.get("endLine"),
+        region.get("endColumn"),
+    )
+
+
+def _sync_sarif_semantic_results(
+    report: SASTReport,
+    semantic_rule_ids: set[str],
+) -> None:
+    if not report.sarif_raw:
+        return
+    accepted = {
+        _finding_identity(finding): finding.semantic_evidence
+        for finding in report.findings
+        if finding.rule_id in semantic_rule_ids
+    }
+    for run in report.sarif_raw.get("runs") or []:
+        filtered: list[dict] = []
+        for result in run.get("results") or []:
+            if result.get("ruleId") not in semantic_rule_ids:
+                filtered.append(result)
+                continue
+            identity = _sarif_result_identity(result)
+            semantic = accepted.get(identity)
+            if semantic is None:
+                continue
+            result.setdefault("properties", {})["craEvidenceSemanticEvidence"] = semantic
+            filtered.append(result)
+        run["results"] = filtered
+
+
+def _semantic_unanalysed_item(path: str, reason_code: str, language: str) -> dict:
+    return {
+        "path": path,
+        "language": _LANGUAGE_DISPLAY_NAMES.get(language, language),
+        "reason": reason_code,
+    }
+
+
+def _apply_semantic_evidence(
+    report: SASTReport,
+    inventory,
+    evidence_paths: tuple[Path, ...],
+    scan_root: Path,
+) -> None:
+    policies = inventory.semantic_policies
+    candidates = [finding for finding in report.findings if finding.rule_id in policies]
+    if not candidates:
+        return
+
+    reason_counts: dict[str, int] = {}
+    attested = 0
+    rejected = 0
+    unanalysed = 0
+    verified = []
+    load_error: SemanticEvidenceError | None = None
+    if not evidence_paths:
+        load_error = SemanticEvidenceError(
+            "semantic_evidence_missing",
+            "semantic-required candidates have no evidence envelope",
+        )
+    else:
+        try:
+            verified = [
+                load_semantic_evidence(evidence_path, scan_root) for evidence_path in evidence_paths
+            ]
+        except SemanticEvidenceError as exc:
+            load_error = exc
+
+    kept = [finding for finding in report.findings if finding.rule_id not in policies]
+    existing_unanalysed = {
+        (item.get("path"), item.get("language"), item.get("reason"))
+        for item in report.unanalysed_files
+    }
+    for finding in candidates:
+        policy = policies[finding.rule_id]
+        try:
+            relative_path = _finding_relative_path(finding, scan_root)
+        except SemanticEvidenceError as exc:
+            relative_path = Path(finding.file).name
+            candidate_error = exc
+        else:
+            candidate_error = load_error
+
+        if candidate_error is None and (
+            finding.line is None
+            or finding.start_column is None
+            or finding.end_line is None
+            or finding.end_column is None
+        ):
+            candidate_error = SemanticEvidenceError(
+                "candidate_range_missing",
+                "semantic-required candidate has no exact SARIF range",
+            )
+
+        if candidate_error is not None:
+            reason = candidate_error.reason_code
+            unanalysed += 1
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            item = _semantic_unanalysed_item(relative_path, reason, policy.language)
+            key = (item["path"], item["language"], item["reason"])
+            if key not in existing_unanalysed:
+                report.unanalysed_files.append(item)
+                existing_unanalysed.add(key)
+            continue
+
+        symbol = expected_symbol(policy.policy)
+        range_matches = tuple(
+            (evidence, occurrence)
+            for evidence in verified
+            if evidence.language == policy.language
+            for occurrence in evidence.matching_occurrences(
+                path=relative_path,
+                start_line=finding.line,
+                start_column=finding.start_column,
+                end_line=finding.end_line,
+                end_column=finding.end_column,
+            )
+        )
+        if not range_matches:
+            reason = "semantic_occurrence_missing"
+            unanalysed += 1
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            item = _semantic_unanalysed_item(relative_path, reason, policy.language)
+            key = (item["path"], item["language"], item["reason"])
+            if key not in existing_unanalysed:
+                report.unanalysed_files.append(item)
+                existing_unanalysed.add(key)
+            continue
+        if len(range_matches) != 1:
+            reason = "semantic_occurrence_ambiguous"
+            unanalysed += 1
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            item = _semantic_unanalysed_item(relative_path, reason, policy.language)
+            key = (item["path"], item["language"], item["reason"])
+            if key not in existing_unanalysed:
+                report.unanalysed_files.append(item)
+                existing_unanalysed.add(key)
+            continue
+
+        evidence, occurrence = range_matches[0]
+        if occurrence.symbol != symbol:
+            reason = "semantic_symbol_not_attested"
+            rejected += 1
+            reason_counts[reason] = reason_counts.get(reason, 0) + 1
+            continue
+        semantic = {
+            "status": "attested",
+            "reason_code": "semantic_symbol_attested",
+            "policy": policy.policy,
+            "adapter_profile": evidence.adapter_profile,
+            "source_tree_sha256": evidence.source_tree_sha256,
+            "build_profile_sha256": evidence.build_profile_sha256,
+        }
+        kept.append(replace(finding, semantic_evidence=semantic))
+        attested += 1
+        reason_counts["semantic_symbol_attested"] = (
+            reason_counts.get("semantic_symbol_attested", 0) + 1
+        )
+
+    report.findings = kept
+    report.semantic_evidence_summary = {
+        "schema_version": "craevidence.semantic_summary.v1",
+        "candidate_count": len(candidates),
+        "attested": attested,
+        "rejected": rejected,
+        "unanalysed": unanalysed,
+        "reason_counts": dict(sorted(reason_counts.items())),
+    }
+    _sync_sarif_semantic_results(report, set(policies))
+    _mark_unanalysed_coverage(report)
+
 
 def _severity_label(level: str) -> str:
     return level.upper()
@@ -349,8 +563,7 @@ def _render_text(report: SASTReport, verbose: bool = False) -> str:
         )
     if report.rule_language_counts:
         coverage = ", ".join(
-            f"{language} {count}"
-            for language, count in report.rule_language_counts.items()
+            f"{language} {count}" for language, count in report.rule_language_counts.items()
         )
         lines.append(f"Enabled rules by language: {coverage}")
     lines.append(
@@ -360,8 +573,7 @@ def _render_text(report: SASTReport, verbose: bool = False) -> str:
     lines.append(f"Parser coverage assurance: {report.parser_coverage_assurance}.")
     if report.language_counts:
         languages = ", ".join(
-            f"{language} {count}"
-            for language, count in report.language_counts.items()
+            f"{language} {count}" for language, count in report.language_counts.items()
         )
         lines.append(f"Languages: {languages}")
     if report.engine_errors and not report.scan_failed:
@@ -371,8 +583,7 @@ def _render_text(report: SASTReport, verbose: bool = False) -> str:
         )
     if report.unanalysed_files and not report.scan_failed:
         missing_languages = ", ".join(
-            f"{language} {count}"
-            for language, count in _unanalysed_language_counts(report).items()
+            f"{language} {count}" for language, count in _unanalysed_language_counts(report).items()
         )
         lines.append(
             "Coverage degraded: "
@@ -381,9 +592,17 @@ def _render_text(report: SASTReport, verbose: bool = False) -> str:
         )
         if verbose:
             for item in report.unanalysed_files:
-                lines.append(
-                    f"  {item['path']} [{item['language']}] {item['reason']}"
-                )
+                lines.append(f"  {item['path']} [{item['language']}] {item['reason']}")
+    if report.semantic_evidence_summary:
+        summary = report.semantic_evidence_summary
+        lines.append(
+            "Semantic evidence: "
+            f"{summary['attested']} attested, {summary['rejected']} rejected, "
+            f"{summary['unanalysed']} unanalysed."
+        )
+        if verbose:
+            for reason, count in summary["reason_counts"].items():
+                lines.append(f"  {reason}: {count}")
 
     if report.scan_failed:
         lines.append(f"Scan failed: {report.failure_reason}")
@@ -433,7 +652,11 @@ def _render_text(report: SASTReport, verbose: bool = False) -> str:
 
 def _render_json(report: SASTReport) -> str:
     payload = {
-        "schema_version": "craevidence.code_check.v1",
+        "schema_version": (
+            "craevidence.code_check.v2"
+            if report.semantic_evidence_summary
+            else "craevidence.code_check.v1"
+        ),
         "engine": f"Opengrep {report.engine_version}",
         "rules_path": report.rules_path,
         "rule_count": report.rule_count,
@@ -448,6 +671,8 @@ def _render_json(report: SASTReport) -> str:
         "unanalysed_language_counts": _unanalysed_language_counts(report),
         "parser_coverage_assurance": report.parser_coverage_assurance,
     }
+    if report.semantic_evidence_summary:
+        payload["semantic_evidence"] = report.semantic_evidence_summary
     # The bundled pack version is only meaningful for the bundled rules.
     if report.pack_version:
         payload["pack_version"] = report.pack_version
@@ -479,30 +704,22 @@ def _render_sarif(report: SASTReport) -> str:
             driver = runs[0].setdefault("tool", {}).setdefault("driver", {})
             properties = driver.setdefault("properties", {})
             properties["craEvidenceCoverageDegraded"] = _coverage_degraded(report)
-            properties["craEvidenceParserCoverageAssurance"] = (
-                report.parser_coverage_assurance
-            )
+            properties["craEvidenceParserCoverageAssurance"] = report.parser_coverage_assurance
             properties["craEvidenceLanguageCounts"] = report.language_counts
-            properties["craEvidenceUnanalysedFileCount"] = len(
-                report.unanalysed_files
-            )
-            properties["craEvidenceUnanalysedLanguageCounts"] = (
-                _unanalysed_language_counts(report)
-            )
+            properties["craEvidenceUnanalysedFileCount"] = len(report.unanalysed_files)
+            properties["craEvidenceUnanalysedLanguageCounts"] = _unanalysed_language_counts(report)
             properties["advisory"] = _code_advisory_block()
+            if report.semantic_evidence_summary:
+                properties["craEvidenceSemanticEvidence"] = report.semantic_evidence_summary
             if report.pack_version:
                 properties["craEvidencePackVersion"] = report.pack_version
             if report.default_rule_count is not None:
                 properties["craEvidenceRuleTiers"] = {
                     "defaultEnabled": report.default_rule_count,
                     "experimentalEnabled": report.experimental_rule_count or 0,
-                    "experimentalAvailable": (
-                        report.available_experimental_rule_count or 0
-                    ),
+                    "experimentalAvailable": (report.available_experimental_rule_count or 0),
                 }
-                properties["craEvidenceRuleLanguageCounts"] = (
-                    report.rule_language_counts
-                )
+                properties["craEvidenceRuleLanguageCounts"] = report.rule_language_counts
         return json.dumps(document, indent=2)
 
     doc = {
@@ -517,14 +734,17 @@ def _render_sarif(report: SASTReport) -> str:
                         "properties": {
                             "advisory": _code_advisory_block(),
                             "craEvidenceLanguageCounts": report.language_counts,
-                            "craEvidenceUnanalysedFileCount": len(
-                                report.unanalysed_files
-                            ),
+                            "craEvidenceUnanalysedFileCount": len(report.unanalysed_files),
                             "craEvidenceUnanalysedLanguageCounts": (
                                 _unanalysed_language_counts(report)
                             ),
                             "craEvidenceParserCoverageAssurance": (
                                 report.parser_coverage_assurance
+                            ),
+                            **(
+                                {"craEvidenceSemanticEvidence": (report.semantic_evidence_summary)}
+                                if report.semantic_evidence_summary
+                                else {}
                             ),
                         },
                     }
@@ -537,9 +757,7 @@ def _render_sarif(report: SASTReport) -> str:
                             [
                                 {
                                     "level": "error",
-                                    "message": {
-                                        "text": report.failure_reason or "scan failed"
-                                    },
+                                    "message": {"text": report.failure_reason or "scan failed"},
                                 }
                             ]
                             if report.scan_failed
@@ -625,6 +843,16 @@ _UPLOAD_SIZE_LIMIT = 10 * 1024 * 1024  # 10 MiB
     ),
 )
 @click.option(
+    "--semantic-evidence",
+    "semantic_evidence_paths",
+    multiple=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    help=(
+        "Validate semantic-required candidates against an external evidence "
+        "envelope. Repeatable. The CLI does not execute the semantic analyzer."
+    ),
+)
+@click.option(
     "--upload",
     "upload",
     is_flag=True,
@@ -669,6 +897,7 @@ def code_check(
     excludes: tuple[str, ...],
     exclude_rules: tuple[str, ...],
     include_experimental: bool,
+    semantic_evidence_paths: tuple[Path, ...],
     upload: bool,
     product: str | None,
     version_number: str | None,
@@ -704,7 +933,19 @@ def code_check(
 
     effective_rules = rules_path if rules_path is not None else _BUNDLED_RULES
 
-    inventory = inspect_rule_pack(_BUNDLED_RULES) if rules_path is None else None
+    bundled_inventory = inspect_rule_pack(_BUNDLED_RULES)
+    inventory = bundled_inventory if rules_path is None else None
+    semantic_inventory = None
+    if rules_path is None:
+        semantic_inventory = bundled_inventory
+    else:
+        resolved_rules = rules_path.resolve(strict=True)
+        resolved_bundle = _BUNDLED_RULES.resolve(strict=True)
+        if resolved_rules == resolved_bundle or resolved_bundle in resolved_rules.parents:
+            semantic_inventory = bundled_inventory
+    if semantic_evidence_paths and semantic_inventory is None:
+        message = "--semantic-evidence is supported only with the bundled rule pack"
+        raise click.UsageError(message)
     effective_exclude_rules = exclude_rules
     if inventory is not None and not include_experimental:
         effective_exclude_rules = (
@@ -748,9 +989,7 @@ def code_check(
         )
         report.default_rule_count = default_count
         report.experimental_rule_count = experimental_count
-        report.available_experimental_rule_count = len(
-            inventory.experimental_rule_ids
-        )
+        report.available_experimental_rule_count = len(inventory.experimental_rule_ids)
         report.rule_language_counts = language_counts
         report.rule_count = default_count + experimental_count
         report.unanalysed_files = _unanalysed_source_files(
@@ -760,6 +999,19 @@ def code_check(
             excludes,
         )
         _mark_unanalysed_coverage(report)
+        _apply_semantic_evidence(
+            report,
+            inventory,
+            semantic_evidence_paths,
+            path,
+        )
+    elif semantic_inventory is not None:
+        _apply_semantic_evidence(
+            report,
+            semantic_inventory,
+            semantic_evidence_paths,
+            path,
+        )
 
     if output_format == "json":
         rendered = _render_json(report)
@@ -779,10 +1031,7 @@ def code_check(
         if report.scan_failed:
             # The user explicitly asked to record evidence; a silent exit 0
             # would leave the evidence absent while CI stays green.
-            message = (
-                "cannot upload: the scan did not complete "
-                f"({report.failure_reason})"
-            )
+            message = f"cannot upload: the scan did not complete ({report.failure_reason})"
             raise click.ClickException(message)
         _do_upload(ctx, config, product, version_number, report)
 
@@ -865,14 +1114,12 @@ def _sanitized_sarif(report: SASTReport) -> dict:
                 ]
         driver = run.get("tool", {}).get("driver", {})
         properties = driver.setdefault("properties", {})
-        properties["craEvidenceCoverageDegraded"] = bool(
-            report.engine_errors and not report.scan_failed
-        )
-        properties["craEvidenceParserCoverageAssurance"] = (
-            report.parser_coverage_assurance
-        )
+        properties["craEvidenceCoverageDegraded"] = _coverage_degraded(report)
+        properties["craEvidenceParserCoverageAssurance"] = report.parser_coverage_assurance
         properties["craEvidenceLanguageCounts"] = report.language_counts
         properties["advisory"] = _code_advisory_block()
+        if report.semantic_evidence_summary:
+            properties["craEvidenceSemanticEvidence"] = report.semantic_evidence_summary
         if report.pack_version:
             properties["craEvidencePackVersion"] = report.pack_version
         if report.default_rule_count is not None:
@@ -882,9 +1129,7 @@ def _sanitized_sarif(report: SASTReport) -> dict:
                 "experimentalAvailable": report.available_experimental_rule_count or 0,
             }
             properties["craEvidenceRuleLanguageCounts"] = report.rule_language_counts
-        driver_rules = (
-            run.get("tool", {}).get("driver", {}).get("rules") or []
-        )
+        driver_rules = run.get("tool", {}).get("driver", {}).get("rules") or []
         static_messages = {
             rule.get("id"): (
                 (rule.get("fullDescription") or {}).get("text")
@@ -935,10 +1180,7 @@ def _do_upload(ctx: click.Context, config, product, version_number, report: SAST
 
     if len(sarif_bytes) > _UPLOAD_SIZE_LIMIT:
         mb = len(sarif_bytes) / (1024 * 1024)
-        message = (
-            f"cannot upload: SARIF output is {mb:.1f} MiB, which exceeds the "
-            "10 MiB limit"
-        )
+        message = f"cannot upload: SARIF output is {mb:.1f} MiB, which exceeds the 10 MiB limit"
         raise click.ClickException(message)
 
     with tempfile.NamedTemporaryFile(suffix=".sarif.json", delete=False) as tmp:

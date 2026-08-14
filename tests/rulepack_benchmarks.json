@@ -1,6 +1,313 @@
 {
   "schema_version": 1,
   "engine_version": "1.26.0",
+  "default_tier_evidence": [
+    {
+      "rule_id": "cra-go-tls-direct-dial-insecure",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "exact crypto/tls import-bound call and Config qualifier",
+      "compiling_homonym_fixtures": [
+        "tests/rule_fixtures/go/tls/cra-go-tls-direct-dial-insecure-homonym.go",
+        "tests/rule_fixtures/go/tls/cra-go-tls-direct-dial-insecure-suffix-import.go"
+      ],
+      "semantic_test": "tests/test_fixture_semantics.py::test_go_tls_import_homonym_fixtures_are_valid_compiling_code",
+      "companion_rule": "cra-go-tls-insecure",
+      "real_project_lane": "chi",
+      "real_project_evidence": "parser and false-positive compatibility only"
+    },
+    {
+      "rule_id": "cra-java-jdk-weak-message-digest-literal",
+      "pack_version": "4.3.0",
+      "evidence_route": "A",
+      "terminal_decision": "default",
+      "precision": 1.0,
+      "detected_positive_count": 51,
+      "safe_case_count": 96,
+      "compiling_homonym_status": "no findings",
+      "benchmark_lanes": [
+        "owasp-benchmark-java",
+        "nist-juliet-java-1.3"
+      ],
+      "semantic_benchmark": "nist-juliet-java-1.3.semantic_evidence",
+      "compiling_homonym_fixtures": [
+        "tests/rule_fixtures/java/crypto/cra-java-jdk-weak-message-digest-literal-shadow.java"
+      ],
+      "semantic_tests": [
+        "tests/test_code_evidence_command.py::test_java_evidence_records_compiling_application_shadow",
+        "tests/test_code_evidence_command.py::test_java_evidence_rejects_nested_dotted_name_lookalike"
+      ],
+      "companion_rule": "cra-java-weak-message-digest",
+      "real_project_lane": "spring-petclinic",
+      "real_project_evidence": "30 selected Java files, zero findings, and zero parser errors"
+    },
+    {
+      "rule_id": "cra-php-global-unserialize-superglobal",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "literal fully qualified PHP global function name",
+      "compiling_homonym_fixtures": [
+        "tests/rule_fixtures/php/deserialization/cra-php-global-unserialize-superglobal.php"
+      ],
+      "semantic_test": "tests/test_fixture_semantics.py::test_php_global_unserialize_binding_and_fixture_are_executable",
+      "runtime_probe_files": [
+        "tests/semantic/php_global_unserialize_binding.php",
+        "tests/semantic/php_global_unserialize_redeclare.php"
+      ],
+      "runtime_image": "php@sha256:f78661b492226388a7057679cc731c3e43bc92ba66cd49a8cfe12374a56bee9f",
+      "companion_rule": "cra-php-unserialize-superglobal",
+      "real_project_lane": "symfony-demo",
+      "real_project_evidence": "41 selected PHP files, zero findings, and zero parser errors; compatibility only"
+    },
+    {
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "exact Roslyn ownership of both properties on the signed System.Net.Http HttpClientHandler type",
+      "binding_references": [
+        "https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.dangerousacceptanyservercertificatevalidator",
+        "https://learn.microsoft.com/en-us/dotnet/api/system.net.http.httpclienthandler.servercertificatecustomvalidationcallback"
+      ],
+      "compiling_homonym_fixtures": [
+        "tests/semantic/csharp_dangerous_validator_binding.cs"
+      ],
+      "semantic_test": "tests/test_code_evidence_command.py::test_csharp_evidence_resolves_framework_and_application_owners",
+      "semantic_producer": "code-evidence --language csharp",
+      "sdk_version": "8.0.423",
+      "reference_pack_version": "8.0.29",
+      "analyzer_asset": "cra_evidence_cli/local/csharp_symbol_analyzer.cs",
+      "schema_asset": "cra_evidence_cli/local/csharp_semantic_evidence.schema.json",
+      "framework_assembly": "System.Net.Http, Version=8.0.0.0, PublicKeyToken=b03f5f7f11d50a3a",
+      "companion_rule": "cra-csharp-certificate-callback-accept-all",
+      "real_project_lane": "dotnet-eshop",
+      "real_project_evidence": "two runs of 494 selected C# files, zero findings, and zero engine errors; compatibility only"
+    },
+    {
+      "rule_id": "cra-rust-cratesio-reqwest-invalid-certs",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "Rust 2018, 2021, and 2024 absolute extern-prelude binding plus one exact crates.io reqwest 0.12.24 lock record and checksum",
+      "binding_references": [
+        "https://doc.rust-lang.org/reference/paths.html#path-qualifiers",
+        "https://doc.rust-lang.org/reference/items/extern-crates.html",
+        "https://docs.rs/reqwest/0.12.24/reqwest/struct.ClientBuilder.html#method.danger_accept_invalid_certs",
+        "https://docs.rs/reqwest/0.12.24/src/reqwest/async_impl/client.rs.html"
+      ],
+      "compiling_homonym_fixtures": [
+        "tests/semantic/rust_reqwest_self_alias/src/lib.rs"
+      ],
+      "compiling_positive_fixture": "tests/semantic/rust_reqwest_absolute_binding/src/lib.rs",
+      "compiler_dependency_fixture": "tests/semantic/rust_reqwest_dummy.rs",
+      "semantic_test": "tests/test_fixture_semantics.py::test_rust_absolute_and_current_crate_alias_fixtures_compile",
+      "semantic_producer": "code-evidence --language rust",
+      "analyzer_asset": "cra_evidence_cli/local/rust_semantic_analyzer.py",
+      "schema_asset": "cra_evidence_cli/local/rust_semantic_evidence.schema.json",
+      "compiler_image": "rust@sha256:38bc5a86d998772d4aec2348656ed21438d20fcdce2795b56ca434cf21430d89",
+      "compiler_version": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+      "package_name": "reqwest",
+      "package_version": "0.12.24",
+      "package_source": "registry+https://github.com/rust-lang/crates.io-index",
+      "package_checksum": "9d0946410b9f7b082a427e4ef5c8ff541a88b357bc6c637c40db3a68ac70a36f",
+      "broad_benchmark_lane": "codeql-rust-cwe295",
+      "broad_benchmark_rule": "cra-rust-reqwest-invalid-certs",
+      "narrow_benchmark_findings": 0,
+      "benchmark_attribution": "The CodeQL lane remains evidence for the broad experimental rule only. Its relative reqwest paths do not satisfy this rule's absolute-path candidate and no locations are credited here.",
+      "companion_rule": "cra-rust-reqwest-invalid-certs",
+      "real_project_lane": "axum",
+      "real_project_evidence": "compatibility only; the real-project lane is not a safe denominator"
+    },
+    {
+      "rule_id": "cra-c-fixed-array-literal-oob-write",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "exact libclang C17 array-bounds diagnostic at the direct decimal-literal assignment range",
+      "compiling_homonym_fixtures": [
+        "tests/semantic/c_array_bounds_binding.c"
+      ],
+      "semantic_test": "tests/test_code_evidence_command.py::test_c_evidence_attests_bounds_and_rejects_macro_redirect",
+      "diagnostic_origin_test": "tests/test_code_evidence_command.py::test_c_evidence_does_not_attribute_header_diagnostic_to_source",
+      "semantic_producer": "code-evidence --language c",
+      "analyzer_asset": "cra_evidence_cli/local/c_semantic_analyzer.py",
+      "schema_asset": "cra_evidence_cli/local/c_semantic_evidence.schema.json",
+      "compiler_frontend": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      "compiler_library_sha256": "d7c54213dbeb95deb5bfee76cf3e32e425cbaf8ccbd2900345414fb57476458b",
+      "compiler_profile": "libclang-18-c17-security-evidence-v2",
+      "container_compiler_frontend": "Debian clang version 18.1.8 (18+b1)",
+      "container_compiler_library_sha256_by_arch": {
+        "amd64": "4b9b5073e3dad198b23589a81ce317b0224b36cfa5776305b48d138a53bf2e1d",
+        "arm64": "939adf9a6d00fd3ed53c7cecace983f885431d4e9c61a9dc01999517c64b27dd"
+      },
+      "container_resource_headers_sha256_by_arch": {
+        "amd64": "9ecfc31a5e9b723c6ad8e62fce9839907cc0cdaf44b68a37ece1dc9a55ab51c8",
+        "arm64": "8343b19f446ea7d62767fa342753ba8c1b535ec6973ee8b17182822bba656b67"
+      },
+      "container_compiler_profile": "libclang-18.1.8-debian13-c17-security-evidence-v2",
+      "companion_rule": null,
+      "real_project_lane": "curl",
+      "real_project_evidence": "compatibility only; 386 selected C files, zero findings, and 48 partial parses, including 17 files newly reached by this rule; not a safe denominator"
+    },
+    {
+      "rule_id": "cra-c-printf-argv-format",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "active direct call bound by libclang to the system printf declaration in global main, with the complete format argument bound to that main declaration's second parameter",
+      "compiling_homonym_fixtures": [
+        "tests/semantic/c_printf_application_homonym.c",
+        "tests/semantic/c_printf_wrong_scope.c"
+      ],
+      "compiling_positive_fixture": "tests/semantic/c_printf_argv_binding.c",
+      "semantic_test": "tests/test_code_evidence_command.py::test_c_evidence_attests_system_printf_and_rejects_homonyms",
+      "end_to_end_test": "tests/test_code_check_command.py::test_c_family_direct_call_semantic_evidence_filters_unbound_candidates",
+      "semantic_producer": "code-evidence --language c",
+      "analyzer_asset": "cra_evidence_cli/local/c_semantic_analyzer.py",
+      "schema_asset": "cra_evidence_cli/local/c_semantic_evidence.schema.json",
+      "compiler_frontend": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      "compiler_library_sha256": "d7c54213dbeb95deb5bfee76cf3e32e425cbaf8ccbd2900345414fb57476458b",
+      "compiler_profile": "libclang-18-c17-security-evidence-v2",
+      "container_compiler_frontend": "Debian clang version 18.1.8 (18+b1)",
+      "container_compiler_profile": "libclang-18.1.8-debian13-c17-security-evidence-v2",
+      "companion_rule": null,
+      "real_project_lane": "curl",
+      "real_project_evidence": "compatibility only; the pinned curl lane is not a labelled safe denominator"
+    },
+    {
+      "rule_id": "cra-c-system-argv",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "active direct call bound by libclang to the system-header system function declaration in global main, with the complete command argument bound to that main declaration's second parameter",
+      "compiling_homonym_fixtures": [
+        "tests/semantic/c_system_application_homonym.c",
+        "tests/semantic/c_system_wrong_scope.c"
+      ],
+      "compiling_positive_fixture": "tests/semantic/c_system_argv_binding.c",
+      "semantic_test": "tests/test_code_evidence_command.py::test_c_evidence_attests_system_shell_and_rejects_homonyms",
+      "end_to_end_test": "tests/test_code_check_command.py::test_c_family_direct_call_semantic_evidence_filters_unbound_candidates",
+      "semantic_producer": "code-evidence --language c",
+      "analyzer_asset": "cra_evidence_cli/local/c_semantic_analyzer.py",
+      "schema_asset": "cra_evidence_cli/local/c_semantic_evidence.schema.json",
+      "compiler_frontend": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      "compiler_library_sha256": "d7c54213dbeb95deb5bfee76cf3e32e425cbaf8ccbd2900345414fb57476458b",
+      "compiler_profile": "libclang-18-c17-security-evidence-v2",
+      "container_compiler_frontend": "Debian clang version 18.1.8 (18+b1)",
+      "container_compiler_profile": "libclang-18.1.8-debian13-c17-security-evidence-v2",
+      "companion_rule": null,
+      "real_project_lane": "curl",
+      "real_project_evidence": "compatibility only; the pinned curl lane is not a labelled safe denominator"
+    },
+    {
+      "rule_id": "cra-cpp-fixed-array-literal-oob-write",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "exact libclang C++17 array-bounds diagnostic at the direct decimal-literal assignment range",
+      "compiling_homonym_fixtures": [
+        "tests/semantic/cpp_array_bounds_binding.cpp",
+        "tests/semantic/cpp_array_application_type.cpp"
+      ],
+      "semantic_test": "tests/test_code_evidence_command.py::test_cpp_evidence_attests_bounds_and_rejects_preprocessor_decoys",
+      "diagnostic_origin_test": "tests/test_code_evidence_command.py::test_cpp_evidence_does_not_attribute_header_diagnostic_to_source",
+      "semantic_producer": "code-evidence --language cpp",
+      "analyzer_asset": "cra_evidence_cli/local/c_semantic_analyzer.py",
+      "schema_asset": "cra_evidence_cli/local/cpp_semantic_evidence.schema.json",
+      "compiler_frontend": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      "compiler_library_sha256": "d7c54213dbeb95deb5bfee76cf3e32e425cbaf8ccbd2900345414fb57476458b",
+      "compiler_profile": "libclang-18-cpp17-security-evidence-v2",
+      "container_compiler_frontend": "Debian clang version 18.1.8 (18+b1)",
+      "container_compiler_library_sha256_by_arch": {
+        "amd64": "4b9b5073e3dad198b23589a81ce317b0224b36cfa5776305b48d138a53bf2e1d",
+        "arm64": "939adf9a6d00fd3ed53c7cecace983f885431d4e9c61a9dc01999517c64b27dd"
+      },
+      "container_resource_headers_sha256_by_arch": {
+        "amd64": "02371ccb4f079176c8f92152e50769067facb335bca9381b1662c9f9d0f71985",
+        "arm64": "264f66375eebe65d080ac48c5931c59841e9c06eaa504b5abd0ce7ceb4de43ce"
+      },
+      "container_compiler_profile": "libclang-18.1.8-debian13-cpp17-security-evidence-v2",
+      "companion_rule": null,
+      "real_project_lane": "fmt",
+      "real_project_evidence": "compatibility only; 19 selected C++ files, zero findings, and five partial parses, including color.h newly reached by this rule; not a safe denominator"
+    },
+    {
+      "rule_id": "cra-cpp-printf-argv-format",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "active direct call bound by libclang to the system printf declaration in global main, with the complete format argument bound to that main declaration's second parameter",
+      "compiling_homonym_fixtures": [
+        "tests/semantic/cpp_printf_application_homonym.cpp",
+        "tests/semantic/cpp_printf_shadowed_parameter.cpp"
+      ],
+      "compiling_positive_fixture": "tests/semantic/cpp_printf_argv_binding.cpp",
+      "semantic_test": "tests/test_code_evidence_command.py::test_cpp_evidence_attests_both_system_printf_spellings",
+      "end_to_end_test": "tests/test_code_check_command.py::test_c_family_direct_call_semantic_evidence_filters_unbound_candidates",
+      "semantic_producer": "code-evidence --language cpp",
+      "analyzer_asset": "cra_evidence_cli/local/c_semantic_analyzer.py",
+      "schema_asset": "cra_evidence_cli/local/cpp_semantic_evidence.schema.json",
+      "compiler_frontend": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      "compiler_library_sha256": "d7c54213dbeb95deb5bfee76cf3e32e425cbaf8ccbd2900345414fb57476458b",
+      "compiler_profile": "libclang-18-cpp17-security-evidence-v2",
+      "container_compiler_frontend": "Debian clang version 18.1.8 (18+b1)",
+      "container_compiler_profile": "libclang-18.1.8-debian13-cpp17-security-evidence-v2",
+      "companion_rule": null,
+      "real_project_lane": "fmt",
+      "real_project_evidence": "compatibility only; the pinned fmt lane is not a labelled safe denominator"
+    },
+    {
+      "rule_id": "cra-cpp-system-argv",
+      "pack_version": "4.3.0",
+      "evidence_route": "B",
+      "terminal_decision": "default",
+      "binding_basis": "active direct call bound by libclang to the system-header system function declaration in global main, with the complete command argument bound to that main declaration's second parameter",
+      "compiling_homonym_fixtures": [
+        "tests/semantic/cpp_system_application_homonym.cpp",
+        "tests/semantic/cpp_system_shadowed_parameter.cpp"
+      ],
+      "compiling_positive_fixture": "tests/semantic/cpp_system_argv_binding.cpp",
+      "semantic_test": "tests/test_code_evidence_command.py::test_cpp_evidence_attests_both_system_shell_spellings",
+      "end_to_end_test": "tests/test_code_check_command.py::test_c_family_direct_call_semantic_evidence_filters_unbound_candidates",
+      "semantic_producer": "code-evidence --language cpp",
+      "analyzer_asset": "cra_evidence_cli/local/c_semantic_analyzer.py",
+      "schema_asset": "cra_evidence_cli/local/cpp_semantic_evidence.schema.json",
+      "compiler_frontend": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+      "compiler_library_sha256": "d7c54213dbeb95deb5bfee76cf3e32e425cbaf8ccbd2900345414fb57476458b",
+      "compiler_profile": "libclang-18-cpp17-security-evidence-v2",
+      "container_compiler_frontend": "Debian clang version 18.1.8 (18+b1)",
+      "container_compiler_profile": "libclang-18.1.8-debian13-cpp17-security-evidence-v2",
+      "companion_rule": null,
+      "real_project_lane": "fmt",
+      "real_project_evidence": "compatibility only; the pinned fmt lane is not a labelled safe denominator"
+    },
+    {
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "pack_version": "4.3.0",
+      "evidence_route": "A",
+      "terminal_decision": "default",
+      "ownership_model": "language-intrinsic",
+      "binding_basis": "assigned odd integer literal above the binary64 safe-integer boundary",
+      "precision": 1.0,
+      "detected_positive_count": 24,
+      "safe_case_count": 79,
+      "compiling_homonym_status": "not applicable: no identifier or API binding",
+      "compiling_homonym_fixtures": [],
+      "benchmark_lanes": [
+        "eslint-js-no-loss-of-precision"
+      ],
+      "semantic_benchmark": "official ESLint no-loss-of-precision RuleTester labels at commit 87f66f4435c4df7f4f6815c939d153196ec03e3c",
+      "semantic_tests": [
+        "tests/test_fixture_semantics.py::test_javascript_unsafe_integer_fixture_matches_binary64_runtime_values",
+        "tests/test_rulepack_evidence.py::test_eslint_rule_tester_parser_preserves_official_labels"
+      ],
+      "companion_rule": null,
+      "real_project_lane": "hono",
+      "real_project_evidence": "two candidate-only runs over 356 selected Hono JavaScript and TypeScript files produced zero findings; supplemental exact-commit scans covered 141 Express and 300 Fastify JavaScript and TypeScript files with zero findings and zero engine errors in both repeated runs"
+    }
+  ],
   "benchmarks": [
     {
       "name": "owasp-benchmark-java",
@@ -67,6 +374,14 @@
               "tn": 128
             }
           },
+          "cra-java-jdk-weak-message-digest-literal": {
+            "328": {
+              "tp": 89,
+              "fp": 0,
+              "fn": 40,
+              "tn": 107
+            }
+          },
           "cra-java-runtime-exec-request": {
             "78": {
               "tp": 5,
@@ -85,9 +400,9 @@
           },
           "cra-java-weak-message-digest": {
             "328": {
-              "tp": 89,
+              "tp": 0,
               "fp": 0,
-              "fn": 40,
+              "fn": 129,
               "tn": 107
             }
           }
@@ -130,14 +445,35 @@
       ],
       "manifest_file": "manifest.repaired.xml",
       "rule_cwes": {
+        "cra-java-jdk-weak-message-digest-literal": 328,
         "cra-java-runtime-exec-request": 78,
         "cra-java-sql-request-taint": 89,
         "cra-java-weak-message-digest": 328
+      },
+      "semantic_evidence": {
+        "rule_id": "cra-java-jdk-weak-message-digest-literal",
+        "source_directory": "src/testcases/CWE328_Reversible_One_Way_Hash",
+        "file_glob": "CWE*.java",
+        "support_files": [
+          "src/testcasesupport/AbstractTestCase.java",
+          "src/testcasesupport/AbstractTestCaseBase.java",
+          "src/testcasesupport/IO.java"
+        ]
       },
       "expected": {
         "files_scanned": 4461,
         "engine_errors": 0,
         "metrics_by_rule": {
+          "cra-java-jdk-weak-message-digest-literal": {
+            "cwe": 328,
+            "cases_total": 51,
+            "cases_detected": 51,
+            "cases_missed": 0,
+            "files_with_findings": 51,
+            "finding_count": 51,
+            "findings_at_manifest_flaws": 51,
+            "findings_outside_manifest_flaws": 0
+          },
           "cra-java-runtime-exec-request": {
             "cwe": 78,
             "cases_total": 444,
@@ -161,13 +497,27 @@
           "cra-java-weak-message-digest": {
             "cwe": 328,
             "cases_total": 51,
-            "cases_detected": 51,
-            "cases_missed": 0,
-            "files_with_findings": 51,
-            "finding_count": 51,
-            "findings_at_manifest_flaws": 51,
+            "cases_detected": 0,
+            "cases_missed": 51,
+            "files_with_findings": 0,
+            "finding_count": 0,
+            "findings_at_manifest_flaws": 0,
             "findings_outside_manifest_flaws": 0
           }
+        },
+        "semantic_evidence": {
+          "source_files": 54,
+          "compiler_errors": 0,
+          "resolved_invocations": 147,
+          "jdk_owned_invocations": 147,
+          "safe_literal_controls": 96,
+          "candidate_count": 51,
+          "attested": 51,
+          "rejected": 0,
+          "unanalysed": 0,
+          "finding_count": 51,
+          "engine_errors": 0,
+          "unanalysed_files": 0
         }
       },
       "promotion_ready": false,
@@ -189,6 +539,15 @@
         "G501": "testutils/g501_samples.go",
         "G505": "testutils/g505_samples.go",
         "G204": "testutils/g204_samples.go"
+      },
+      "scored_rules": {
+        "G109": "cra-go-parseint-downcast",
+        "G115": "cra-go-parseint-downcast",
+        "G204": "cra-go-shell-command-injection",
+        "G401": "cra-go-weak-hash",
+        "G402": "cra-go-tls-insecure",
+        "G501": "cra-go-weak-hash",
+        "G505": "cra-go-weak-hash"
       },
       "expected": {
         "cases_total": 191,
@@ -251,6 +610,7 @@
       "archive_sha256": "ada9d7e1c323d283446df3f55bdee0d00bda1fed786785fe98764d58688f38eb",
       "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
       "rules_subdir": "c/filesystem",
+      "scored_rule": "cra-c-insecure-temp-name",
       "source_path": "C/testcases/CWE377_Insecure_Temporary_File",
       "support_path": "C/testcasesupport",
       "file_glob": "*.c",
@@ -274,6 +634,7 @@
       "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
       "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
       "rules_subdir": "csharp/crypto",
+      "scored_rule": "cra-csharp-weak-hash",
       "source_path": "src/testcases/CWE328_Reversible_One_Way_Hash",
       "expected": {
         "files_with_bad_finding": 34,
@@ -292,13 +653,15 @@
       "commit": "f3d78a4e0bcc60bcd11199bc6357d83379851872",
       "license_note": "MIT, per the github/codeql repository LICENSE. Fixture text is reused as ground truth; the CodeQL engine is not run.",
       "rules_subdir": "rust/tls",
+      "scored_rule": "cra-rust-reqwest-invalid-certs",
       "source_path": "rust/ql/test/query-tests/security/CWE-295",
       "alert_query": "rust/disabled-certificate-check",
       "expected": {
         "alert_lines": 18,
         "alert_lines_covered": 11,
         "good_lines": 5,
-        "good_lines_reported": 0
+        "good_lines_reported": 0,
+        "findings_scored": 11
       },
       "promotion_ready": false,
       "promotion_blocker": "All 10 alerts whose argument is the literal true are covered, with no finding on a good line. The 7 uncovered alerts pass a variable or const, which the rule does not resolve, the same non-literal boolean boundary the Go TLS rule has."
@@ -312,13 +675,15 @@
       "commit": "dfe05599d3792cf5b50c5a95759735383865cda1",
       "license_note": "MIT, per the github/codeql repository LICENSE. Fixture text is reused as ground truth; the CodeQL engine is not run.",
       "rules_subdir": "javascript",
+      "scored_rule": "cra-javascript-exec-injection",
       "source_path": "javascript/ql/test/query-tests/Security/CWE-078/CommandInjection",
       "alert_query": "$ Alert",
       "expected": {
         "alert_lines": 96,
         "alert_lines_covered": 11,
         "good_lines": 0,
-        "good_lines_reported": 0
+        "good_lines_reported": 0,
+        "findings_scored": 11
       },
       "promotion_ready": false,
       "promotion_blocker": "The 96 alert lines are the whole CodeQL command injection tree, which is dominated by sinks these rules never claimed: execa, cross-spawn, ssh2, opener, @actions/exec, promisified exec wrappers, and spawn or execFile argument arrays. 11 alert lines are inside the published scope of cra-javascript-exec-injection, exec or execSync resolved from child_process with the command built by concatenation or template interpolation, and all 11 are covered. Read the covered figure against that 11, not against 96. The tree carries no good-marked lines, so this benchmark measures recall only and gives no false positive signal."
@@ -633,6 +998,7 @@
         "tn": 1674
       },
       "promotion_blocker": "Measures cra-php-command-superglobal only. Precision is far below the promotion bar. Modelled sanitizers are shell escaping, numeric casts and numeric filter_var. Validation by regular expression is deliberately not suppressed because the corpus contains permissive patterns it correctly labels unsafe. Allowlist comparison via in_array is the remaining tractable precision work. Findings on htmlspecialchars, htmlentities and addslashes cases are a deliberate disagreement with the corpus: none of those neutralise shell metacharacters.",
+      "promotion_ready": false,
       "license_note": "The repository carries no LICENSE file. Every generated case embeds its own grant in a header comment: Copyright 2015 Bertrand STIVALET, permission granted without written agreement or royalty fee to use, copy, modify and distribute the software and its documentation for any purpose, provided the copyright notice and disclaimer paragraphs appear in all copies. The corpus is read during scoring and no case is redistributed with this package.",
       "benchmark_type": "sard-folders",
       "scored_rule": "cra-php-command-superglobal"
@@ -646,7 +1012,7 @@
       "directory": "php-sard",
       "typo_variable": "$tained",
       "unassigned_variable": "$sanitized",
-      "label_correction_note": "The corpus labels by directory, safe or unsafe. Two generated shapes carry the wrong label and both are detected mechanically. A safe case that applies its sanitizer to the misspelled variable $tained leaves the tainted value reaching the sink and is scored vulnerable. An unsafe case that reassigns the tainted variable from $sanitized, which it never assigns, kills the taint and is scored safe. 192 of 2496 cases, 7.7 percent, are affected.",
+      "label_correction_note": "The corpus labels by directory, safe or unsafe. One generated shape carries the wrong label in this directory. An unsafe case reassigns the tainted variable from $sanitized, which it never assigns, so the taint is killed and the case is scored safe. 96 of 9552 cases, 1.0 percent, are affected. The misspelled $tained sanitizer shape present in the CWE-78 directory does not occur here.",
       "expected": {
         "files_scanned": 9552,
         "tp": 153,
@@ -655,6 +1021,7 @@
         "tn": 8187
       },
       "promotion_blocker": "Measures cra-php-sql-superglobal-taint only. Precision is far below the promotion bar, and the rule also produces 15 findings on phpMyAdmin production code, so it fails the real-code half of the bar independently. Recall was 0 percent before this measurement because the corpus executes through mysql_query, the legacy extension removed in PHP 7, which the rule did not cover. Escaping functions are deliberately not modelled as sanitizers: see the rule's sanitizer_analysis.",
+      "promotion_ready": false,
       "license_note": "The repository carries no LICENSE file. Every generated case embeds its own grant in a header comment: Copyright 2015 Bertrand STIVALET, permission granted without written agreement or royalty fee to use, copy, modify and distribute the software and its documentation for any purpose, provided the copyright notice and disclaimer paragraphs appear in all copies. The corpus is read during scoring and no case is redistributed with this package.",
       "benchmark_type": "sard-folders",
       "scored_rule": "cra-php-sql-superglobal-taint"
@@ -669,7 +1036,9 @@
       "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
       "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
       "rules_subdir": "csharp/injection",
+      "scored_rule": "cra-csharp-sql-request-taint",
       "source_path": "src/testcases/CWE89_SQL_Injection",
+      "promotion_blocker": "The labelled corpus measurement passes the precision threshold, but the experimental rule matches request and SQL APIs by written name. Exact application-versus-framework ownership is not proven, so the stronger adversarial binding condition remains unsatisfied.",
       "expected": {
         "files_with_bad_finding": 189,
         "findings_in_good_methods": 0,
@@ -688,14 +1057,16 @@
       "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
       "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
       "rules_subdir": "csharp/injection",
+      "scored_rule": "cra-csharp-process-request-taint",
       "source_path": "src/testcases/CWE78_OS_Command_Injection",
+      "promotion_blocker": "The labelled corpus measurement passes the precision threshold, but the experimental rule matches request and process APIs by written name. Exact application-versus-framework ownership is not proven, so the stronger adversarial binding condition remains unsatisfied.",
       "expected": {
         "files_with_bad_finding": 63,
         "findings_in_good_methods": 0,
         "findings_not_attributed": 0
       },
       "promotion_ready": false,
-      "promotion_note": "Measures cra-csharp-process-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The discriminating controls are the Good methods: GoodG2B puts a hardcoded string into the same bad sink and GoodB2G puts the bad source into a safe sink, and both are silent."
+      "promotion_note": "Measures cra-csharp-process-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The directory supplies GoodG2B controls that put a hardcoded string into the same bad sink, and they are silent. It contains no GoodB2G methods, so it does not test bad HTTP input reaching a safe sink."
     },
     {
       "name": "nist-juliet-csharp-cwe23",
@@ -707,14 +1078,16 @@
       "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
       "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
       "rules_subdir": "csharp/path",
+      "scored_rule": "cra-csharp-file-request-taint",
       "source_path": "src/testcases/CWE23_Relative_Path_Traversal",
+      "promotion_blocker": "The labelled corpus measurement passes the precision threshold, but the experimental rule matches request and filesystem APIs by written name. Exact application-versus-framework ownership is not proven, so the stronger adversarial binding condition remains unsatisfied.",
       "expected": {
         "files_with_bad_finding": 63,
         "findings_in_good_methods": 0,
         "findings_not_attributed": 0
       },
       "promotion_ready": false,
-      "promotion_note": "Measures cra-csharp-file-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The discriminating controls are the Good methods: GoodG2B puts a hardcoded string into the same bad sink and GoodB2G puts the bad source into a safe sink, and both are silent."
+      "promotion_note": "Measures cra-csharp-file-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The directory supplies GoodG2B controls that put a hardcoded string into the same bad sink, and they are silent. It contains no GoodB2G methods, so it does not test bad HTTP input reaching a safe sink."
     },
     {
       "name": "nist-juliet-csharp-cwe36",
@@ -726,14 +1099,42 @@
       "archive_sha256": "2e6dbac4741fb020a0b1c2db69e98aed165987df2bd70bd51f7c8c5302c8e8f8",
       "license_note": "Public domain under 17 USC 105; CC0 1.0 for any foreign rights, per the SARD suite page",
       "rules_subdir": "csharp/path",
+      "scored_rule": "cra-csharp-file-request-taint",
       "source_path": "src/testcases/CWE36_Absolute_Path_Traversal",
+      "promotion_blocker": "The labelled corpus measurement passes the precision threshold, but the experimental rule matches request and filesystem APIs by written name. Exact application-versus-framework ownership is not proven, so the stronger adversarial binding condition remains unsatisfied.",
       "expected": {
         "files_with_bad_finding": 63,
         "findings_in_good_methods": 0,
         "findings_not_attributed": 0
       },
       "promotion_ready": false,
-      "promotion_note": "Measures cra-csharp-file-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The discriminating controls are the Good methods: GoodG2B puts a hardcoded string into the same bad sink and GoodB2G puts the bad source into a safe sink, and both are silent."
+      "promotion_note": "Measures cra-csharp-file-request-taint. Every finding lands in a Bad method and none in a Good method. Recall is 63 of the 180 files whose BadSource is an HTTP read; the undetected variants carry the flow across a method or file boundary, which intrafile taint does not follow. The remaining files in this directory take their BadSource from a socket, file, database, console, environment variable or network client, which are not request data and correctly produce nothing. The directory supplies GoodG2B controls that put a hardcoded string into the same bad sink, and they are silent. It contains no GoodB2G methods, so it does not test bad HTTP input reaching a safe sink."
+    },
+    {
+      "name": "eslint-js-no-loss-of-precision",
+      "benchmark_type": "eslint-rule-tester",
+      "source_type": "git",
+      "directory": "eslint-js-precision",
+      "repository": "https://github.com/eslint/eslint.git",
+      "commit": "87f66f4435c4df7f4f6815c939d153196ec03e3c",
+      "license_file": "LICENSE",
+      "source_file": "tests/lib/rules/no-loss-of-precision.js",
+      "rule_path": "cra_evidence_cli/local/rules/javascript/integer/cra-javascript-odd-unsafe-integer-literal.yaml",
+      "scored_rule": "cra-javascript-odd-unsafe-integer-literal",
+      "expected": {
+        "cases_total": 125,
+        "vulnerable_cases": 46,
+        "safe_cases": 79,
+        "tp": 24,
+        "fp": 0,
+        "fn": 22,
+        "tn": 79,
+        "precision": 1.0,
+        "recall": 0.5217391304347826,
+        "engine_errors": 0
+      },
+      "promotion_ready": true,
+      "promotion_note": "The narrow default rule detects only assigned odd integer literals above the binary64 safe-integer boundary. It detects 24 of 46 official invalid cases and none of 79 official valid cases. The remaining invalid cases are outside the declared scope and stay false negatives rather than weakening precision."
     }
   ]
 }

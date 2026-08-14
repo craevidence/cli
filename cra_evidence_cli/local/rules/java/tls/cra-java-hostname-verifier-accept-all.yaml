@@ -5,7 +5,7 @@ rules:
       platform hostname verifier so TLS peers are matched to the requested host.
     severity: WARNING
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-297: Improper Validation of Certificate with Host Mismatch"]
       owasp: ["A02:2021 - Cryptographic Failures"]
       references:
@@ -13,22 +13,24 @@ rules:
         - https://docs.oracle.com/en/java/javase/21/docs/api/java.base/javax/net/ssl/HostnameVerifier.html
       category: security
       technology: [java, tls]
-      confidence: VERY HIGH
+      confidence: MEDIUM
       scope: >
         Detects a verifier that returns the literal value true for every host.
         Two shapes are reported: a lambda whose whole body is true, passed to
         setHostnameVerifier, setDefaultHostnameVerifier, or an OkHttp-style
         hostnameVerifier builder call; and a verify(String, SSLSession) method
-        that ends in return true with no branch and no return false, declared
+        that ends in return true with no rejecting return or throw, declared
         in an anonymous HostnameVerifier or in a class whose only declared
         interface is HostnameVerifier.
       limitations: >
-        A verify method that returns true from inside a branch is not
-        reported, because a branch can be a real host check. Does not evaluate
+        A verify method that returns true only inside a branch is not
+        reported. Does not evaluate
         helper-returned booleans, constant expressions, method references,
         block-bodied lambdas, or verifier behavior distributed across methods
         or files, and does not recognize accept-all verifiers supplied by a
-        library, such as Apache HttpClient NoopHostnameVerifier.
+        library, such as Apache HttpClient NoopHostnameVerifier. Interfaces and
+        callback methods are matched as written rather than resolved, so an
+        application interface named HostnameVerifier can produce a finding.
       license: MIT
       author: CRA Evidence
     languages: [java]
@@ -52,13 +54,13 @@ rules:
           - pattern-not: |
               public boolean verify(String $HOST, $TYPE $SESSION) {
                 ...
-                if (...) { ... }
+                return false;
                 ...
               }
           - pattern-not: |
               public boolean verify(String $HOST, $TYPE $SESSION) {
                 ...
-                return false;
+                throw $EXCEPTION;
                 ...
               }
           - pattern-either:

@@ -2,6 +2,8 @@ package tls
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"net"
 	"net/http"
 )
 
@@ -96,10 +98,10 @@ type peerCertificateMissing struct{}
 
 func (peerCertificateMissing) Error() string { return "no peer certificate" }
 
-// Safe: the standard check is turned off but the configuration installs its own
-// certificate check in the same literal.
-func okInsecureSkipVerifyWithConnectionVerification() *tls.Config {
-	// ok: cra-go-tls-insecure
+// Reported for review: the rule cannot prove that a custom callback performs a
+// complete certificate and hostname check.
+func reportedInsecureSkipVerifyWithConnectionVerification() *tls.Config {
+	// ruleid: cra-go-tls-insecure
 	return &tls.Config{
 		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: true,
@@ -112,18 +114,17 @@ func okInsecureSkipVerifyWithConnectionVerification() *tls.Config {
 	}
 }
 
-// Safe: the same, with the peer check taken from a pinned configuration and
-// installed on the value afterwards.
-func okInsecureSkipVerifyThenPeerVerification(pinned *tls.Config) *tls.Config {
+// Reported for the same reason when a callback is installed afterwards.
+func reportedInsecureSkipVerifyThenPeerVerification(pinned *tls.Config) *tls.Config {
+	// ruleid: cra-go-tls-insecure
 	conf := &tls.Config{MinVersion: tls.VersionTLS12, InsecureSkipVerify: true}
-	// ok: cra-go-tls-insecure
 	conf.VerifyPeerCertificate = pinned.VerifyPeerCertificate
 	return conf
 }
 
-// Safe: the field assignment form followed by a connection check.
-func okInsecureSkipVerifyThenConnectionCheck(conf *tls.Config) {
-	// ok: cra-go-tls-insecure
+// Reported when the field assignment is followed by a callback too.
+func reportedInsecureSkipVerifyThenConnectionCheck(conf *tls.Config) {
+	// ruleid: cra-go-tls-insecure
 	conf.InsecureSkipVerify = true
 	conf.VerifyConnection = func(cs tls.ConnectionState) error {
 		if len(cs.PeerCertificates) == 0 {
@@ -131,4 +132,46 @@ func okInsecureSkipVerifyThenConnectionCheck(conf *tls.Config) {
 		}
 		return nil
 	}
+}
+
+func reportedDirectDialWithConnectionCallback(address string) (*tls.Conn, error) {
+	// ruleid: cra-go-tls-insecure
+	return tls.Dial("tcp", address, &tls.Config{
+		VerifyConnection:   func(tls.ConnectionState) error { return nil },
+		InsecureSkipVerify: true,
+	})
+}
+
+func reportedDirectDialWithPeerCallback(address string) (*tls.Conn, error) {
+	// ruleid: cra-go-tls-insecure
+	return tls.Dial("tcp", address, &tls.Config{
+		InsecureSkipVerify: true,
+		VerifyPeerCertificate: func([][]byte, [][]*x509.Certificate) error {
+			return nil
+		},
+	})
+}
+
+func reportedDialerWithConnectionCallback(
+	dialer *net.Dialer,
+	address string,
+) (*tls.Conn, error) {
+	// ruleid: cra-go-tls-insecure
+	return tls.DialWithDialer(dialer, "tcp", address, &tls.Config{
+		VerifyConnection:   func(tls.ConnectionState) error { return nil },
+		InsecureSkipVerify: true,
+	})
+}
+
+func reportedDialerWithPeerCallback(
+	dialer *net.Dialer,
+	address string,
+) (*tls.Conn, error) {
+	// ruleid: cra-go-tls-insecure
+	return tls.DialWithDialer(dialer, "tcp", address, &tls.Config{
+		InsecureSkipVerify: true,
+		VerifyPeerCertificate: func([][]byte, [][]*x509.Certificate) error {
+			return nil
+		},
+	})
 }

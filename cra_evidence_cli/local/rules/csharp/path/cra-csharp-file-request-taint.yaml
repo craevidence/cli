@@ -5,7 +5,7 @@ rules:
       fixed base directory, canonicalize it, and reject paths outside the base.
     severity: ERROR
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-22: Improper Limitation of a Pathname to a Restricted Directory"]
       owasp: ["A01:2021 - Broken Access Control"]
       references:
@@ -26,10 +26,15 @@ rules:
         Taint is followed within a single file. The stream constructors also
         accept a Stream, so only a path argument carrying request data is
         reported. Flows that cross a method boundary through a field, a helper
-        class, or another file are not reported.
+        class, or another file are not reported. Request collection and file
+        API names are matched as written rather than resolved, so application
+        classes exposing the same member names can produce findings.
       sanitizer_analysis:
-        status: modeled
-        reason: Canonicalized paths are suppressed only after an explicit base-directory containment guard.
+        status: not-modeled
+        reason: >
+          A lexical StartsWith check is not sufficient without canonicalizing
+          both paths, and the engine cannot bind those operations to the later
+          containment guard without suppressing real traversals.
       license: MIT
       author: CRA Evidence
     languages: [csharp]
@@ -69,15 +74,6 @@ rules:
                     ...
                   }
               - focus-metavariable: $PARAM
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $PATH.StartsWith($BASE + Path.DirectorySeparatorChar)
-          - focus-metavariable: $PATH
-          - pattern-inside: |
-              if (!$PATH.StartsWith($BASE + Path.DirectorySeparatorChar)) {
-                return ...;
-              }
-        by-side-effect: true
     pattern-sinks:
       - pattern-either:
           - patterns:

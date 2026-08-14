@@ -54,16 +54,20 @@
 # engine contract, including /grype, /LICENSE and /NOTICE.
 ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340
 
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:4e6d70f6819594aa6210ba629695eaec7e56f72cd1ec0dca22e9cf0699ff01d7
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:fe4ca3638379d1b3fa722e30a4fad0fecf61a2bf21464945bea5cb003f8739af
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656018123b3eaf4f33f71ae902b7
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:8f20a4c351f7d4b8fc89b10d04d6089adac166e14aa4953b301db5b3a3b07ea2
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
 FROM ${BASE_IMAGE_BUILDER} AS builder
 ARG TARGETARCH
 ARG OPENGREP_VERSION=1.26.0
 ARG OPENGREP_COMMIT=1bef4ea4ff3264754132eec823b5b1d8cde3e4ee
+ARG LIBCLANG_VERSION=1:18.1.8-18+b1
+ARG LIBEDIT_VERSION=3.1-20250104-1
+ARG LIBXML2_VERSION=2.12.7+dfsg+really2.9.14-2.1+deb13u3
+ARG LIBZ3_VERSION=4.13.3-1
 
 # Build-time environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -90,6 +94,78 @@ RUN set -eux; \
 # additionally verifies the upstream Sigstore signature before publishing.
 RUN python -c 'import hashlib, json, os, pathlib, re, urllib.request; arch=os.environ["TARGETARCH"]; version=os.environ["OPENGREP_VERSION"]; commit=os.environ["OPENGREP_COMMIT"]; assets={"amd64":("opengrep_manylinux_x86","40c21299eeddabf743b856daa843d24f9d4a027130671cd45b3b21776fd9ab26"),"arm64":("opengrep_manylinux_aarch64","3042a3b1aa98fa93407b9d66a45ab1f179b5b367e76965f56afdbd2c038fb1fa")}; asset,expected=assets[arch]; target=pathlib.Path("/usr/local/bin/opengrep"); urllib.request.urlretrieve(f"https://github.com/opengrep/opengrep/releases/download/v{version}/{asset}", target); content=target.read_bytes(); actual=hashlib.sha256(content).hexdigest(); assert actual == expected, f"Opengrep SHA-256 mismatch: {actual}"; target.chmod(0o755); license_dir=pathlib.Path("/licenses/opengrep"); license_dir.mkdir(parents=True); urllib.request.urlretrieve(f"https://raw.githubusercontent.com/opengrep/opengrep/{commit}/LICENSE", license_dir / "LICENSE"); urllib.request.urlretrieve(f"https://raw.githubusercontent.com/opengrep/opengrep/{commit}/COPYRIGHT", license_dir / "COPYRIGHT"); libraries=sorted({match.group(0)[:-1].decode("ascii") for match in re.finditer(rb"(?:lib[A-Za-z0-9_+.-]+\.(?:so(?:\.[0-9.]+)?|dylib))\x00", content)}); assert libraries, f"no native dependencies found in {asset}"; (license_dir / "NATIVE-DEPENDENCIES.json").write_text(json.dumps({asset:libraries}, indent=2, sort_keys=True)+"\n", encoding="utf-8"); (license_dir / "NOTICE").write_text(f"This product includes Opengrep {version}, licensed under the GNU Lesser General Public License version 2.1. Source commit: {commit}. The upstream repository is https://github.com/opengrep/opengrep. The matching CRA Evidence CLI GitHub release includes opengrep-{version}-source.tar.gz with the pinned build-source modules. Upstream copyright notices and the native dependency inventory accompany this notice.\n", encoding="utf-8")'
 RUN opengrep --version | grep -F "${OPENGREP_VERSION}" >/dev/null
+
+# Install the exact Debian 13 libclang frontend and build a runtime subset.
+# The final image receives only the frontend libraries, required headers,
+# package identity records, and copyright files. It does not receive apt,
+# dpkg, a compiler driver, a linker, or a shell.
+RUN set -eux; \
+    gcc_version="$(dpkg-query -W -f='${Version}' gcc-14-base)"; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      "libclang1-18=${LIBCLANG_VERSION}" \
+      "libllvm18=${LIBCLANG_VERSION}" \
+      "libclang-common-18-dev=${LIBCLANG_VERSION}" \
+      "libstdc++-14-dev=${gcc_version}" \
+      "libedit2=${LIBEDIT_VERSION}" \
+      "libxml2=${LIBXML2_VERSION}" \
+      "libz3-4=${LIBZ3_VERSION}"; \
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    architecture="$(dpkg-query -W -f='${Architecture}' libc6)"; \
+    case "${architecture}" in \
+      amd64) triple=x86_64-linux-gnu ;; \
+      arm64) triple=aarch64-linux-gnu ;; \
+      *) printf 'Unsupported Debian architecture: %s\n' "${architecture}" >&2; exit 1 ;; \
+    esac; \
+    runtime_root=/semantic-runtime; \
+    mkdir -p "${runtime_root}" "${runtime_root}/licenses/semantic"; \
+    header_packages="libclang-common-18-dev libstdc++-14-dev libc6-dev linux-libc-dev"; \
+    runtime_packages="libclang1-18 libllvm18 libedit2 libxml2 libz3-4 libbsd0 libmd0"; \
+    for package in ${header_packages}; do \
+      dpkg-query -L "${package}" | while IFS= read -r path; do \
+        case "${path}" in \
+          /usr/include/*|/usr/lib/llvm-18/lib/clang/18/include/*) \
+            if [ -f "${path}" ] || [ -L "${path}" ]; then \
+              relative="${path#/}"; \
+              (cd / && cp -a --parents "${relative}" "${runtime_root}"); \
+            fi \
+            ;; \
+        esac; \
+      done; \
+    done; \
+    for package in ${runtime_packages}; do \
+      dpkg-query -L "${package}" | while IFS= read -r path; do \
+        case "${path}" in \
+          /lib/${triple}/*.so*|/usr/lib/${triple}/*.so*) \
+            if [ -f "${path}" ] || [ -L "${path}" ]; then \
+              relative="${path#/}"; \
+              (cd / && cp -a --parents "${relative}" "${runtime_root}"); \
+            fi \
+            ;; \
+        esac; \
+      done; \
+    done; \
+    : > "${runtime_root}/licenses/semantic/DPKG-STATUS"; \
+    for package in ${header_packages} ${runtime_packages}; do \
+      dpkg-query -s "${package}" >> "${runtime_root}/licenses/semantic/DPKG-STATUS"; \
+      printf '\n' >> "${runtime_root}/licenses/semantic/DPKG-STATUS"; \
+      copyright="/usr/share/doc/${package}/copyright"; \
+      test -e "${copyright}"; \
+      cp -L "${copyright}" "${runtime_root}/licenses/semantic/${package}-copyright"; \
+    done; \
+    dpkg-query -W -f='${Package} ${Version} ${Architecture}\n' \
+      ${header_packages} ${runtime_packages} \
+      > "${runtime_root}/licenses/semantic/PACKAGES"; \
+    printf '%s\n' \
+      'This image includes a build-free C and C++ semantic evidence frontend.' \
+      'Package identities and Debian copyright notices are stored in this directory.' \
+      > "${runtime_root}/licenses/semantic/NOTICE"; \
+    test -e "${runtime_root}/usr/lib/${triple}/libclang-18.so.18"; \
+    test -e "${runtime_root}/usr/lib/${triple}/libLLVM-18.so.18.1"; \
+    test -d "${runtime_root}/usr/lib/llvm-18/lib/clang/18/include"; \
+    test -d "${runtime_root}/usr/include/c++/14"
 
 # Create virtual environment for clean dependency isolation
 RUN python -m venv /opt/venv
@@ -136,14 +212,15 @@ ARG SECURITY_NO_PACKAGE_MANAGER="true"
 
 # OCI Image Labels for CRA compliance and traceability.
 # MIT is the CLI license, Apache-2.0 covers Grype and its embedded Syft library,
-# and LGPL-2.1-only covers the redistributed Opengrep executable.
+# LGPL-2.1-only covers Opengrep, and the semantic frontend notices record
+# LLVM, GCC runtime exception, libc, Linux headers, and support-library terms.
 LABEL org.opencontainers.image.title="CRA Evidence CLI" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
       org.opencontainers.image.vendor="CRA Evidence" \
       org.opencontainers.image.url="https://craevidence.com" \
       org.opencontainers.image.documentation="https://github.com/craevidence/cli/tree/main/docs" \
       org.opencontainers.image.source="https://github.com/craevidence/cli" \
-      org.opencontainers.image.licenses="MIT AND Apache-2.0 AND LGPL-2.1-only" \
+      org.opencontainers.image.licenses="MIT AND Apache-2.0 AND LGPL-2.1-only AND (Apache-2.0 WITH LLVM-exception) AND (GPL-3.0-or-later WITH GCC-exception-3.1) AND LGPL-2.1-or-later AND (GPL-2.0-only WITH Linux-syscall-note) AND BSD-3-Clause" \
       org.opencontainers.image.base.name="${BASE_IMAGE_NAME}" \
       org.opencontainers.image.python.version="3.14" \
       eu.cra.security.hardened="${SECURITY_HARDENED}" \
@@ -172,8 +249,22 @@ COPY --from=builder /usr/local/bin/opengrep /usr/local/bin/opengrep
 # Third-party LICENSE and NOTICE files for redistributed Apache-2.0 binaries
 COPY --from=builder /licenses /licenses
 
+# Copy the compiler frontend subset without adding a package manager, shell,
+# compiler driver, linker, or project build tool to the runtime image.
+COPY --from=builder /semantic-runtime/ /
+
+# Merge the copied packages into the runtime inventory so SBOM and
+# vulnerability scanners see every redistributed frontend component. Existing
+# packages must have the same exact version or the build fails.
+USER 0:0
+RUN ["python", "-c", "from pathlib import Path; base=Path('/var/lib/dpkg/status'); extra=Path('/licenses/semantic/DPKG-STATUS'); stanzas=lambda text:[item for item in text.strip().split('\\n\\n') if item]; field=lambda item,name:next(line[len(name)+2:] for line in item.splitlines() if line.startswith(name+': ')); current=stanzas(base.read_text(encoding='utf-8')); incoming=stanzas(extra.read_text(encoding='utf-8')); key=lambda item:(field(item,'Package'),field(item,'Architecture')); versions={key(item):field(item,'Version') for item in current}; conflicts=[(key(item),versions[key(item)],field(item,'Version')) for item in incoming if key(item) in versions and versions[key(item)]!=field(item,'Version')]; assert not conflicts, f'package inventory version conflict: {conflicts}'; additions=[item for item in incoming if key(item) not in versions]; base.write_text('\\n\\n'.join(current+additions)+'\\n', encoding='utf-8')"]
+USER 1001:1001
+
 # Copy CA certificates for HTTPS connections
 COPY --from=builder --chown=1001:1001 /build/ssl /app/ssl
+
+# Verify the final distroless runtime can load both exact semantic profiles.
+RUN ["python", "-c", "from cra_evidence_cli.local.c_semantic_analyzer import inspect_c_frontend; c=inspect_c_frontend('c'); cpp=inspect_c_frontend('cpp'); assert c['profile']=='libclang-18.1.8-debian13-c17-security-evidence-v2'; assert cpp['profile']=='libclang-18.1.8-debian13-cpp17-security-evidence-v2'"]
 
 # Explicit non-root user directive (UID 1001 - DHI default)
 USER 1001:1001

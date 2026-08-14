@@ -7,25 +7,44 @@ from pathlib import Path
 
 import yaml
 
-PACK_VERSION = "3.0.0"
+PACK_VERSION = "4.3.0"
 TESTED_OPENGREP_VERSION = "1.26.0"
 
 VALID_RULE_TIERS = frozenset({"default", "experimental"})
+VALID_SEMANTIC_POLICIES = frozenset(
+    {
+        "csharp.framework-dangerous-certificate-validator",
+        "csharp.framework-md5-create",
+        "c.fixed-array-literal-oob-write",
+        "c.printf-main-argv-format",
+        "c.system-main-argv-command",
+        "cpp.fixed-array-literal-oob-write",
+        "cpp.printf-main-argv-format",
+        "cpp.system-main-argv-command",
+        "java.jdk-message-digest-get-instance",
+        "rust.cratesio-reqwest-invalid-certs",
+    }
+)
+VALID_SEMANTIC_CANDIDATE_RANGES = frozenset({"result"})
+
+
+@dataclass(frozen=True)
+class SemanticRulePolicy:
+    language: str
+    policy: str
+    candidate_range: str
 
 
 @dataclass(frozen=True)
 class RulePackInventory:
     rule_tiers: dict[str, str]
     rule_languages: dict[str, str]
+    semantic_policies: dict[str, SemanticRulePolicy]
 
     @property
     def experimental_rule_ids(self) -> tuple[str, ...]:
         return tuple(
-            sorted(
-                rule_id
-                for rule_id, tier in self.rule_tiers.items()
-                if tier == "experimental"
-            )
+            sorted(rule_id for rule_id, tier in self.rule_tiers.items() if tier == "experimental")
         )
 
     @property
@@ -69,6 +88,7 @@ class RulePackInventory:
 def inspect_rule_pack(rules_root: Path) -> RulePackInventory:
     rule_tiers: dict[str, str] = {}
     rule_languages: dict[str, str] = {}
+    semantic_policies: dict[str, SemanticRulePolicy] = {}
     for rule_path in sorted(rules_root.rglob("*.yaml")):
         document = yaml.safe_load(rule_path.read_text(encoding="utf-8"))
         rules = document.get("rules") if isinstance(document, dict) else None
@@ -85,6 +105,27 @@ def inspect_rule_pack(rules_root: Path) -> RulePackInventory:
         if rule_id in rule_tiers:
             message = f"duplicate bundled rule id: {rule_id}"
             raise ValueError(message)
+        language = rule_path.relative_to(rules_root).parts[0]
+        semantic = metadata.get("semantic_evidence")
+        if semantic is not None:
+            if not isinstance(semantic, dict) or semantic.get("required") is not True:
+                message = f"invalid bundled semantic evidence metadata: {rule_path}"
+                raise ValueError(message)
+            semantic_language = semantic.get("language")
+            policy = semantic.get("policy")
+            candidate_range = semantic.get("candidate_range")
+            if (
+                semantic_language != language
+                or policy not in VALID_SEMANTIC_POLICIES
+                or candidate_range not in VALID_SEMANTIC_CANDIDATE_RANGES
+            ):
+                message = f"invalid bundled semantic evidence policy: {rule_path}"
+                raise ValueError(message)
+            semantic_policies[rule_id] = SemanticRulePolicy(
+                language=semantic_language,
+                policy=policy,
+                candidate_range=candidate_range,
+            )
         rule_tiers[rule_id] = tier
-        rule_languages[rule_id] = rule_path.relative_to(rules_root).parts[0]
-    return RulePackInventory(rule_tiers, rule_languages)
+        rule_languages[rule_id] = language
+    return RulePackInventory(rule_tiers, rule_languages, semantic_policies)

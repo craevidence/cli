@@ -9,6 +9,8 @@ import tarfile
 import zipfile
 from pathlib import Path
 
+import pytest
+
 _MODULE_PATH = Path(__file__).resolve().parent.parent / "scripts" / "check_dist.py"
 _spec = importlib.util.spec_from_file_location("check_dist", _MODULE_PATH)
 check_dist = importlib.util.module_from_spec(_spec)
@@ -109,6 +111,25 @@ def test_engine_free_sdist_check_rejects_bundled_engine():
 
     assert len(errors) == 1
     assert engine_path in errors[0]
+
+
+def test_semantic_evidence_assets_are_required_exactly_once():
+    valid = [
+        f"craevidence-4.2.0/{suffix}"
+        for suffix in check_dist.SEMANTIC_ASSET_SUFFIXES
+    ]
+
+    assert check_dist._check_semantic_assets("artifact", valid) == []
+
+    missing = check_dist._check_semantic_assets("artifact", valid[:-1])
+    assert len(missing) == 1
+    assert check_dist.SEMANTIC_ASSET_SUFFIXES[-1] in missing[0]
+
+    duplicated = check_dist._check_semantic_assets(
+        "artifact", [*valid, valid[0]]
+    )
+    assert len(duplicated) == 1
+    assert check_dist.SEMANTIC_ASSET_SUFFIXES[0] in duplicated[0]
 
 
 def test_wheel_size_release_limit_is_enforced(tmp_path):
@@ -350,7 +371,12 @@ def _generator_notice_template() -> str:
         / "scripts"
         / "fetch_opengrep_release.py"
     ).read_text(encoding="utf-8")
+    return _notice_template_from_source(source)
+
+
+def _notice_template_from_source(source: str) -> str:
     tree = ast.parse(source)
+    notice_writes = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -362,10 +388,18 @@ def _generator_notice_template() -> str:
             continue
         if not isinstance(target.right, ast.Constant) or target.right.value != "NOTICE":
             continue
-        if not node.args:
-            continue
+        notice_writes.append(node)
+    if len(notice_writes) != 1:
+        msg = f"expected exactly one NOTICE write, found {len(notice_writes)}"
+        raise AssertionError(msg)
+    node = notice_writes[0]
+    target = node.func.value
+    if not isinstance(target.left, ast.Name) or target.left.id != "out_dir":
+        msg = "NOTICE must be written to out_dir / 'NOTICE'"
+        raise AssertionError(msg)
+    if node.args:
         return _render_joined_string(node.args[0])
-    msg = "could not locate the NOTICE write in fetch_opengrep_release.py"
+    msg = "NOTICE write has no text argument"
     raise AssertionError(msg)
 
 
@@ -394,3 +428,22 @@ def _render_joined_string(node: ast.AST) -> str:
 
 def test_notice_template_matches_the_release_fetcher():
     assert _generator_notice_template() == check_dist.OPENGREP_NOTICE_TEMPLATE
+
+
+def test_notice_template_rejects_duplicate_notice_writes():
+    source = """
+def write(out_dir):
+    (out_dir / "NOTICE").write_text("first")
+    (out_dir / "NOTICE").write_text("second")
+"""
+    with pytest.raises(AssertionError, match="exactly one NOTICE write"):
+        _notice_template_from_source(source)
+
+
+def test_notice_template_rejects_an_alternate_target():
+    source = """
+def write(other_dir):
+    (other_dir / "NOTICE").write_text("text")
+"""
+    with pytest.raises(AssertionError, match="out_dir"):
+        _notice_template_from_source(source)

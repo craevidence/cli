@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://craevidence.com/schemas/java-semantic-evidence-v1.json",
+  "title": "CRA Evidence Java semantic evidence envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "language", "adapter", "isolation", "source", "analysis"],
+  "properties": {
+    "schema_version": {"const": "craevidence.java_semantic_evidence.v1"},
+    "language": {"const": "java"},
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "analyzer_sha256", "java_version", "java_executable_sha256", "arguments"],
+      "properties": {
+        "profile": {"const": "jdk-compiler-api-java-symbols-v1"},
+        "analyzer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "java_version": {"type": "string", "minLength": 1},
+        "java_executable_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "arguments": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "isolation": {
+      "const": {
+        "build_scripts_executed": false,
+        "annotation_processing": false,
+        "class_path": "empty",
+        "source_path": "empty",
+        "implicit_compilation": false
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tree_sha256", "files"],
+      "properties": {
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "mode", "sha256"],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\).+\\.java$"
+              },
+              "mode": {"type": "integer", "minimum": 0, "maximum": 4095},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            }
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compiler_exit_code", "error_count", "compiler_options", "profile_sha256", "occurrences"],
+      "properties": {
+        "compiler_exit_code": {"const": 0},
+        "error_count": {"const": 0},
+        "compiler_options": {
+          "const": ["-proc:none", "-implicit:none", "empty-class-path", "empty-source-path"]
+        },
+        "profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "occurrences": {
+          "type": "array",
+          "maxItems": 2000000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "start_line",
+              "start_column",
+              "end_line",
+              "end_column",
+              "module",
+              "package",
+              "qualified_name",
+              "binary_name",
+              "nesting",
+              "method",
+              "first_parameter"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\).+\\.java$"
+              },
+              "start_line": {"type": "integer", "minimum": 1},
+              "start_column": {"type": "integer", "minimum": 1},
+              "end_line": {"type": "integer", "minimum": 1},
+              "end_column": {"type": "integer", "minimum": 1},
+              "module": {"type": "string"},
+              "package": {"type": "string"},
+              "qualified_name": {"type": "string", "minLength": 1},
+              "binary_name": {"type": "string", "minLength": 1},
+              "nesting": {"type": "string", "minLength": 1},
+              "method": {"type": "string", "minLength": 1},
+              "first_parameter": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      }
+    }
+  }
+}

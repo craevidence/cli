@@ -1,6 +1,6 @@
 {
-  "files_scanned": 103,
-  "finding_count": 576,
+  "files_scanned": 117,
+  "finding_count": 647,
   "findings": [
     {
       "end": [
@@ -25,6 +25,19 @@
       "severity": "ERROR",
       "start": [
         7,
+        5
+      ]
+    },
+    {
+      "end": [
+        8,
+        31
+      ],
+      "path": "c/memory/cra-c-fixed-array-literal-oob-write.c",
+      "rule_id": "cra-c-fixed-array-literal-oob-write",
+      "severity": "ERROR",
+      "start": [
+        8,
         5
       ]
     },
@@ -194,6 +207,19 @@
       "severity": "ERROR",
       "start": [
         7,
+        5
+      ]
+    },
+    {
+      "end": [
+        8,
+        44
+      ],
+      "path": "cpp/memory/cra-cpp-fixed-array-literal-oob-write.cpp",
+      "rule_id": "cra-cpp-fixed-array-literal-oob-write",
+      "severity": "ERROR",
+      "start": [
+        8,
         5
       ]
     },
@@ -420,40 +446,53 @@
     },
     {
       "end": [
-        22,
-        44
+        21,
+        103
       ],
       "path": "csharp/deserialization/cra-csharp-binaryformatter-deserialize.cs",
       "rule_id": "cra-csharp-binaryformatter-deserialize",
       "severity": "ERROR",
       "start": [
-        22,
+        21,
         16
       ]
     },
     {
       "end": [
         27,
+        44
+      ],
+      "path": "csharp/deserialization/cra-csharp-binaryformatter-deserialize.cs",
+      "rule_id": "cra-csharp-binaryformatter-deserialize",
+      "severity": "ERROR",
+      "start": [
+        27,
+        16
+      ]
+    },
+    {
+      "end": [
+        32,
         105
       ],
       "path": "csharp/deserialization/cra-csharp-binaryformatter-deserialize.cs",
       "rule_id": "cra-csharp-binaryformatter-deserialize",
       "severity": "ERROR",
       "start": [
-        27,
+        32,
         16
       ]
     },
     {
       "end": [
-        33,
+        38,
         44
       ],
       "path": "csharp/deserialization/cra-csharp-binaryformatter-deserialize.cs",
       "rule_id": "cra-csharp-binaryformatter-deserialize",
       "severity": "ERROR",
       "start": [
-        33,
+        38,
         16
       ]
     },
@@ -563,6 +602,45 @@
     },
     {
       "end": [
+        9,
+        123
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-certificate-callback-accept-all",
+      "severity": "ERROR",
+      "start": [
+        9,
+        9
+      ]
+    },
+    {
+      "end": [
+        33,
+        119
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-certificate-callback-accept-all",
+      "severity": "ERROR",
+      "start": [
+        33,
+        13
+      ]
+    },
+    {
+      "end": [
+        67,
+        127
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-certificate-callback-accept-all",
+      "severity": "ERROR",
+      "start": [
+        67,
+        13
+      ]
+    },
+    {
+      "end": [
         14,
         37
       ],
@@ -615,6 +693,19 @@
     },
     {
       "end": [
+        48,
+        37
+      ],
+      "path": "csharp/path/cra-csharp-file-request-taint.cs",
+      "rule_id": "cra-csharp-file-request-taint",
+      "severity": "ERROR",
+      "start": [
+        48,
+        33
+      ]
+    },
+    {
+      "end": [
         57,
         47
       ],
@@ -663,6 +754,149 @@
       "start": [
         83,
         37
+      ]
+    },
+    {
+      "end": [
+        16,
+        123
+      ],
+      "path": "csharp/tls/cra-csharp-certificate-callback-accept-all.cs",
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "severity": "ERROR",
+      "start": [
+        16,
+        9
+      ]
+    },
+    {
+      "end": [
+        34,
+        146
+      ],
+      "path": "csharp/tls/cra-csharp-certificate-callback-accept-all.cs",
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "severity": "ERROR",
+      "start": [
+        34,
+        40
+      ]
+    },
+    {
+      "end": [
+        9,
+        123
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "severity": "ERROR",
+      "start": [
+        9,
+        9
+      ]
+    },
+    {
+      "end": [
+        17,
+        139
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "severity": "ERROR",
+      "start": [
+        17,
+        9
+      ]
+    },
+    {
+      "end": [
+        25,
+        147
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "severity": "ERROR",
+      "start": [
+        25,
+        9
+      ]
+    },
+    {
+      "end": [
+        33,
+        119
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "severity": "ERROR",
+      "start": [
+        33,
+        13
+      ]
+    },
+    {
+      "end": [
+        67,
+        127
+      ],
+      "path": "csharp/tls/cra-csharp-framework-dangerous-certificate-validator.cs",
+      "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
+      "severity": "ERROR",
+      "start": [
+        67,
+        13
+      ]
+    },
+    {
+      "end": [
+        6,
+        28
+      ],
+      "path": "csharp/crypto/cra-csharp-framework-md5-create.cs",
+      "rule_id": "cra-csharp-framework-md5-create",
+      "severity": "WARNING",
+      "start": [
+        6,
+        16
+      ]
+    },
+    {
+      "end": [
+        11,
+        57
+      ],
+      "path": "csharp/crypto/cra-csharp-framework-md5-create.cs",
+      "rule_id": "cra-csharp-framework-md5-create",
+      "severity": "WARNING",
+      "start": [
+        11,
+        16
+      ]
+    },
+    {
+      "end": [
+        16,
+        65
+      ],
+      "path": "csharp/crypto/cra-csharp-framework-md5-create.cs",
+      "rule_id": "cra-csharp-framework-md5-create",
+      "severity": "WARNING",
+      "start": [
+        16,
+        16
+      ]
+    },
+    {
+      "end": [
+        33,
+        32
+      ],
+      "path": "csharp/crypto/cra-csharp-framework-md5-create.cs",
+      "rule_id": "cra-csharp-framework-md5-create",
+      "severity": "WARNING",
+      "start": [
+        33,
+        20
       ]
     },
     {
@@ -915,7 +1149,7 @@
     {
       "end": [
         9,
-        28
+        29
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
@@ -928,7 +1162,7 @@
     {
       "end": [
         14,
-        29
+        43
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
@@ -941,7 +1175,7 @@
     {
       "end": [
         19,
-        57
+        35
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
@@ -954,7 +1188,7 @@
     {
       "end": [
         24,
-        43
+        36
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
@@ -967,7 +1201,7 @@
     {
       "end": [
         29,
-        35
+        69
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
@@ -980,78 +1214,52 @@
     {
       "end": [
         34,
-        36
+        46
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
       "severity": "WARNING",
       "start": [
         34,
-        16
-      ]
-    },
-    {
-      "end": [
-        39,
-        69
-      ],
-      "path": "csharp/crypto/cra-csharp-weak-hash.cs",
-      "rule_id": "cra-csharp-weak-hash",
-      "severity": "WARNING",
-      "start": [
-        39,
-        16
-      ]
-    },
-    {
-      "end": [
-        44,
-        46
-      ],
-      "path": "csharp/crypto/cra-csharp-weak-hash.cs",
-      "rule_id": "cra-csharp-weak-hash",
-      "severity": "WARNING",
-      "start": [
-        44,
         22
       ]
     },
     {
       "end": [
-        49,
+        39,
         36
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
       "severity": "WARNING",
       "start": [
-        49,
+        39,
         16
       ]
     },
     {
       "end": [
-        54,
+        44,
         33
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
       "severity": "WARNING",
       "start": [
-        54,
+        44,
         16
       ]
     },
     {
       "end": [
-        59,
+        49,
         46
       ],
       "path": "csharp/crypto/cra-csharp-weak-hash.cs",
       "rule_id": "cra-csharp-weak-hash",
       "severity": "WARNING",
       "start": [
-        59,
+        49,
         16
       ]
     },
@@ -1148,216 +1356,203 @@
     },
     {
       "end": [
-        16,
+        24,
         17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        15,
-        2
-      ]
-    },
-    {
-      "end": [
         23,
+        2
+      ]
+    },
+    {
+      "end": [
+        31,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        22,
-        2
-      ]
-    },
-    {
-      "end": [
         30,
+        2
+      ]
+    },
+    {
+      "end": [
+        38,
         17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        29,
-        2
-      ]
-    },
-    {
-      "end": [
         37,
+        2
+      ]
+    },
+    {
+      "end": [
+        45,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        36,
+        44,
         2
       ]
     },
     {
       "end": [
-        47,
+        55,
         17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        43,
+        51,
         2
       ]
     },
     {
       "end": [
-        57,
+        65,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        53,
+        61,
         2
       ]
     },
     {
       "end": [
-        67,
+        75,
         17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        63,
-        2
-      ]
-    },
-    {
-      "end": [
-        78,
-        17
-      ],
-      "path": "go/integer/cra-go-parseint-downcast.go",
-      "rule_id": "cra-go-parseint-downcast",
-      "severity": "WARNING",
-      "start": [
-        73,
+        71,
         2
       ]
     },
     {
       "end": [
         86,
-        18
-      ],
-      "path": "go/integer/cra-go-parseint-downcast.go",
-      "rule_id": "cra-go-parseint-downcast",
-      "severity": "WARNING",
-      "start": [
-        85,
-        3
-      ]
-    },
-    {
-      "end": [
-        98,
-        3
-      ],
-      "path": "go/integer/cra-go-parseint-downcast.go",
-      "rule_id": "cra-go-parseint-downcast",
-      "severity": "WARNING",
-      "start": [
-        95,
-        2
-      ]
-    },
-    {
-      "end": [
-        110,
         17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
+        81,
+        2
+      ]
+    },
+    {
+      "end": [
+        94,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        93,
+        3
+      ]
+    },
+    {
+      "end": [
         106,
-        2
-      ]
-    },
-    {
-      "end": [
-        120,
         3
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        117,
+        103,
         2
       ]
     },
     {
       "end": [
-        132,
+        118,
         17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
+        114,
+        2
+      ]
+    },
+    {
+      "end": [
         128,
+        3
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        125,
         2
       ]
     },
     {
       "end": [
-        139,
+        140,
         17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        138,
+        136,
         2
       ]
     },
     {
       "end": [
+        147,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
         146,
+        2
+      ]
+    },
+    {
+      "end": [
+        154,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        145,
-        2
-      ]
-    },
-    {
-      "end": [
         153,
-        17
-      ],
-      "path": "go/integer/cra-go-parseint-downcast.go",
-      "rule_id": "cra-go-parseint-downcast",
-      "severity": "WARNING",
-      "start": [
-        152,
         2
       ]
     },
     {
       "end": [
-        163,
-        3
+        161,
+        17
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
@@ -1369,79 +1564,144 @@
     },
     {
       "end": [
-        173,
+        171,
         3
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        170,
+        168,
         2
       ]
     },
     {
       "end": [
-        183,
+        181,
         3
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        180,
+        178,
         2
       ]
     },
     {
       "end": [
-        381,
+        191,
+        3
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        188,
+        2
+      ]
+    },
+    {
+      "end": [
+        330,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        377,
+        326,
         2
       ]
     },
     {
       "end": [
-        395,
+        340,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        391,
+        336,
+        2
+      ]
+    },
+    {
+      "end": [
+        351,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        347,
+        2
+      ]
+    },
+    {
+      "end": [
+        362,
+        17
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        358,
+        2
+      ]
+    },
+    {
+      "end": [
+        412,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        408,
+        2
+      ]
+    },
+    {
+      "end": [
+        426,
+        18
+      ],
+      "path": "go/integer/cra-go-parseint-downcast.go",
+      "rule_id": "cra-go-parseint-downcast",
+      "severity": "WARNING",
+      "start": [
+        422,
         3
       ]
     },
     {
       "end": [
-        410,
+        441,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        406,
+        437,
         2
       ]
     },
     {
       "end": [
-        423,
+        454,
         18
       ],
       "path": "go/integer/cra-go-parseint-downcast.go",
       "rule_id": "cra-go-parseint-downcast",
       "severity": "WARNING",
       "start": [
-        419,
+        450,
         2
       ]
     },
@@ -1525,54 +1785,288 @@
     },
     {
       "end": [
-        14,
+        46,
+        71
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        46,
+        50
+      ]
+    },
+    {
+      "end": [
+        51,
+        66
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        51,
+        45
+      ]
+    },
+    {
+      "end": [
+        56,
+        60
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        56,
+        39
+      ]
+    },
+    {
+      "end": [
+        61,
+        73
+      ],
+      "path": "go/injection/cra-go-shell-command-injection.go",
+      "rule_id": "cra-go-shell-command-injection",
+      "severity": "ERROR",
+      "start": [
+        61,
+        52
+      ]
+    },
+    {
+      "end": [
+        9,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-direct-dial-insecure-alias.go",
+      "rule_id": "cra-go-tls-direct-dial-insecure",
+      "severity": "ERROR",
+      "start": [
+        7,
+        9
+      ]
+    },
+    {
+      "end": [
+        11,
+        72
+      ],
+      "path": "go/tls/cra-go-tls-direct-dial-insecure.go",
+      "rule_id": "cra-go-tls-direct-dial-insecure",
+      "severity": "ERROR",
+      "start": [
+        11,
+        9
+      ]
+    },
+    {
+      "end": [
+        21,
+        3
+      ],
+      "path": "go/tls/cra-go-tls-direct-dial-insecure.go",
+      "rule_id": "cra-go-tls-direct-dial-insecure",
+      "severity": "ERROR",
+      "start": [
+        16,
+        9
+      ]
+    },
+    {
+      "end": [
+        45,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-direct-dial-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        31,
+        9
+      ]
+    },
+    {
+      "end": [
+        53,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-direct-dial-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        50,
+        9
+      ]
+    },
+    {
+      "end": [
+        65,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-direct-dial-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        62,
+        9
+      ]
+    },
+    {
+      "end": [
+        77,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-direct-dial-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        74,
+        9
+      ]
+    },
+    {
+      "end": [
+        16,
         4
       ],
       "path": "go/tls/cra-go-tls-insecure.go",
       "rule_id": "cra-go-tls-insecure",
       "severity": "ERROR",
       "start": [
-        12,
+        14,
         21
       ]
     },
     {
       "end": [
-        22,
+        24,
         76
       ],
       "path": "go/tls/cra-go-tls-insecure.go",
       "rule_id": "cra-go-tls-insecure",
       "severity": "ERROR",
       "start": [
-        22,
+        24,
         10
       ]
     },
     {
       "end": [
-        29,
+        31,
         32
       ],
       "path": "go/tls/cra-go-tls-insecure.go",
       "rule_id": "cra-go-tls-insecure",
       "severity": "ERROR",
       "start": [
-        29,
+        31,
         2
       ]
     },
     {
       "end": [
-        37,
+        39,
         32
       ],
       "path": "go/tls/cra-go-tls-insecure.go",
       "rule_id": "cra-go-tls-insecure",
       "severity": "ERROR",
       "start": [
-        37,
+        39,
         2
+      ]
+    },
+    {
+      "end": [
+        114,
+        3
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        105,
+        10
+      ]
+    },
+    {
+      "end": [
+        120,
+        77
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        120,
+        11
+      ]
+    },
+    {
+      "end": [
+        128,
+        32
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        128,
+        2
+      ]
+    },
+    {
+      "end": [
+        142,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        139,
+        9
+      ]
+    },
+    {
+      "end": [
+        152,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        147,
+        9
+      ]
+    },
+    {
+      "end": [
+        163,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        160,
+        9
+      ]
+    },
+    {
+      "end": [
+        176,
+        4
+      ],
+      "path": "go/tls/cra-go-tls-insecure.go",
+      "rule_id": "cra-go-tls-insecure",
+      "severity": "ERROR",
+      "start": [
+        171,
+        9
       ]
     },
     {
@@ -1720,6 +2214,32 @@
     },
     {
       "end": [
+        64,
+        20
+      ],
+      "path": "go/concurrency/cra-go-wrong-lock-unlock.go",
+      "rule_id": "cra-go-wrong-lock-unlock",
+      "severity": "ERROR",
+      "start": [
+        60,
+        2
+      ]
+    },
+    {
+      "end": [
+        74,
+        19
+      ],
+      "path": "go/concurrency/cra-go-wrong-lock-unlock.go",
+      "rule_id": "cra-go-wrong-lock-unlock",
+      "severity": "ERROR",
+      "start": [
+        70,
+        2
+      ]
+    },
+    {
+      "end": [
         14,
         29
       ],
@@ -1824,41 +2344,106 @@
     },
     {
       "end": [
-        23,
+        29,
+        6
+      ],
+      "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
+      "rule_id": "cra-java-hostname-verifier-accept-all",
+      "severity": "WARNING",
+      "start": [
+        24,
+        5
+      ]
+    },
+    {
+      "end": [
+        35,
         64
       ],
       "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
       "rule_id": "cra-java-hostname-verifier-accept-all",
       "severity": "WARNING",
       "start": [
-        23,
+        35,
         9
       ]
     },
     {
       "end": [
-        35,
+        47,
         83
       ],
       "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
       "rule_id": "cra-java-hostname-verifier-accept-all",
       "severity": "WARNING",
       "start": [
-        35,
+        47,
         9
       ]
     },
     {
       "end": [
-        43,
+        55,
         14
       ],
       "path": "java/tls/cra-java-hostname-verifier-accept-all.java",
       "rule_id": "cra-java-hostname-verifier-accept-all",
       "severity": "WARNING",
       "start": [
-        41,
+        53,
         13
+      ]
+    },
+    {
+      "end": [
+        12,
+        48
+      ],
+      "path": "java/crypto/cra-java-jdk-weak-message-digest-literal-shadow.java",
+      "rule_id": "cra-java-jdk-weak-message-digest-literal",
+      "severity": "WARNING",
+      "start": [
+        12,
+        16
+      ]
+    },
+    {
+      "end": [
+        7,
+        48
+      ],
+      "path": "java/crypto/cra-java-jdk-weak-message-digest-literal.java",
+      "rule_id": "cra-java-jdk-weak-message-digest-literal",
+      "severity": "WARNING",
+      "start": [
+        7,
+        16
+      ]
+    },
+    {
+      "end": [
+        12,
+        64
+      ],
+      "path": "java/crypto/cra-java-jdk-weak-message-digest-literal.java",
+      "rule_id": "cra-java-jdk-weak-message-digest-literal",
+      "severity": "WARNING",
+      "start": [
+        12,
+        16
+      ]
+    },
+    {
+      "end": [
+        17,
+        35
+      ],
+      "path": "java/crypto/cra-java-jdk-weak-message-digest-literal.java",
+      "rule_id": "cra-java-jdk-weak-message-digest-literal",
+      "severity": "WARNING",
+      "start": [
+        17,
+        16
       ]
     },
     {
@@ -2019,6 +2604,58 @@
     },
     {
       "end": [
+        97,
+        84
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        97,
+        9
+      ]
+    },
+    {
+      "end": [
+        102,
+        80
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        102,
+        51
+      ]
+    },
+    {
+      "end": [
+        108,
+        46
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        108,
+        17
+      ]
+    },
+    {
+      "end": [
+        114,
+        46
+      ],
+      "path": "java/injection/cra-java-runtime-exec-request.java",
+      "rule_id": "cra-java-runtime-exec-request",
+      "severity": "ERROR",
+      "start": [
+        114,
+        17
+      ]
+    },
+    {
+      "end": [
         16,
         37
       ],
@@ -2124,7 +2761,7 @@
     {
       "end": [
         18,
-        48
+        56
       ],
       "path": "java/crypto/cra-java-weak-message-digest.java",
       "rule_id": "cra-java-weak-message-digest",
@@ -2137,7 +2774,7 @@
     {
       "end": [
         23,
-        50
+        55
       ],
       "path": "java/crypto/cra-java-weak-message-digest.java",
       "rule_id": "cra-java-weak-message-digest",
@@ -2150,7 +2787,7 @@
     {
       "end": [
         28,
-        64
+        53
       ],
       "path": "java/crypto/cra-java-weak-message-digest.java",
       "rule_id": "cra-java-weak-message-digest",
@@ -2163,7 +2800,7 @@
     {
       "end": [
         33,
-        69
+        54
       ],
       "path": "java/crypto/cra-java-weak-message-digest.java",
       "rule_id": "cra-java-weak-message-digest",
@@ -2175,183 +2812,40 @@
     },
     {
       "end": [
-        38,
-        35
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        38,
-        16
-      ]
-    },
-    {
-      "end": [
-        43,
+        142,
         56
       ],
       "path": "java/crypto/cra-java-weak-message-digest.java",
       "rule_id": "cra-java-weak-message-digest",
       "severity": "WARNING",
       "start": [
-        43,
+        142,
         16
       ]
     },
     {
       "end": [
-        49,
-        48
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        49,
-        16
-      ]
-    },
-    {
-      "end": [
-        54,
-        48
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        54,
-        16
-      ]
-    },
-    {
-      "end": [
-        59,
-        55
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        59,
-        16
-      ]
-    },
-    {
-      "end": [
-        65,
-        58
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        65,
-        16
-      ]
-    },
-    {
-      "end": [
-        70,
-        63
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        70,
-        16
-      ]
-    },
-    {
-      "end": [
-        75,
-        63
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        75,
-        16
-      ]
-    },
-    {
-      "end": [
-        80,
-        67
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        80,
-        16
-      ]
-    },
-    {
-      "end": [
-        85,
-        53
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        85,
-        16
-      ]
-    },
-    {
-      "end": [
-        90,
-        54
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        90,
-        16
-      ]
-    },
-    {
-      "end": [
-        199,
+        153,
         56
       ],
       "path": "java/crypto/cra-java-weak-message-digest.java",
       "rule_id": "cra-java-weak-message-digest",
       "severity": "WARNING",
       "start": [
-        199,
+        153,
         16
       ]
     },
     {
       "end": [
-        210,
+        163,
         56
       ],
       "path": "java/crypto/cra-java-weak-message-digest.java",
       "rule_id": "cra-java-weak-message-digest",
       "severity": "WARNING",
       "start": [
-        210,
-        16
-      ]
-    },
-    {
-      "end": [
-        220,
-        56
-      ],
-      "path": "java/crypto/cra-java-weak-message-digest.java",
-      "rule_id": "cra-java-weak-message-digest",
-      "severity": "WARNING",
-      "start": [
-        220,
+        163,
         16
       ]
     },
@@ -2591,14 +3085,14 @@
     },
     {
       "end": [
-        110,
+        108,
         54
       ],
       "path": "javascript/injection/cra-javascript-exec-injection.js",
       "rule_id": "cra-javascript-exec-injection",
       "severity": "ERROR",
       "start": [
-        110,
+        108,
         5
       ]
     },
@@ -2639,6 +3133,162 @@
       "start": [
         22,
         5
+      ]
+    },
+    {
+      "end": [
+        15,
+        39
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.js",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        15,
+        23
+      ]
+    },
+    {
+      "end": [
+        17,
+        48
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.js",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        17,
+        32
+      ]
+    },
+    {
+      "end": [
+        19,
+        46
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.js",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        19,
+        25
+      ]
+    },
+    {
+      "end": [
+        21,
+        43
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.js",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        21,
+        27
+      ]
+    },
+    {
+      "end": [
+        23,
+        78
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.js",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        23,
+        22
+      ]
+    },
+    {
+      "end": [
+        25,
+        41
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.js",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        25,
+        21
+      ]
+    },
+    {
+      "end": [
+        15,
+        47
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.ts",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        15,
+        31
+      ]
+    },
+    {
+      "end": [
+        17,
+        56
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.ts",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        17,
+        40
+      ]
+    },
+    {
+      "end": [
+        19,
+        54
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.ts",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        19,
+        33
+      ]
+    },
+    {
+      "end": [
+        21,
+        51
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.ts",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        21,
+        35
+      ]
+    },
+    {
+      "end": [
+        23,
+        86
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.ts",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        23,
+        30
+      ]
+    },
+    {
+      "end": [
+        25,
+        49
+      ],
+      "path": "javascript/integer/cra-javascript-odd-unsafe-integer-literal.ts",
+      "rule_id": "cra-javascript-odd-unsafe-integer-literal",
+      "severity": "ERROR",
+      "start": [
+        25,
+        29
       ]
     },
     {
@@ -2955,6 +3605,58 @@
     },
     {
       "end": [
+        13,
+        43
+      ],
+      "path": "php/deserialization/cra-php-global-unserialize-superglobal.php",
+      "rule_id": "cra-php-global-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        13,
+        24
+      ]
+    },
+    {
+      "end": [
+        17,
+        45
+      ],
+      "path": "php/deserialization/cra-php-global-unserialize-superglobal.php",
+      "rule_id": "cra-php-global-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        17,
+        26
+      ]
+    },
+    {
+      "end": [
+        20,
+        43
+      ],
+      "path": "php/deserialization/cra-php-global-unserialize-superglobal.php",
+      "rule_id": "cra-php-global-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        20,
+        27
+      ]
+    },
+    {
+      "end": [
+        23,
+        53
+      ],
+      "path": "php/deserialization/cra-php-global-unserialize-superglobal.php",
+      "rule_id": "cra-php-global-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        23,
+        24
+      ]
+    },
+    {
+      "end": [
         10,
         28
       ],
@@ -3133,6 +3835,19 @@
       "start": [
         24,
         12
+      ]
+    },
+    {
+      "end": [
+        10,
+        39
+      ],
+      "path": "php/deserialization/cra-php-global-unserialize-superglobal.php",
+      "rule_id": "cra-php-unserialize-superglobal",
+      "severity": "ERROR",
+      "start": [
+        10,
+        22
       ]
     },
     {
@@ -4762,6 +5477,19 @@
     },
     {
       "end": [
+        185,
+        27
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-open-redirect",
+      "severity": "WARNING",
+      "start": [
+        185,
+        21
+      ]
+    },
+    {
+      "end": [
         16,
         17
       ],
@@ -4918,144 +5646,170 @@
     },
     {
       "end": [
-        25,
+        29,
         36
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        25,
+        29,
         12
       ]
     },
     {
       "end": [
-        34,
+        38,
         16
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        34,
+        38,
         12
       ]
     },
     {
       "end": [
-        41,
+        45,
         41
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        41,
+        45,
         12
       ]
     },
     {
       "end": [
-        48,
+        52,
         38
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        48,
+        52,
         12
       ]
     },
     {
       "end": [
-        57,
+        61,
         16
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        57,
+        61,
         12
       ]
     },
     {
       "end": [
-        64,
+        68,
         36
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        64,
+        68,
         12
       ]
     },
     {
       "end": [
-        73,
+        77,
         39
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        73,
+        77,
         12
       ]
     },
     {
       "end": [
-        81,
+        85,
         37
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        81,
+        85,
         12
       ]
     },
     {
       "end": [
-        88,
+        92,
         36
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        88,
+        92,
         12
       ]
     },
     {
       "end": [
-        95,
+        99,
         36
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        95,
+        99,
         12
       ]
     },
     {
       "end": [
-        101,
+        105,
         61
       ],
       "path": "python/flask/cra-python-flask-response-html-taint.py",
       "rule_id": "cra-python-flask-response-html-taint",
       "severity": "ERROR",
       "start": [
-        101,
+        105,
+        12
+      ]
+    },
+    {
+      "end": [
+        135,
+        16
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        135,
+        12
+      ]
+    },
+    {
+      "end": [
+        143,
+        16
+      ],
+      "path": "python/flask/cra-python-flask-response-html-taint.py",
+      "rule_id": "cra-python-flask-response-html-taint",
+      "severity": "ERROR",
+      "start": [
+        143,
         12
       ]
     },
@@ -6881,6 +7635,58 @@
     },
     {
       "end": [
+        3,
+        75
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-cratesio-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        3,
+        15
+      ]
+    },
+    {
+      "end": [
+        6,
+        82
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-cratesio-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        6,
+        15
+      ]
+    },
+    {
+      "end": [
+        11,
+        85
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-cratesio-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        11,
+        15
+      ]
+    },
+    {
+      "end": [
+        15,
+        47
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-cratesio-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        14,
+        15
+      ]
+    },
+    {
+      "end": [
         8,
         48
       ],
@@ -6920,144 +7726,170 @@
     },
     {
       "end": [
-        48,
+        39,
+        38
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        39,
+        34
+      ]
+    },
+    {
+      "end": [
+        55,
+        38
+      ],
+      "path": "rust/path/cra-rust-file-env-taint.rs",
+      "rule_id": "cra-rust-file-env-taint",
+      "severity": "ERROR",
+      "start": [
+        55,
+        34
+      ]
+    },
+    {
+      "end": [
+        65,
         39
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        48,
+        65,
         34
       ]
     },
     {
       "end": [
-        64,
+        81,
         38
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        64,
+        81,
         34
       ]
     },
     {
       "end": [
-        75,
+        92,
         47
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        75,
+        92,
         42
       ]
     },
     {
       "end": [
-        86,
+        103,
         43
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        86,
+        103,
         38
       ]
     },
     {
       "end": [
-        97,
+        114,
         47
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        97,
+        114,
         42
       ]
     },
     {
       "end": [
-        108,
+        125,
         47
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        108,
+        125,
         42
       ]
     },
     {
       "end": [
-        122,
+        139,
         43
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        122,
+        139,
         38
       ]
     },
     {
       "end": [
-        134,
+        151,
         47
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        134,
+        151,
         42
       ]
     },
     {
       "end": [
-        147,
+        164,
         51
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        147,
+        164,
         46
       ]
     },
     {
       "end": [
-        162,
+        179,
         47
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        162,
+        179,
         42
       ]
     },
     {
       "end": [
-        175,
+        192,
         47
       ],
       "path": "rust/path/cra-rust-file-env-taint.rs",
       "rule_id": "cra-rust-file-env-taint",
       "severity": "ERROR",
       "start": [
-        175,
+        192,
         42
       ]
     },
@@ -7189,6 +8021,97 @@
       "start": [
         35,
         35
+      ]
+    },
+    {
+      "end": [
+        3,
+        75
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        3,
+        15
+      ]
+    },
+    {
+      "end": [
+        6,
+        82
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        6,
+        15
+      ]
+    },
+    {
+      "end": [
+        11,
+        85
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        11,
+        15
+      ]
+    },
+    {
+      "end": [
+        15,
+        47
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        14,
+        15
+      ]
+    },
+    {
+      "end": [
+        20,
+        73
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        20,
+        13
+      ]
+    },
+    {
+      "end": [
+        27,
+        78
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        27,
+        15
+      ]
+    },
+    {
+      "end": [
+        31,
+        43
+      ],
+      "path": "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+      "rule_id": "cra-rust-reqwest-invalid-certs",
+      "severity": "ERROR",
+      "start": [
+        30,
+        15
       ]
     },
     {
@@ -7493,49 +8416,57 @@
   ],
   "findings_by_rule": {
     "cra-c-curl-verification-disabled": 2,
+    "cra-c-fixed-array-literal-oob-write": 1,
     "cra-c-insecure-temp-name": 2,
     "cra-c-printf-argv-format": 2,
     "cra-c-strcpy-argv": 2,
     "cra-c-system-argv": 2,
     "cra-c-system-getenv-taint": 3,
     "cra-cpp-curl-verification-disabled": 2,
+    "cra-cpp-fixed-array-literal-oob-write": 1,
     "cra-cpp-insecure-temp-name": 2,
     "cra-cpp-printf-argv-format": 4,
     "cra-cpp-strcpy-argv": 3,
     "cra-cpp-system-argv": 3,
     "cra-cpp-system-getenv-taint": 3,
-    "cra-csharp-binaryformatter-deserialize": 5,
-    "cra-csharp-certificate-callback-accept-all": 8,
-    "cra-csharp-file-request-taint": 8,
+    "cra-csharp-binaryformatter-deserialize": 6,
+    "cra-csharp-certificate-callback-accept-all": 11,
+    "cra-csharp-file-request-taint": 9,
+    "cra-csharp-framework-dangerous-certificate-validator": 7,
+    "cra-csharp-framework-md5-create": 4,
     "cra-csharp-httpclient-request-taint": 4,
     "cra-csharp-jwt-hardcoded-secret": 1,
     "cra-csharp-process-request-taint": 8,
     "cra-csharp-sql-request-taint": 6,
-    "cra-csharp-weak-hash": 11,
+    "cra-csharp-weak-hash": 9,
     "cra-go-hmac-reused-hash": 3,
     "cra-go-hmac-timing": 4,
-    "cra-go-parseint-downcast": 23,
-    "cra-go-shell-command-injection": 6,
-    "cra-go-tls-insecure": 4,
+    "cra-go-parseint-downcast": 27,
+    "cra-go-shell-command-injection": 10,
+    "cra-go-tls-direct-dial-insecure": 3,
+    "cra-go-tls-insecure": 15,
     "cra-go-weak-hash": 4,
-    "cra-go-wrong-lock-unlock": 7,
+    "cra-go-wrong-lock-unlock": 9,
     "cra-java-file-request-taint": 6,
-    "cra-java-hostname-verifier-accept-all": 5,
+    "cra-java-hostname-verifier-accept-all": 6,
+    "cra-java-jdk-weak-message-digest-literal": 4,
     "cra-java-objectinputstream-readobject": 3,
-    "cra-java-runtime-exec-request": 9,
+    "cra-java-runtime-exec-request": 13,
     "cra-java-sql-request-taint": 5,
     "cra-java-url-request-taint": 3,
-    "cra-java-weak-message-digest": 18,
+    "cra-java-weak-message-digest": 7,
     "cra-java-xxe-doctype-enabled": 4,
     "cra-javascript-eval": 3,
     "cra-javascript-exec-injection": 15,
+    "cra-javascript-odd-unsafe-integer-literal": 12,
     "cra-php-command-superglobal": 10,
     "cra-php-curl-url-superglobal-taint": 5,
     "cra-php-echo-superglobal-taint": 4,
     "cra-php-file-superglobal-taint": 5,
+    "cra-php-global-unserialize-superglobal": 4,
     "cra-php-sql-superglobal-taint": 9,
     "cra-php-superglobal-password-md5": 5,
-    "cra-php-unserialize-superglobal": 4,
+    "cra-php-unserialize-superglobal": 5,
     "cra-python-django-allowed-hosts-wildcard": 2,
     "cra-python-django-csrf-exempt": 3,
     "cra-python-django-file-path-traversal": 5,
@@ -7557,10 +8488,10 @@
     "cra-python-flask-hardcoded-secret-key": 9,
     "cra-python-flask-jsonify-request-reflect-secret": 12,
     "cra-python-flask-markup-untrusted": 7,
-    "cra-python-flask-open-redirect": 8,
+    "cra-python-flask-open-redirect": 9,
     "cra-python-flask-plaintext-password-compare": 7,
     "cra-python-flask-render-template-string-ssti": 5,
-    "cra-python-flask-response-html-taint": 11,
+    "cra-python-flask-response-html-taint": 13,
     "cra-python-flask-send-file-path-traversal": 5,
     "cra-python-flask-session-cookie-httponly-false": 2,
     "cra-python-flask-session-cookie-insecure-false": 5,
@@ -7580,10 +8511,11 @@
     "cra-python-taint-sql-inject": 15,
     "cra-python-taint-subprocess-shell": 18,
     "cra-python-yaml-load": 5,
-    "cra-rust-file-env-taint": 14,
+    "cra-rust-cratesio-reqwest-invalid-certs": 4,
+    "cra-rust-file-env-taint": 16,
     "cra-rust-jsonwebtoken-hardcoded-secret": 5,
     "cra-rust-reqwest-env-taint": 5,
-    "cra-rust-reqwest-invalid-certs": 3,
+    "cra-rust-reqwest-invalid-certs": 10,
     "cra-rust-shell-command-env-args": 8,
     "cra-rust-sqlx-query-env-taint": 5,
     "cra-rust-weak-digest": 7

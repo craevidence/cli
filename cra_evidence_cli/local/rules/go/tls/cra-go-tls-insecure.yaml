@@ -5,12 +5,12 @@ rules:
       assignment to the field on a tls.Config value or pointer. Certificate
       chain and hostname verification are off, so a person-in-the-middle can
       intercept or modify traffic without detection. Remove InsecureSkipVerify
-      or set it to false. A configuration that also installs a
-      VerifyPeerCertificate or VerifyConnection callback is not reported,
-      because that callback replaces the standard check.
+      or set it to false. A custom VerifyPeerCertificate or VerifyConnection
+      callback still requires review because its presence alone does not prove
+      that it performs certificate or hostname verification.
     severity: ERROR
     metadata:
-      tier: default
+      tier: experimental
       cwe:
         - "CWE-295: Improper Certificate Validation"
       owasp:
@@ -26,11 +26,11 @@ rules:
       scope: >
         Reports the literal true assigned to InsecureSkipVerify, either as a
         field in a tls.Config composite literal or as an assignment to the field
-        on a receiver whose written type is tls.Config or *tls.Config. The
-        finding is withheld when the same configuration also sets
-        VerifyPeerCertificate or VerifyConnection, either in the same literal or
-        on the same variable later in the function, because those callbacks
-        carry the verification the standard check would have done.
+        on a receiver whose written type is tls.Config or *tls.Config. A
+        custom VerifyPeerCertificate or VerifyConnection callback does not
+        suppress the finding because the rule cannot establish what that
+        callback checks. Direct import-bound Dial and DialWithDialer calls with
+        no callback have a separate default rule.
       limitations: >
         Only the literal true is matched, so a value supplied through a
         variable, a constant, or an expression is not resolved. The assignment
@@ -38,10 +38,14 @@ rules:
         so a receiver typed only by a call result or by a declaration in another
         file is not matched. Package names are matched as written rather than
         resolved to an import path, so a package named tls that declares its own
-        Config type with an InsecureSkipVerify field is reported. A
-        VerifyPeerCertificate or VerifyConnection callback installed in a
-        different function or file is not seen, and a callback that does no real
-        checking suppresses the finding just as a complete one does.
+        Config type with an InsecureSkipVerify field is generally reported by
+        the composite and assignment forms. Direct inline Dial and
+        DialWithDialer calls without callbacks are excluded for the import-bound
+        default rule, so an application-package homonym in that exact shape is
+        silent. A
+        VerifyPeerCertificate or VerifyConnection callback may perform a
+        complete replacement check, but callback behavior is not evaluated, so
+        that configuration is still reported for review.
         A configuration guarded by a flag whose name signals a deliberate opt
         out, such as an insecure or self signed option, is still reported. Some
         analysers suppress those by reading intent from the identifier name;
@@ -52,7 +56,25 @@ rules:
     languages: [go]
     patterns:
       - pattern-either:
-          - pattern: "tls.Config{..., InsecureSkipVerify: true, ...}"
+          # Direct crypto/tls Dial calls with no callback are handled by the
+          # import-bound default rule. Callback-bearing calls stay here because
+          # this rule cannot establish what the callback verifies.
+          - patterns:
+              - pattern: "tls.Dial(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
+              - pattern: "tls.Dial(..., &tls.Config{..., VerifyConnection: $VERIFY, ...})"
+          - patterns:
+              - pattern: "tls.Dial(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
+              - pattern: "tls.Dial(..., &tls.Config{..., VerifyPeerCertificate: $VERIFY, ...})"
+          - patterns:
+              - pattern: "tls.DialWithDialer(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
+              - pattern: "tls.DialWithDialer(..., &tls.Config{..., VerifyConnection: $VERIFY, ...})"
+          - patterns:
+              - pattern: "tls.DialWithDialer(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
+              - pattern: "tls.DialWithDialer(..., &tls.Config{..., VerifyPeerCertificate: $VERIFY, ...})"
+          - patterns:
+              - pattern: "tls.Config{..., InsecureSkipVerify: true, ...}"
+              - pattern-not-inside: "tls.Dial(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
+              - pattern-not-inside: "tls.DialWithDialer(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
           # InsecureSkipVerify is not a name reserved to crypto/tls, so the bare
           # assignment form is tied to a receiver whose type resolves to
           # tls.Config. Matching the field name on its own reported any struct
@@ -64,23 +86,3 @@ rules:
                   types:
                     - tls.Config
                     - "*tls.Config"
-      # A configuration that supplies its own certificate check is not running
-      # without verification, so the message above would not be true of it.
-      - pattern-not: "tls.Config{..., InsecureSkipVerify: true, ..., VerifyPeerCertificate: $F, ...}"
-      - pattern-not: "tls.Config{..., InsecureSkipVerify: true, ..., VerifyConnection: $F, ...}"
-      - pattern-not-inside: |
-          $CFG.InsecureSkipVerify = true
-          ...
-          $CFG.VerifyPeerCertificate = $F
-      - pattern-not-inside: |
-          $CFG.InsecureSkipVerify = true
-          ...
-          $CFG.VerifyConnection = $F
-      - pattern-not-inside: |
-          $CFG = &tls.Config{..., InsecureSkipVerify: true, ...}
-          ...
-          $CFG.VerifyPeerCertificate = $F
-      - pattern-not-inside: |
-          $CFG = &tls.Config{..., InsecureSkipVerify: true, ...}
-          ...
-          $CFG.VerifyConnection = $F

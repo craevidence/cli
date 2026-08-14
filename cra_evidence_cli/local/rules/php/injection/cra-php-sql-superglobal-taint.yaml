@@ -23,9 +23,12 @@ rules:
         reason: >
           Suppressed: a value coerced to a number or a boolean by intval,
           floatval, doubleval, boolval, a cast, settype, arithmetic coercion,
-          or filter_var validating or stripping to a number, and PDO quote,
-          which adds the surrounding quotes itself. A value constrained to a
-          number cannot carry SQL syntax.
+          or filter_var validating or stripping to a number, and a direct
+          quote method call used as the complete value. PDO::quote adds the
+          surrounding quotes when the selected driver implements it, and its
+          escaping depends on the connection character set. This gate does not
+          execute each PDO driver, and method receiver types are not resolved.
+          A value constrained to a number cannot carry SQL syntax.
           Deliberately NOT suppressed: mysql_real_escape_string,
           mysqli_real_escape_string and real_escape_string. Escaping only
           protects a value that is written inside quotes, and the rule cannot

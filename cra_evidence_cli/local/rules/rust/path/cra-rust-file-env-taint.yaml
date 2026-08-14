@@ -15,21 +15,14 @@ rules:
       technology: [rust, filesystem]
       confidence: HIGH
       sanitizer_analysis:
-        status: partially-modeled
+        status: not-modeled
         reason: >
-          One containment shape is suppressed:
-          std::fs::canonicalize(...).unwrap() bound to both the base and the
-          candidate, followed by an if !path.starts_with(&base) guard whose body
-          returns. Every other spelling reports, including the common
-          if let Ok(path) = candidate.canonicalize() form, a guard written with
-          match, a guard that returns a Result, and a base written as an inline
-          literal. Correct containment written any other way is reported, so a
-          finding here is a prompt to check the containment rather than proof
-          that it is missing. A broader shape was modeled and withdrawn: the
-          engine matches an if statement together with its else branch and
-          cannot tell a fixed base from an attacker supplied one, so the wider
-          sanitizer silenced real traversals through a vacuous "/" base and
-          through sinks placed in the else branch.
+          Containment is not suppressed. The engine cannot prove that the base
+          is trusted or that a sink is reached only after a successful guard.
+          Two modeled shapes were withdrawn after they silenced traversals with
+          attacker-controlled or vacuous bases and sinks in an else branch.
+          Correct canonicalize-and-contain code may therefore be reported for
+          review.
       license: MIT
       author: CRA Evidence
     languages: [rust]
@@ -38,19 +31,6 @@ rules:
       - pattern-either:
           - pattern: std::env::args().nth(...)
           - pattern: std::env::var(...)
-    pattern-sanitizers:
-      - patterns:
-          - pattern: $PATH.starts_with(&$BASE)
-          - focus-metavariable: $PATH
-          - pattern-inside: |
-              let $BASE = std::fs::canonicalize(...).unwrap();
-              ...
-              let $PATH = std::fs::canonicalize(...).unwrap();
-              ...
-              if !$PATH.starts_with(&$BASE) {
-                  return;
-              }
-        by-side-effect: true
     pattern-sinks:
       - pattern-either:
           - patterns:

@@ -398,6 +398,61 @@ back to `text`.
 - Use the results to review secure defaults and attack-surface exposure. Static
   scanning cannot observe every runtime or organisational control.
 
+## `code-evidence`
+
+Generate local Java, C#, Rust, C, or C++ semantic evidence without invoking the project build:
+
+```
+craevidence code-evidence PATH --language java --output evidence.json
+craevidence code-evidence PATH --language csharp --output evidence.json
+craevidence code-evidence PATH --language rust --output evidence.json
+craevidence code-evidence PATH --language c --output evidence.json
+craevidence code-evidence PATH --language cpp --output evidence.json
+craevidence code-check PATH \
+  --semantic-evidence evidence.json
+```
+
+The Java profile requires a local Java runtime that exposes the standard JDK
+compiler module. It passes every Java source directly to the compiler API with
+annotation processing, implicit compilation, the class path, and the source
+path disabled. It does not read or execute Gradle, Maven, project plugins,
+application classes, or source static initializers. Any compiler error or
+source change prevents the envelope from being written. This narrow profile
+will not analyze projects that require external types to compile; that is
+reported as a failed evidence run, not a clean result. Source code and evidence
+are not uploaded. The CLI container does not include a JDK. Generate the
+envelope in a Java-enabled job or host installation, then mount the unchanged
+source tree and envelope into the container for `code-check`.
+
+The C# profile requires .NET SDK 8.0.423 with reference pack 8.0.29. It compiles
+the shipped analyzer directly with Roslyn and passes only the trusted framework
+references and selected `.cs` files. It does not load a project, solution,
+props, targets, NuGet, MSBuild, generators, plugins, or target binaries. The
+subprocess environment is allowlisted so inherited .NET startup hooks and
+profilers are not loaded. Compiler errors, source changes, unsupported SDKs,
+missing references, and malformed analyzer output prevent the envelope from
+being written. The CLI container does not include a .NET SDK.
+
+The Rust profile needs no Rust toolchain. It reads a single non-workspace Cargo
+package and accepts Rust editions 2018, 2021, and 2024 with a normal reqwest
+dependency that resolves to the exact crates.io reqwest 0.12.24 lock record and
+checksum. It records direct literal-true TLS verification disablement only when
+the source uses a leading absolute extern-prelude path. It does not invoke
+Cargo, rustc, build scripts, proc macros, target code, or the network.
+Workspaces, overrides, Cargo configuration, application-owned extern aliases,
+unsupported dependency forms, and stale or malformed inputs fail closed.
+
+The C and C++ profiles use separate C17 and C++17 options and require an exact
+libclang library plus exact system-header hashes. Native installs support the
+Ubuntu clang 18.1.3 profile. The CLI container carries a Debian 13 libclang
+18.1.8 frontend and required headers for both supported image architectures.
+It does not include a clang or GCC compiler driver, linker, project build tool,
+or compiler plugin. The producer invokes only the frontend library, disables
+inherited include-path overrides, and never runs target code or the network.
+Generate and consume an envelope in an environment with the same exact
+frontend assets. A profile, library, option, source, or header mismatch fails
+closed and becomes degraded coverage under a strict `code-check` policy.
+
 ## `code-check` (alias: `sast`)
 
 Scan source code for potential security weaknesses using
@@ -415,6 +470,7 @@ craevidence [--output text|json|sarif] code-check [PATH]
   [--rule-timeout <seconds>]
   [--exclude <pattern>]...
   [--include-experimental]
+  [--semantic-evidence <envelope.json>]...
   [--upload [--product <slug> --version <number>]]
   [-o <path>]
 ```
@@ -426,26 +482,56 @@ back to `text`.
   Opengrep executable. No scanner is downloaded when a scan starts. An
   engine-free source install can use `CRA_EVIDENCE_OPENGREP` or an `opengrep`
   executable on `PATH`.
-- The default bundled pack contains 43 focused Python rules covering SQL
+- The default bundled pack contains 54 rules: 42 focused Python rules covering SQL
   injection (structural and intrafile taint),
   OS command injection (structural and intrafile taint), unsafe deserialization
   (`pickle` and unsafe `yaml.load` forms), code injection via `eval`/`exec`,
   Flask, Django, SQLAlchemy, and JWT misuse. Taint rules also cover untrusted
-  input reaching `subprocess` shell mode, `os.system`, and `os.popen`.
-  C#, Java, and Go also contribute default rules: C# request-taint rules for
-  SQL injection, OS command injection, and path traversal, plus weak hashing,
-  `BinaryFormatter` deserialization, accept-all certificate callbacks, and
-  hardcoded JWT keys; Java weak message digests, `Runtime.exec` on request
-  data, and accept-all hostname verifiers; Go weak hashing and disabled TLS
-  verification. Another 41 focused C, C++, JavaScript/TypeScript, PHP, Rust,
-  and remaining Java, Go, and C# rules are marked experimental. A rule runs by
-  default only where a labelled corpus measured its precision or where it
-  matches an unambiguous dangerous API. The rest stay opt-in because their
-  precision is unmeasured, below the bar, or bounded by parser and intrafile
-  taint limits. Use `--include-experimental` to run them. The output states the
-  exact enabled rule count for every language; no group is presented as general
-  SAST coverage.
+  input reaching `subprocess` shell mode, `os.system`, and `os.popen`, plus one
+  import-bound Go rule for direct `crypto/tls` dial calls with verification
+  disabled and no custom callback, plus one compiler-attested Java rule for
+  literal weak algorithms passed to the JDK `MessageDigest.getInstance` API,
+  plus one PHP rule limited to a literal global `\unserialize` call whose
+  focused first argument is derived from a reviewed HTTP superglobal source.
+  One C# rule reports the exact framework accept-any certificate-validator
+  assignment only when semantic evidence resolves both properties to signed
+  `System.Net.Http.HttpClientHandler`. One Rust rule requires static crates.io
+  package and absolute-path evidence for reqwest TLS verification disablement.
+  Separate C and C++ rules require exact supported libclang C17 or C++17
+  array-bounds diagnostics for a direct decimal-literal
+  fixed-`uint8_t`-array write. A second rule per language requires libclang to
+  bind a direct system `printf` format argument to global `main`'s own second
+  parameter. A third requires the same binding for a direct system-shell
+  command, including the C++ `std::system` spelling. One JavaScript and
+  TypeScript rule reports an
+  assigned odd integer literal above the exact binary64 safe-integer boundary.
+  Another 50 focused rules across C, C++, C#, Go, Java,
+  JavaScript/TypeScript, PHP, Python, and Rust are experimental. They stay
+  opt-in where precision is unmeasured or below the bar, or where parser
+  coverage, written-name type matching, and intrafile taint limits make a clean
+  result too weak for default use. Use `--include-experimental` to run them.
+  The output states the exact enabled rule count for every language; no group
+  is presented as general SAST coverage.
   Pass `--rules` to use your own rules instead.
+- `--semantic-evidence` consumes a versioned external envelope for bundled
+  rules that declare an exact semantic policy. The CLI verifies source and
+  evidence digests, the adapter profile, isolation claims, successful analysis,
+  and the resolved occurrence. `code-check` does not execute Java, .NET,
+  MSBuild, or an analyzer. A missing or invalid
+  envelope suppresses the semantic-required candidate and reports degraded
+  coverage; a resolved application-owned lookalike is rejected without being
+  reported as a vulnerability. A raw candidate with no semantic occurrence is
+  degraded coverage, including code hidden by the selected compiler profile.
+  The C and C++ producers load distinct fixed libclang frontend profiles with
+  hashed system-header roots and never invoke a project build, linker, compiler
+  plugin, or target code. The C# framework
+  `MD5.Create` candidate remains experimental because valid
+  non-security checksum uses exist. The exact framework accept-any validator
+  assignment and Java JDK `MessageDigest.getInstance` literal rule are
+  enabled by default after their language-specific evidence gates passed. The
+  C# rule uses a definitional framework-ownership proof plus compiling shadow
+  controls; the Java rule uses its pinned corpus, compiling-shadow, and
+  real-project gates. Their broader companions remain experimental.
 - The CLI always gives Opengrep an explicit local rules path and disables its
   version check. It does not use Opengrep's `auto` configuration or download
   registry rules. This keeps the default scan offline and avoids redistributing

@@ -35,15 +35,16 @@ rules:
         numeric literal or math.MaxInt32, math.MinInt32, or math.MaxUint32, a
         signed parse states both ends with && (in range) or || (out of range),
         and the out-of-range branch either encloses the cast or contains a
-        return, a continue, os.Exit, log.Fatal, log.Fatalf, or log.Fatalln that
-        does not itself cast the parsed value. Each accepted bound is the last
-        value that cannot truncate for its operator.
+        return or continue that does not itself cast the parsed value. Each
+        accepted bound is the last value that cannot truncate for its operator.
       limitations: >
         A correct check written any other way is reported: a named constant, a
         computed bound, a reversed comparison, a helper predicate, a round-trip
         comparison such as n == int(uint32(n)), or a rejection by break, goto,
-        or panic. The rule recognizes a bounds check by its shape and position
-        in the source, not by control flow: it does not verify that the check
+        panic, os.Exit, or log.Fatal. Package selectors are not accepted as
+        terminators because local values named os or log can define returning
+        methods with the same names. The rule recognizes a bounds check by its
+        shape and position in the source, not by control flow: it does not verify that the check
         runs before the cast on every path. A check nested inside another
         conditional, inside a loop that may not execute, or inside a closure
         suppresses the finding just as a check on the straight-line path does,
@@ -109,10 +110,6 @@ rules:
                           - pattern-either:
                               - pattern: return ...
                               - pattern: continue
-                              - pattern: os.Exit(...)
-                              - pattern: log.Fatal(...)
-                              - pattern: log.Fatalf(...)
-                              - pattern: log.Fatalln(...)
                           - pattern-not: return uint32($X)
                     - metavariable-pattern:
                         metavariable: $COND
@@ -181,10 +178,6 @@ rules:
                           - pattern-either:
                               - pattern: return ...
                               - pattern: continue
-                              - pattern: os.Exit(...)
-                              - pattern: log.Fatal(...)
-                              - pattern: log.Fatalf(...)
-                              - pattern: log.Fatalln(...)
                           - pattern-not: return int32($X)
                     - metavariable-pattern:
                         metavariable: $COND
@@ -282,10 +275,6 @@ rules:
                           - pattern-either:
                               - pattern: return ...
                               - pattern: continue
-                              - pattern: os.Exit(...)
-                              - pattern: log.Fatal(...)
-                              - pattern: log.Fatalf(...)
-                              - pattern: log.Fatalln(...)
                           - pattern-not: return int32($X)
                     - metavariable-pattern:
                         metavariable: $COND
@@ -410,10 +399,6 @@ rules:
                           - pattern-either:
                               - pattern: return ...
                               - pattern: continue
-                              - pattern: os.Exit(...)
-                              - pattern: log.Fatal(...)
-                              - pattern: log.Fatalf(...)
-                              - pattern: log.Fatalln(...)
                           - pattern-not: return uint32($X)
                     - metavariable-pattern:
                         metavariable: $COND

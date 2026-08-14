@@ -5,7 +5,7 @@ rules:
       stronger digest for integrity, and a password-specific KDF for passwords.
     severity: WARNING
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-328: Use of Weak Hash"]
       owasp: ["A02:2021 - Cryptographic Failures"]
       references:
@@ -14,25 +14,25 @@ rules:
         - https://learn.microsoft.com/en-us/dotnet/api/system.security.cryptography.md5.hashdata
       category: security
       technology: [csharp, dotnet, cryptography]
-      confidence: VERY HIGH
+      confidence: MEDIUM
       scope: >
-        Detects the MD5 and SHA-1 implementations in
-        System.Security.Cryptography reached through direct construction, the
-        static Create factory, a literal algorithm name passed to
-        HashAlgorithm.Create, or the static one-shot hashing entry points
-        added in .NET 5.
+        Detects SHA-1 Create calls, MD5 and SHA-1 one-shot hashing calls,
+        direct weak-hash construction, and literal weak algorithm names passed
+        to HashAlgorithm.Create. MD5.Create calls are handled by the separate
+        semantic-evidence candidate.
       limitations: >
         Does not flag HMAC constructions such as HMACMD5, whose security
         properties differ from those of a bare digest, and does not resolve
-        algorithm names built at runtime or read from configuration.
+        algorithm names built at runtime or read from configuration. Simple
+        type names are matched as written, so application classes named MD5,
+        SHA1, or HashAlgorithm with the same methods are also reported. This
+        broad review rule remains experimental.
       license: MIT
       author: CRA Evidence
     languages: [csharp]
     pattern-either:
-      - pattern: MD5.Create()
       - pattern: SHA1.Create()
       - pattern: SHA1Managed.Create()
-      - pattern: System.Security.Cryptography.MD5.Create()
       - pattern: System.Security.Cryptography.SHA1.Create()
       - pattern: MD5.HashData(...)
       - pattern: SHA1.HashData(...)

@@ -7,9 +7,11 @@ import argparse
 import csv
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -24,8 +26,16 @@ except ModuleNotFoundError:  # Direct execution: python scripts/score_rulepack_b
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO_ROOT / "tests" / "rulepack_benchmarks.json"
 DEFAULT_RULES = REPO_ROOT / "cra_evidence_cli" / "local" / "rules"
+
+# Corpus CWEs may differ from the precise mappable child used by a rule. An
+# alias changes benchmark ground truth before scoring, so every accepted pair is
+# bound to the benchmark where that relationship was reviewed.
+REVIEWED_CWE_ALIASES = {("owasp-benchmark-python", 94, 95)}
 TEST_ID_RE = re.compile(r"(BenchmarkTest\d+)")
 CWE_RE = re.compile(r"^CWE-(\d+)")
+JAVA_STRONG_DIGEST_RE = re.compile(
+    r'MessageDigest\s*\.\s*getInstance\s*\(\s*"(?:SHA-256|SHA-384|SHA-512)"\s*\)'
+)
 
 
 class BenchmarkGateError(RuntimeError):
@@ -147,16 +157,8 @@ def _score(
     document: dict,
     cases: dict[str, tuple[int, bool]],
     rule_cwes: dict[str, set[int]],
-    cwe_aliases: dict[int, int] | None = None,
 ) -> dict:
-    """Score an OWASP-style corpus.
-
-    cwe_aliases maps a benchmark CWE onto the rule CWE that covers it, for the
-    case where a corpus labels a case with a class-level weakness while the rule
-    declares the precise child MITRE prefers for mapping. The relationship is
-    declared per benchmark so it stays visible rather than being hidden by
-    widening a rule's own CWE list.
-    """
+    """Score an OWASP-style corpus."""
     scanned = document.get("paths", {}).get("scanned") or []
     if not scanned:
         message = "benchmark scan evaluated zero files"
@@ -174,13 +176,11 @@ def _score(
         for rule_id, cwes in rule_cwes.items()
         if cwes & set(applicable_cwes)
     }
-    aliases = cwe_aliases or {}
     for rule_id, test_id, _, _ in _normalized_findings(document):
         if test_id not in cases:
             message = f"finding references unknown benchmark case: {test_id}"
             raise BenchmarkGateError(message)
         expected_cwe, _ = cases[test_id]
-        expected_cwe = aliases.get(expected_cwe, expected_cwe)
         if rule_id not in rule_cwes:
             # A rule outside the scored tier. Not part of this measurement.
             continue
@@ -374,6 +374,162 @@ def _score_juliet(
     }
 
 
+def _run_local_cli(arguments: list[str], *, opengrep: Path | None = None) -> str:
+    environment = os.environ.copy()
+    if opengrep is not None:
+        environment["CRA_EVIDENCE_OPENGREP"] = str(opengrep.resolve(strict=True))
+    command = [sys.executable, "-m", "cra_evidence_cli.cli", *arguments]
+    result = subprocess.run(  # noqa: S603
+        command,
+        cwd=REPO_ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip()
+        message = f"local CLI failed with exit {result.returncode}: {detail[:500]}"
+        raise BenchmarkGateError(message)
+    return result.stdout
+
+
+def _java_semantic_metrics(
+    evidence: dict,
+    report: dict,
+    source_files: list[Path],
+    rule_id: str,
+) -> dict[str, int]:
+    occurrences = evidence.get("analysis", {}).get("occurrences") or []
+    exact_owner = {
+        "module": "java.base",
+        "package": "java.security",
+        "qualified_name": "java.security.MessageDigest",
+        "binary_name": "java.security.MessageDigest",
+        "nesting": "TOP_LEVEL",
+        "method": "getInstance",
+        "first_parameter": "java.lang.String",
+    }
+    owned = sum(
+        all(occurrence.get(key) == value for key, value in exact_owner.items())
+        for occurrence in occurrences
+    )
+    findings = report.get("findings") or []
+    wrong_rules = sorted(
+        {str(finding.get("rule_id") or "") for finding in findings}
+        - {rule_id}
+    )
+    if wrong_rules:
+        message = f"semantic subset produced findings from other rules: {wrong_rules}"
+        raise BenchmarkGateError(message)
+    if any(
+        (finding.get("semantic_evidence") or {}).get("status") != "attested"
+        for finding in findings
+    ):
+        message = "semantic subset retained a finding without attestation"
+        raise BenchmarkGateError(message)
+    summary = report.get("semantic_evidence") or {}
+    safe_controls = sum(
+        len(JAVA_STRONG_DIGEST_RE.findall(path.read_text(encoding="utf-8")))
+        for path in source_files
+    )
+    return {
+        "source_files": len(evidence.get("source", {}).get("files") or []),
+        "compiler_errors": int(evidence.get("analysis", {}).get("error_count", -1)),
+        "resolved_invocations": len(occurrences),
+        "jdk_owned_invocations": owned,
+        "safe_literal_controls": safe_controls,
+        "candidate_count": int(summary.get("candidate_count", -1)),
+        "attested": int(summary.get("attested", -1)),
+        "rejected": int(summary.get("rejected", -1)),
+        "unanalysed": int(summary.get("unanalysed", -1)),
+        "finding_count": len(findings),
+        "engine_errors": len(report.get("engine_errors") or []),
+        "unanalysed_files": len(report.get("unanalysed_files") or []),
+    }
+
+
+def _score_java_semantic_juliet(
+    source_root: Path,
+    specification: dict,
+    opengrep: Path,
+) -> dict[str, int]:
+    source_directory = source_root / str(specification["source_directory"])
+    if not source_directory.is_dir() or source_directory.is_symlink():
+        message = f"semantic source directory is invalid: {source_directory}"
+        raise BenchmarkGateError(message)
+    selected = sorted(source_directory.glob(str(specification["file_glob"])))
+    support = [source_root / str(path) for path in specification["support_files"]]
+    source_files = [*selected, *support]
+    if not selected or any(not path.is_file() or path.is_symlink() for path in source_files):
+        message = "semantic subset contains a missing, non-file, or symlink source"
+        raise BenchmarkGateError(message)
+    relative_files = [path.relative_to(source_root) for path in source_files]
+    if len(set(relative_files)) != len(relative_files):
+        message = "semantic subset contains duplicate source paths"
+        raise BenchmarkGateError(message)
+
+    with tempfile.TemporaryDirectory(prefix="cra-java-semantic-benchmark-") as work:
+        subset = Path(work) / "source"
+        copied: list[Path] = []
+        for source, relative in zip(source_files, relative_files, strict=True):
+            destination = subset / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+            if _sha256(source) != _sha256(destination):
+                message = f"semantic source copy changed content: {relative}"
+                raise BenchmarkGateError(message)
+            copied.append(destination)
+
+        first_evidence = Path(work) / "evidence-one.json"
+        second_evidence = Path(work) / "evidence-two.json"
+        for output in (first_evidence, second_evidence):
+            _run_local_cli(
+                [
+                    "code-evidence",
+                    str(subset),
+                    "--language",
+                    "java",
+                    "--output",
+                    str(output),
+                ]
+            )
+        if first_evidence.read_bytes() != second_evidence.read_bytes():
+            message = "repeated Java semantic evidence differs"
+            raise BenchmarkGateError(message)
+
+        reports = []
+        for _ in range(2):
+            raw_report = _run_local_cli(
+                [
+                    "--output",
+                    "json",
+                    "code-check",
+                    str(subset),
+                    "--include-experimental",
+                    "--semantic-evidence",
+                    str(first_evidence),
+                ],
+                opengrep=opengrep,
+            )
+            try:
+                reports.append(json.loads(raw_report))
+            except json.JSONDecodeError as exc:
+                message = "semantic benchmark returned invalid JSON"
+                raise BenchmarkGateError(message) from exc
+        evidence = json.loads(first_evidence.read_text(encoding="utf-8"))
+        first_metrics = _java_semantic_metrics(
+            evidence, reports[0], copied, str(specification["rule_id"])
+        )
+        second_metrics = _java_semantic_metrics(
+            evidence, reports[1], copied, str(specification["rule_id"])
+        )
+        if first_metrics != second_metrics:
+            message = "repeated Java semantic benchmark results differ"
+            raise BenchmarkGateError(message)
+        return first_metrics
+
+
 GOSEC_SAMPLE_RE = re.compile(r"\{\[\]string\{(.*?)\},\s*(\d+),", re.S)
 GOSEC_CODE_RE = re.compile(r"`(.*?)`", re.S)
 
@@ -441,7 +597,9 @@ def _preprocess_juliet(
     return done, skipped
 
 
-def _score_juliet_preprocessed(document: dict, preprocessed: int, skipped: int) -> dict:
+def _score_juliet_preprocessed(
+    document: dict, preprocessed: int, skipped: int, scored_rule: str
+) -> dict:
     """Score by Juliet's bad/good function naming, not by manifest line numbers.
 
     Preprocessing shifts every line, so the shipped manifest offsets no longer
@@ -453,6 +611,8 @@ def _score_juliet_preprocessed(document: dict, preprocessed: int, skipped: int) 
     in_good_on_secure_call = 0
     cache: dict[str, list[str]] = {}
     for result in document.get("results") or []:
+        if str(result.get("check_id") or "") != scored_rule:
+            continue
         path = str(result["path"])
         if path not in cache:
             cache[path] = Path(path).read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -504,10 +664,12 @@ def _sard_truth(path: Path, typo_var: str, unassigned_var: str) -> str:
     body = path.read_text(encoding="utf-8", errors="replace")
     marker = body.rfind("MODIFICATIONS.*/")
     code = body[marker + len("MODIFICATIONS.*/") :] if marker >= 0 else body
+    typo_token = re.escape(typo_var)
+    unassigned_token = re.escape(unassigned_var)
     if f"/{SARD_SAFE_DIR}/" in path.as_posix():
-        return "vulnerable" if re.search(rf"\{typo_var}\b", code) else "safe"
-    uses = unassigned_var in code
-    assigned = re.search(rf"\{unassigned_var}\s*=", code) is not None
+        return "vulnerable" if re.search(rf"{typo_token}\b", code) else "safe"
+    uses = re.search(rf"{unassigned_token}\b", code) is not None
+    assigned = re.search(rf"{unassigned_token}\s*=(?![=>])", code) is not None
     return "safe" if (uses and not assigned) else "vulnerable"
 
 
@@ -540,7 +702,9 @@ def _score_sard_folders(
     return {"files_scanned": len(scanned), **counts}
 
 
-def _score_juliet_methods(document: dict, method_re: re.Pattern[str]) -> dict:
+def _score_juliet_methods(
+    document: dict, method_re: re.Pattern[str], scored_rule: str
+) -> dict:
     """Score against Juliet's Bad and Good method naming.
 
     Juliet C# ships no manifest. Its ground truth is the method name: a finding
@@ -552,6 +716,8 @@ def _score_juliet_methods(document: dict, method_re: re.Pattern[str]) -> dict:
     unattributed = 0
     cache: dict[str, list[str]] = {}
     for result in document.get("results") or []:
+        if str(result.get("check_id") or "") != scored_rule:
+            continue
         path = str(result["path"])
         if path not in cache:
             cache[path] = Path(path).read_text(
@@ -583,21 +749,43 @@ CODEQL_GOOD_RE = re.compile(r"//\s*good\b", re.IGNORECASE)
 # CodeQL marks its own known false negatives with MISSING. Those lines are not
 # alerts the corpus asserts, so they are not counted as expected detections.
 CODEQL_MISSING_RE = re.compile(r"\$\s*MISSING")
+ESLINT_RULE_TESTER_RE = re.compile(
+    r'\.run\("no-loss-of-precision",\s*rule,\s*\{\s*'
+    r"valid:\s*\[(?P<valid>.*?)\],\s*"
+    r"invalid:\s*\[(?P<invalid>.*?)\],?\s*\}\);",
+    re.DOTALL,
+)
+ESLINT_BARE_CODE_RE = re.compile(
+    r'^\s*(?P<quoted>"(?:\\.|[^"\\])*")\s*,?\s*$', re.MULTILINE
+)
+ESLINT_OBJECT_CODE_RE = re.compile(
+    r'\bcode:\s*(?P<quoted>"(?:\\.|[^"\\])*")'
+)
 
 
-def _score_codeql_markers(document: dict, source: Path, alert_query: str) -> dict:
+def _score_codeql_markers(
+    document: dict, source: Path, alert_query: str, scored_rule: str
+) -> dict:
     """Score against CodeQL's inline alert and good markers.
 
-    A finding is credited to an alert when the alert line falls inside the
-    finding's own start..end source range. Proximity windows were rejected: our
-    rules often anchor at the start of a call chain while CodeQL anchors at the
-    method call, and a window either credits a neighbouring construct or lets one
-    finding absorb every remaining alert.
+    A finding is credited to at most one alert when the alert line falls inside
+    the finding's own start..end source range. Proximity windows were rejected:
+    our rules often anchor at the start of a call chain while CodeQL anchors at
+    the method call, and a window either credits a neighbouring construct or
+    lets one finding absorb every remaining alert.
     """
     spans: dict[str, list[tuple[int, int]]] = {}
+    resolved_source = source.resolve()
     for result in document.get("results") or []:
-        name = Path(str(result["path"])).name
-        spans.setdefault(name, []).append(
+        if str(result.get("check_id") or "") != scored_rule:
+            continue
+        result_path = Path(str(result["path"])).resolve()
+        try:
+            relative = result_path.relative_to(resolved_source).as_posix()
+        except ValueError as error:
+            message = f"CodeQL finding escapes corpus root: {result_path}"
+            raise BenchmarkGateError(message) from error
+        spans.setdefault(relative, []).append(
             (int(result["start"]["line"]), int(result["end"]["line"]))
         )
     alerts = covered = good_lines = good_hit = 0
@@ -605,11 +793,26 @@ def _score_codeql_markers(document: dict, source: Path, alert_query: str) -> dic
         if not path.is_file() or path.name.endswith(".expected"):
             continue
         lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-        file_spans = spans.get(path.name, [])
+        relative = path.resolve().relative_to(resolved_source).as_posix()
+        file_spans = spans.get(relative, [])
+        unused_spans = set(range(len(file_spans)))
         for index, text in enumerate(lines, start=1):
             if alert_query in text and not CODEQL_MISSING_RE.search(text):
                 alerts += 1
-                if any(start <= index <= end for start, end in file_spans):
+                candidates = [
+                    position
+                    for position in unused_spans
+                    if file_spans[position][0] <= index <= file_spans[position][1]
+                ]
+                if candidates:
+                    selected = min(
+                        candidates,
+                        key=lambda position: (
+                            file_spans[position][1] - file_spans[position][0],
+                            file_spans[position][0],
+                        ),
+                    )
+                    unused_spans.remove(selected)
                     covered += 1
             elif CODEQL_GOOD_RE.search(text):
                 good_lines += 1
@@ -620,6 +823,103 @@ def _score_codeql_markers(document: dict, source: Path, alert_query: str) -> dic
         "alert_lines_covered": covered,
         "good_lines": good_lines,
         "good_lines_reported": good_hit,
+        "findings_scored": sum(len(values) for values in spans.values()),
+    }
+
+
+def _eslint_rule_tester_cases(source: Path) -> list[tuple[str, bool, str]]:
+    """Extract official valid and invalid no-loss-of-precision cases."""
+    text = source.read_text(encoding="utf-8")
+    runs = list(ESLINT_RULE_TESTER_RE.finditer(text))
+    if len(runs) != 2:
+        message = f"expected two ESLint RuleTester runs, found {len(runs)}"
+        raise BenchmarkGateError(message)
+
+    cases: list[tuple[str, bool, str]] = []
+    for run_index, run in enumerate(runs):
+        suffix = "js" if run_index == 0 else "ts"
+        valid_block = run.group("valid")
+        invalid_block = run.group("invalid")
+        valid_literals = [
+            match.group("quoted")
+            for match in ESLINT_BARE_CODE_RE.finditer(valid_block)
+        ]
+        valid_literals.extend(
+            match.group("quoted")
+            for match in ESLINT_OBJECT_CODE_RE.finditer(valid_block)
+        )
+        invalid_literals = [
+            match.group("quoted")
+            for match in ESLINT_OBJECT_CODE_RE.finditer(invalid_block)
+        ]
+        if not valid_literals or not invalid_literals:
+            message = "ESLint RuleTester extraction produced an empty label set"
+            raise BenchmarkGateError(message)
+        try:
+            cases.extend((json.loads(value), False, suffix) for value in valid_literals)
+            cases.extend((json.loads(value), True, suffix) for value in invalid_literals)
+        except json.JSONDecodeError as exc:
+            message = "ESLint RuleTester contains an unsupported code literal"
+            raise BenchmarkGateError(message) from exc
+    return cases
+
+
+def _score_eslint_rule_tester(
+    binary: Path,
+    rule: Path,
+    source: Path,
+    scored_rule: str,
+    workdir: Path,
+) -> dict:
+    cases = _eslint_rule_tester_cases(source)
+    corpus = workdir / "corpus"
+    corpus.mkdir()
+    truth: dict[str, bool] = {}
+    for index, (code, vulnerable, suffix) in enumerate(cases):
+        name = f"case-{index:03d}.{suffix}"
+        (corpus / name).write_text(f"{code}\n", encoding="utf-8")
+        truth[name] = vulnerable
+
+    document = _scan(binary, rule, corpus)
+    if document.get("errors"):
+        message = "ESLint RuleTester benchmark produced engine errors"
+        raise BenchmarkGateError(message)
+    scanned = {Path(path).name for path in document.get("paths", {}).get("scanned") or []}
+    if scanned != set(truth):
+        message = "ESLint RuleTester benchmark did not scan the exact extracted cases"
+        raise BenchmarkGateError(message)
+
+    reported: dict[str, int] = {}
+    for result in document.get("results") or []:
+        rule_id = str(result.get("check_id") or "")
+        if rule_id != scored_rule:
+            message = f"unexpected rule in ESLint benchmark result: {rule_id}"
+            raise BenchmarkGateError(message)
+        name = Path(str(result.get("path") or "")).name
+        if name not in truth:
+            message = f"ESLint finding references unknown case: {name}"
+            raise BenchmarkGateError(message)
+        reported[name] = reported.get(name, 0) + 1
+    duplicates = sorted(name for name, count in reported.items() if count != 1)
+    if duplicates:
+        message = f"ESLint cases produced duplicate findings: {duplicates}"
+        raise BenchmarkGateError(message)
+
+    tp = sum(vulnerable and name in reported for name, vulnerable in truth.items())
+    fp = sum(not vulnerable and name in reported for name, vulnerable in truth.items())
+    fn = sum(vulnerable and name not in reported for name, vulnerable in truth.items())
+    tn = sum(not vulnerable and name not in reported for name, vulnerable in truth.items())
+    return {
+        "cases_total": len(truth),
+        "vulnerable_cases": sum(truth.values()),
+        "safe_cases": sum(not value for value in truth.values()),
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": tn,
+        "precision": tp / (tp + fp) if tp + fp else 0.0,
+        "recall": tp / (tp + fn) if tp + fn else 0.0,
+        "engine_errors": 0,
     }
 
 
@@ -628,10 +928,19 @@ def _score_gosec(
     rules: Path,
     checkout: Path,
     sample_files: dict[str, str],
+    scored_rules: dict[str, str],
     workdir: Path,
 ) -> dict:
     """Score our rules against gosec's labelled samples, per gosec rule id."""
     actual: dict[str, dict[str, int]] = {}
+    if set(sample_files) != set(scored_rules):
+        message = "gosec sample files and scored-rule ownership differ"
+        raise BenchmarkGateError(message)
+    available_rules = set(_rule_cwes(rules))
+    missing_rules = set(scored_rules.values()) - available_rules
+    if missing_rules:
+        message = f"gosec scored rules are not present: {sorted(missing_rules)}"
+        raise BenchmarkGateError(message)
     total_cases = 0
     for gosec_rule, relative in sorted(sample_files.items()):
         cases = _gosec_cases(checkout / relative)
@@ -644,7 +953,10 @@ def _score_gosec(
             for position, source in enumerate(sources):
                 (case_dir / f"f{position}.go").write_text(source, encoding="utf-8")
             document = _scan(binary, rules, case_dir)
-            found = len(document.get("results") or [])
+            found = sum(
+                str(result.get("check_id") or "") == scored_rules[gosec_rule]
+                for result in document.get("results") or []
+            )
             if expected > 0:
                 vulnerable += 1
                 if found:
@@ -665,6 +977,17 @@ def _ratio(numerator: int, denominator: int) -> str:
     if denominator == 0:
         return "n/a"
     return f"{numerator / denominator:.1%}"
+
+
+def _reviewed_cwe_aliases(name: str, raw_aliases: dict[str, int]) -> dict[int, int]:
+    aliases = {int(source): int(target) for source, target in raw_aliases.items()}
+    unexpected = {
+        (name, source, target) for source, target in aliases.items()
+    } - REVIEWED_CWE_ALIASES
+    if unexpected:
+        message = f"unreviewed CWE aliases: {sorted(unexpected)}"
+        raise BenchmarkGateError(message)
+    return aliases
 
 
 def _denominator(cases: dict[str, tuple[int, bool]], applicable: set[int]) -> dict:
@@ -706,6 +1029,14 @@ def main() -> int:
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
     benchmarks = manifest["benchmarks"]
+    for benchmark in benchmarks:
+        name = benchmark.get("name", "<unnamed>")
+        if not isinstance(benchmark.get("promotion_ready"), bool):
+            message = f"{name}: promotion_ready must be a boolean"
+            raise BenchmarkGateError(message)
+        if not benchmark["promotion_ready"] and not benchmark.get("promotion_blocker"):
+            message = f"{name}: a non-ready benchmark requires promotion_blocker"
+            raise BenchmarkGateError(message)
     if args.benchmark:
         requested = set(args.benchmark)
         known = {str(benchmark["name"]) for benchmark in benchmarks}
@@ -778,10 +1109,13 @@ def main() -> int:
         if benchmark_type == "owasp-csv":
             source = checkout / benchmark["source_path"]
             cases = _expected_cases(checkout / benchmark["expected_results"])
-            cwe_aliases = {
-                int(source): int(target)
-                for source, target in (benchmark.get("cwe_aliases") or {}).items()
-            }
+            try:
+                cwe_aliases = _reviewed_cwe_aliases(
+                    str(benchmark["name"]), benchmark.get("cwe_aliases") or {}
+                )
+            except BenchmarkGateError as error:
+                failures.append(f"{benchmark['name']}: {error}")
+                continue
             if cwe_aliases:
                 cases = {
                     name: (cwe_aliases.get(cwe, cwe), vulnerable)
@@ -816,7 +1150,7 @@ def main() -> int:
                 second_document
             ):
                 failures.append(f"{benchmark['name']}: repeated findings differ")
-            actual = _score(first_document, cases, rule_cwes, cwe_aliases)
+            actual = _score(first_document, cases, rule_cwes)
         elif benchmark_type == "juliet-xml":
             source_root = checkout / str(benchmark["source_root"])
             sources = [source_root / path for path in benchmark["source_paths"]]
@@ -849,6 +1183,13 @@ def main() -> int:
                 source_root / str(benchmark["manifest_file"]),
                 rule_cwes,
             )
+            semantic_specification = benchmark.get("semantic_evidence")
+            if semantic_specification is not None:
+                actual["semantic_evidence"] = _score_java_semantic_juliet(
+                    source_root,
+                    semantic_specification,
+                    args.opengrep,
+                )
         elif benchmark_type == "juliet-preprocessed":
             benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
             source = checkout / str(benchmark["source_path"])
@@ -865,7 +1206,9 @@ def main() -> int:
                 second = _scan(args.opengrep, benchmark_rules, out)
                 if _exact_findings(first, out) != _exact_findings(second, out):
                     failures.append(f"{benchmark['name']}: repeated findings differ")
-                actual = _score_juliet_preprocessed(first, done, skipped)
+                actual = _score_juliet_preprocessed(
+                    first, done, skipped, str(benchmark["scored_rule"])
+                )
         elif benchmark_type == "codeql-markers":
             benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
             source = checkout / str(benchmark["source_path"])
@@ -882,8 +1225,40 @@ def main() -> int:
                 if _exact_findings(first, neutral) != _exact_findings(second, neutral):
                     failures.append(f"{benchmark['name']}: repeated findings differ")
                 actual = _score_codeql_markers(
-                    first, neutral, str(benchmark["alert_query"])
+                    first,
+                    neutral,
+                    str(benchmark["alert_query"]),
+                    str(benchmark["scored_rule"]),
                 )
+        elif benchmark_type == "eslint-rule-tester":
+            benchmark_rule = REPO_ROOT / str(benchmark["rule_path"])
+            source = checkout / str(benchmark["source_file"])
+            if not benchmark_rule.is_file():
+                failures.append(
+                    f"{benchmark['name']}: rule file missing: {benchmark_rule}"
+                )
+                continue
+            if not source.is_file() or source.is_symlink():
+                failures.append(f"{benchmark['name']}: source file missing: {source}")
+                continue
+            with tempfile.TemporaryDirectory() as first_dir:
+                actual = _score_eslint_rule_tester(
+                    args.opengrep,
+                    benchmark_rule,
+                    source,
+                    str(benchmark["scored_rule"]),
+                    Path(first_dir),
+                )
+            with tempfile.TemporaryDirectory() as second_dir:
+                repeat = _score_eslint_rule_tester(
+                    args.opengrep,
+                    benchmark_rule,
+                    source,
+                    str(benchmark["scored_rule"]),
+                    Path(second_dir),
+                )
+            if actual != repeat:
+                failures.append(f"{benchmark['name']}: repeated scoring differs")
         elif benchmark_type == "sard-folders":
             benchmark_rules = DEFAULT_RULES / str(benchmark["rules_subdir"])
             source = checkout / str(benchmark["source_path"])
@@ -911,7 +1286,9 @@ def main() -> int:
             second = _scan(args.opengrep, benchmark_rules, source)
             if _exact_findings(first, source) != _exact_findings(second, source):
                 failures.append(f"{benchmark['name']}: repeated findings differ")
-            actual = _score_juliet_methods(first, CSHARP_METHOD_RE)
+            actual = _score_juliet_methods(
+                first, CSHARP_METHOD_RE, str(benchmark["scored_rule"])
+            )
         elif benchmark_type == "gosec-samples":
             # Each benchmark states the rule subtree it is scored against. The
             # --rules default targets the Java corpora, so a Go benchmark that
@@ -940,6 +1317,7 @@ def main() -> int:
                     benchmark_rules,
                     checkout,
                     sample_files,
+                    benchmark["scored_rules"],
                     Path(first_dir),
                 )
             with tempfile.TemporaryDirectory() as second_dir:
@@ -948,6 +1326,7 @@ def main() -> int:
                     benchmark_rules,
                     checkout,
                     sample_files,
+                    benchmark["scored_rules"],
                     Path(second_dir),
                 )
             if actual != repeat:
@@ -1007,6 +1386,14 @@ def main() -> int:
                     f"fp_on_safe={values['fp_on_safe']}"
                 )
             continue
+        if benchmark_type == "eslint-rule-tester":
+            print(f"{benchmark['name']}: {actual['cases_total']} cases")
+            print(
+                f"  TP={actual['tp']} FP={actual['fp']} FN={actual['fn']} "
+                f"TN={actual['tn']} precision={actual['precision']:.1%} "
+                f"recall={actual['recall']:.1%}"
+            )
+            continue
         print(f"{benchmark['name']}: {actual['files_scanned']} files")
         if benchmark_type == "sard-folders":
             precision = _ratio(actual["tp"], actual["tp"] + actual["fp"])
@@ -1033,6 +1420,15 @@ def main() -> int:
                     f"{values['cases_total']} recall={recall}, "
                     f"findings={values['finding_count']}, "
                     f"manifest-locations={values['findings_at_manifest_flaws']}"
+                )
+            semantic = actual.get("semantic_evidence")
+            if semantic is not None:
+                print(
+                    "  semantic evidence: "
+                    f"{semantic['attested']}/{semantic['candidate_count']} attested, "
+                    f"{semantic['jdk_owned_invocations']} JDK-owned calls, "
+                    f"{semantic['safe_literal_controls']} strong controls, "
+                    f"{semantic['compiler_errors']} compiler errors"
                 )
 
     if failures:

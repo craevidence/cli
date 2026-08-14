@@ -18,6 +18,10 @@ def escape_for_html(value):
     return html.escape(value)
 
 
+def sanitize(value):
+    return value
+
+
 @app.route("/greet-fstring")
 def greet_fstring():
     name = request.args.get("name")
@@ -108,6 +112,14 @@ def greet_stdlib_escaped():
     return f"<h1>Hello {html.escape(name)}</h1>"
 
 
+@app.route("/greet-assigned-stdlib-escaped")
+def greet_assigned_stdlib_escaped():
+    name = request.args.get("name", "")
+    safe = html.escape(name)
+    # ok: cra-python-flask-response-html-taint
+    return f"<h1>Hello {safe}</h1>"
+
+
 @app.route("/greet-markupsafe-escaped")
 def greet_markupsafe_escaped():
     name = request.args.get("name", "")
@@ -115,11 +127,19 @@ def greet_markupsafe_escaped():
     return f"<h1>Hello {markupsafe.escape(name)}</h1>"
 
 
-@app.route("/greet-project-escaped")
-def greet_project_escaped():
+@app.route("/greet-project-helper")
+def greet_project_helper():
     name = request.args.get("name", "")
     body = f"<h1>Hello {escape_for_html(name)}</h1>"
-    # ok: cra-python-flask-response-html-taint
+    # ruleid: cra-python-flask-response-html-taint
+    return body
+
+
+@app.route("/greet-noop-sanitizer")
+def greet_noop_sanitizer():
+    name = request.args.get("name", "")
+    body = f"<h1>Hello {sanitize(name)}</h1>"
+    # ruleid: cra-python-flask-response-html-taint
     return body
 
 
@@ -137,6 +157,18 @@ def greet_json():
     return jsonify(name=name)
 
 
+@app.route("/greet-dict")
+def greet_dict():
+    # ok: cra-python-flask-response-html-taint
+    return {"name": request.args.get("name", "")}
+
+
+@app.route("/greet-list")
+def greet_list():
+    # ok: cra-python-flask-response-html-taint
+    return [request.args.get("name", "")]
+
+
 @app.route("/greet-redirect")
 def greet_redirect():
     # A redirect does not build an HTML body, so the value is not an XSS sink.
@@ -144,6 +176,13 @@ def greet_redirect():
     request.args.get("next", "/")
     # ok: cra-python-flask-response-html-taint
     return redirect("/home")
+
+
+@app.route("/greet-redirect-tuple")
+def greet_redirect_tuple():
+    target = request.args.get("next", "/")
+    # ok: cra-python-flask-response-html-taint
+    return redirect(target), 302
 
 
 @app.route("/greet-static")

@@ -5,7 +5,7 @@ rules:
       Remove the callback and use the platform certificate validation policy.
     severity: ERROR
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-295: Improper Certificate Validation"]
       owasp: ["A02:2021 - Cryptographic Failures"]
       references:
@@ -14,7 +14,7 @@ rules:
         - https://learn.microsoft.com/en-us/dotnet/api/system.net.security.sslclientauthenticationoptions.remotecertificatevalidationcallback
       category: security
       technology: [csharp, dotnet, tls]
-      confidence: VERY HIGH
+      confidence: MEDIUM
       scope: >
         Detects an accept-all callback attached to the HttpClientHandler,
         ServicePointManager, or SslClientAuthenticationOptions certificate
@@ -24,7 +24,9 @@ rules:
       limitations: >
         Does not follow method groups, named callback variables, or helper
         methods that return true, and does not evaluate callbacks defined in
-        another file.
+        another file. Property and type names are matched as written rather
+        than resolved, so application classes exposing the same callback
+        property names can produce findings.
       license: MIT
       author: CRA Evidence
     languages: [csharp]

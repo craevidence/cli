@@ -5,7 +5,7 @@ rules:
       directly and pass validated values through ArgumentList without a shell.
     severity: ERROR
     metadata:
-      tier: default
+      tier: experimental
       cwe: ["CWE-78: Improper Neutralization of Special Elements used in an OS Command"]
       owasp: ["A03:2021 - Injection"]
       references:
@@ -24,7 +24,9 @@ rules:
       limitations: >
         Taint is followed within a single file. Flows that cross a method
         boundary through a field, a helper class, or another file are not
-        reported.
+        reported. Request collection and process API names are matched as
+        written rather than resolved, so application classes exposing the same
+        member names can produce findings.
       sanitizer_analysis:
         status: modeled
         reason: A fixed executable with ArgumentList is modeled as a non-shell process invocation.

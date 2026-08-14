@@ -1,0 +1,65 @@
+rules:
+  - id: cra-go-tls-direct-dial-insecure
+    message: >
+      crypto/tls is dialling with InsecureSkipVerify set to true and no custom
+      certificate-verification callback in the inline configuration. The TLS
+      handshake will not verify the certificate chain or hostname. Remove
+      InsecureSkipVerify or supply a configuration that performs complete chain
+      and hostname verification.
+    severity: ERROR
+    metadata:
+      tier: default
+      cwe:
+        - "CWE-295: Improper Certificate Validation"
+      owasp:
+        - "A02:2021 - Cryptographic Failures"
+      references:
+        - https://cwe.mitre.org/data/definitions/295.html
+        - https://pkg.go.dev/crypto/tls#Dial
+        - https://pkg.go.dev/crypto/tls#DialWithDialer
+      category: security
+      technology:
+        - go
+      confidence: HIGH
+      scope: >
+        Reports tls.Dial or tls.DialWithDialer when the call receives an inline
+        crypto/tls Config literal whose InsecureSkipVerify field is the literal
+        true and which declares neither VerifyConnection nor
+        VerifyPeerCertificate. The qualifier is bound to an exact crypto/tls
+        import, including an explicit import alias.
+      limitations: >
+        Does not report a Config stored in a variable, a field assignment made
+        before or after construction, a non-literal boolean, or an inline Config
+        containing a custom verification callback. Those broader review cases
+        remain covered by experimental rules because this rule cannot establish
+        callback behavior or later mutation. Dot imports are not matched.
+      license: MIT
+      author: CRA Evidence
+    languages: [go]
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-inside: |
+                  import $TLS "crypto/tls"
+                  ...
+              - pattern-either:
+                  - pattern: "$TLS.Dial(..., &$TLS.Config{..., InsecureSkipVerify: true, ...})"
+                  - pattern: "$TLS.DialWithDialer(..., &$TLS.Config{..., InsecureSkipVerify: true, ...})"
+              - pattern-not: "$TLS.Dial(..., &$TLS.Config{..., VerifyConnection: $VERIFY, ...})"
+              - pattern-not: "$TLS.Dial(..., &$TLS.Config{..., VerifyPeerCertificate: $VERIFY, ...})"
+              - pattern-not: "$TLS.DialWithDialer(..., &$TLS.Config{..., VerifyConnection: $VERIFY, ...})"
+              - pattern-not: "$TLS.DialWithDialer(..., &$TLS.Config{..., VerifyPeerCertificate: $VERIFY, ...})"
+          - patterns:
+              - pattern-inside: |
+                  import "crypto/tls"
+                  ...
+              - pattern-not-inside: |
+                  import $IMPORT_ALIAS "crypto/tls"
+                  ...
+              - pattern-either:
+                  - pattern: "tls.Dial(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
+                  - pattern: "tls.DialWithDialer(..., &tls.Config{..., InsecureSkipVerify: true, ...})"
+              - pattern-not: "tls.Dial(..., &tls.Config{..., VerifyConnection: $VERIFY, ...})"
+              - pattern-not: "tls.Dial(..., &tls.Config{..., VerifyPeerCertificate: $VERIFY, ...})"
+              - pattern-not: "tls.DialWithDialer(..., &tls.Config{..., VerifyConnection: $VERIFY, ...})"
+              - pattern-not: "tls.DialWithDialer(..., &tls.Config{..., VerifyPeerCertificate: $VERIFY, ...})"

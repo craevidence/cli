@@ -36,7 +36,7 @@ class FileHandler {
         return File.ReadAllText("/srv/app/config.json");
     }
 
-    string GoodCanonicalContainment(HttpRequest request) {
+    string ReportedCanonicalContainment(HttpRequest request) {
         string basePath = Path.GetFullPath("/srv/app/documents");
         string path = Path.GetFullPath(
             Path.Combine(basePath, request.Query["path"])
@@ -44,7 +44,7 @@ class FileHandler {
         if (!path.StartsWith(basePath + Path.DirectorySeparatorChar)) {
             return "invalid path";
         }
-        // ok: cra-csharp-file-request-taint
+        // ruleid: cra-csharp-file-request-taint
         return File.ReadAllText(path);
     }
 

@@ -92,6 +92,28 @@ class CommandSequences {
                 request.getParameter("value"))).start();
     }
 
+    void badUppercaseWindowsShellProgram(HttpServletRequest request) throws IOException {
+        // ruleid: cra-java-runtime-exec-request
+        new ProcessBuilder(List.of("CMD.EXE", "/C", request.getParameter("value"))).start();
+    }
+
+    void badMultiArgumentShellProgram(HttpServletRequest request) throws IOException {
+        // ruleid: cra-java-runtime-exec-request
+        new ProcessBuilder("/usr/bin/bash", "-c", request.getParameter("value")).start();
+    }
+
+    void badEnvShellWrapper(HttpServletRequest request) throws IOException {
+        new ProcessBuilder(List.of("/usr/bin/env", "sh", "-c",
+                // ruleid: cra-java-runtime-exec-request
+                request.getParameter("value"))).start();
+    }
+
+    void badBusyboxShellWrapper(HttpServletRequest request) throws IOException {
+        new ProcessBuilder(List.of("busybox", "sh", "-c",
+                // ruleid: cra-java-runtime-exec-request
+                request.getParameter("value"))).start();
+    }
+
     // Program names that merely end in the letters of a shell name.
     void goodProgramEndingInShellLetters(HttpServletRequest request) throws IOException {
         // ok: cra-java-runtime-exec-request

@@ -9,6 +9,108 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A default JavaScript and TypeScript rule reports assigned odd integer
+  literals above the exact binary64 safe-integer boundary. At pinned ESLint
+  commit `87f66f4435c4df7f4f6815c939d153196ec03e3c`, it detects 24 of 46 official
+  invalid cases and none of 79 official valid cases. Its fixture independently
+  verifies all reported values lose precision when converted to `Number`, and
+  its documented scope leaves broader numeric analysis out of the default tier.
+
+- `code-evidence --language cpp` uses a distinct supported libclang C++17 profile
+  and evidence schema. A narrow default rule reports direct decimal-literal
+  assignments outside a fixed `uint8_t` array only after an exact source-file
+  array-bounds diagnostic. Active preprocessing, application element aliases,
+  included-header diagnostics, stale sources, and cross-language evidence are
+  covered by fail-closed tests. A second default rule reports a direct system
+  `printf` or `std::printf` call only in global `main` and only when the complete
+  format argument is bound to that declaration's own second parameter.
+  Application homonyms, macro redirects, inactive code, wrong scopes, and
+  shadowed parameters fail closed. A third default applies the same proof to a
+  direct system-shell command and covers both `system` and `std::system`. The
+  four broader C++ rules remain experimental.
+
+- `code-evidence --language c` loads an exact hashed supported libclang frontend
+  with fixed C17 options and hashed system-header roots. A narrow default rule
+  reports direct decimal-literal assignments outside a fixed `uint8_t` array only when
+  the compiler emits its array-bounds diagnostic at the exact candidate range.
+  A compiling macro redirect is rejected, and diagnostics from included
+  headers cannot attest a source-file candidate. The producer does not run a build
+  system, linker, compiler plugin, or target binary; unsupported includes,
+  compiler errors, stale source, and missing frontend assets fail closed. The
+  same frontend now attests a second default rule only for a direct system
+  `printf` call in global `main` whose complete format argument is bound to
+  that declaration's own second parameter. Application homonyms, macro
+  redirects, inactive code, and wrong scopes fail closed. A third default
+  applies the same proof to a direct system-shell command. The four broader C
+  rules remain experimental.
+
+- The DHI and public fallback containers include exact Debian 13 libclang
+  18.1.8 frontend libraries and required C/C++ headers. They can generate and
+  consume the separate C17 and C++17 evidence profiles without a compiler
+  driver, linker, plugin, project build, target-code execution, or network
+  access. Exact Debian package records and copyright files are retained for
+  SBOM and vulnerability inventory. Native Ubuntu 18.1.3 profiles remain
+  supported, and cross-profile evidence fails closed.
+
+- `code-evidence --language rust` statically binds one narrow default TLS rule
+  to Rust 2018, 2021, or 2024 absolute extern-prelude paths and the exact
+  crates.io reqwest 0.12.24 package checksum. It does not invoke Cargo, rustc,
+  build scripts, proc macros, target code, or the network. Workspaces,
+  dependency overrides, application-owned extern aliases, unsupported Cargo
+  configuration, stale source, and malformed evidence fail closed. The broader
+  reqwest method-name rule and six other Rust rules remain experimental.
+
+- `code-evidence --language csharp` compiles a shipped Roslyn analyzer directly
+  with .NET SDK 8.0.423 and the trusted net8.0 reference pack. It does not load
+  projects, restore packages, invoke MSBuild, run generators, load plugins, or
+  execute target code. A narrow default rule reports direct assignment of the
+  framework's accept-any certificate validator only when both properties
+  resolve to the signed `System.Net.Http.HttpClientHandler` type. Application
+  shadows are rejected, while missing and ambiguous semantic ranges degrade
+  coverage. The broader callback rule and framework MD5 rule remain
+  experimental.
+
+- A narrow PHP rule enabled by default detects the literal fully qualified
+  global `\unserialize` spelling when its focused first argument is derived
+  from a reviewed HTTP superglobal source. Executable PHP namespace probes
+  distinguish the built-in from an application-owned namespaced homonym and
+  verify that the global function cannot be redeclared. The broader
+  short-name rule remains experimental, and unsupported dynamic, alias,
+  multiline, concatenated, and complex-argument forms are disclosed as misses.
+
+- `code-evidence` generates a versioned Java semantic-evidence envelope with
+  the local JDK compiler API. It disables annotation processing, implicit
+  compilation, the class path, and the source path, and never invokes Gradle or
+  Maven. A narrow default weak-digest finding is emitted only when the
+  compiler resolves `MessageDigest.getInstance` to the top-level
+  `java.security.MessageDigest` type in the `java.base` module. Compiler errors,
+  source changes, stale evidence, and application-owned lookalikes fail closed.
+  The promotion is bound to 51 semantically attested NIST Juliet cases, 96
+  strong-literal controls, 89 true positives and 0 false positives on the
+  independent OWASP lane, compiling shadow controls, and a clean pinned Spring
+  Petclinic run. Eight broader Java rules remain experimental.
+  The CLI container consumes envelopes produced by a Java-enabled job or host;
+  it does not include a JDK.
+
+- `code-check` can consume a versioned C# semantic-evidence envelope without
+  executing .NET or an analyzer. The verifier binds the pinned adapter,
+  isolation profile, successful restore and build results, source and index
+  digests, and exact SCIP occurrence before it emits the narrow framework
+  `MD5.Create` candidate. Application-owned lookalikes are rejected; missing,
+  stale, ambiguous, build-failed, or workspace-failed evidence reports degraded
+  coverage. The candidate remains experimental while a normal isolated
+  evidence-generation path and promotion measurements are incomplete.
+
+- A default Go rule detects direct import-bound `crypto/tls` dial calls whose
+  inline configuration sets `InsecureSkipVerify` to `true` without a custom
+  verification callback. In-repository compiling adversarial fixtures bind
+  import aliases, reject an application package exposing the same `tls.Config`
+  and `tls.Dial` names, and reject an unrelated import path ending in
+  `crypto/tls`. A fail-closed evidence record ties the non-Python default tier
+  to those fixtures, their semantic compile test, the experimental companion,
+  and the applicable real-project lane. Broader TLS construction, callback, and
+  assignment cases remain experimental.
+
 - Platform wheels and the CLI container now include the official Opengrep
   1.26.0 executable. Release builds verify fixed SHA-256 hashes and Sigstore
   signatures bound to Opengrep's exact release workflow identity, package its
@@ -16,11 +118,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the exact commit and pinned submodules. The non-build Semgrep rule-test
   corpus is excluded and recorded in the bundle manifest.
 - The bundled rule pack now tests Go, JavaScript/TypeScript, Java, C, C++, Rust,
-  PHP, and C# alongside the default Python group. The pack contains 50
-  experimental rules across those eight groups, including focused injection, path, SSRF,
-  deserialization, TLS, cryptography, filesystem, and secret-key detections.
-  Each rule has positive and negative fixtures executed by the pinned Opengrep
-  engine gate and requires `--include-experimental`.
+  PHP, and C# alongside the default Python group. Those eight groups contain 48
+  experimental rules, and Python contains another two, including focused
+  injection, path, SSRF, deserialization, TLS, cryptography, filesystem, and
+  secret-key detections. Each experimental rule requires
+  `--include-experimental`.
 - Reproducible evidence gates now scan pinned revisions of nine representative
   projects twice and score applicable Java rules against the OWASP Benchmark
   with raw TP, FP, FN, and TN counts. A second gate verifies the official NIST
@@ -30,16 +132,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   false positives, or detection gaps remain.
 - Java rules now recognize qualified filesystem, message-digest, JDBC batch,
   and JDBC overload APIs. The pinned OWASP Benchmark measures 172 of 660
-  applicable vulnerable cases and 24 false positives; Java remains experimental.
-  Each Java rule now declares its exact scope and engine limitations. Rules with
-  known safe-case findings or no independent precision measurement are warnings
-  instead of build-breaking errors.
+  applicable vulnerable cases and 24 false positives across the complete Java
+  group. Only the semantically resolved literal weak-digest rule is enabled by
+  default. Each Java rule declares its exact scope and engine limitations.
+  Rules with known safe-case findings or no independent precision measurement
+  are warnings instead of build-breaking errors.
 - The GitHub Action accepts `command: code-check`, and the GitLab component
   provides `.cra-evidence-code-check` for a source-code CI gate without a
   separate scanner installation.
 
 ### Changed
 
+- Rule-pack review leaves 50 rules behind `--include-experimental`; the default
+  tier now contains 42 Python rules, the narrowly import-bound Go TLS dial
+  rule, the compiler-attested Java JDK weak-digest rule, the narrow PHP global
+  `\unserialize` rule, and the Roslyn-attested C# framework accept-any
+  certificate-validator assignment, and the crates.io-bound Rust reqwest TLS
+  rule, three compiler-attested rules for each of C and C++, and the
+  language-intrinsic JavaScript and TypeScript unsafe-integer rule. Neutral
+  probes showed that promoted Go, Java, and C# rules can report application or
+  third-party types whose written names resemble framework APIs. The review
+  also removed unsound path and TLS callback suppressions, expanded shell
+  wrapper and case coverage, and recorded unsupported helper flows as misses.
+- Benchmark scoring now binds Juliet, CodeQL, gosec, and preprocessed-corpus
+  findings to the rule declared by each benchmark. A CodeQL finding can cover
+  at most one alert, and the only accepted CWE alias is bound to its reviewed
+  corpus. The executable Go integer fixture gate observes the value entering
+  each narrowing conversion, including conversions that wrap to zero.
 - `code-check` resolves `CRA_EVIDENCE_OPENGREP`, then the bundled executable,
   then `PATH`. Custom excludes are additive, and `--rule-timeout` is separate
   from the whole-scan timeout. Engine-free source installs no longer skip an
@@ -67,7 +186,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   has a same-file helper-to-sink fixture under the production intrafile flag.
 - Rule evidence now includes qualified-name, shadowed-sanitizer, `char **argv`,
   API-overload, and safe near-miss variants across Python, Java, C, C++, Rust,
-  PHP, and C#. Rule-pack version 2.4.0 binds both rule bodies and fixture bytes.
+  PHP, and C#. The version ledger binds both rule bodies and fixture bytes.
 - Rule-specific tiers no longer force every rule in a language to move together.
   Experimental rules remain opt-in until their own evidence supports promotion.
   Sanitizer declarations now require nearby executable safe fixtures across the

@@ -53,6 +53,27 @@ func badRLockDeferredClosureUnlock(mu *sync.RWMutex) {
 	defer func() { mu.Unlock() }()
 }
 
+// A conditional release does not make the deferred read unlock pair with the
+// write lock on every path.
+func badLockRUnlockAfterConditionalRelease(mu *sync.RWMutex, release bool) {
+	// ruleid: cra-go-wrong-lock-unlock
+	mu.Lock()
+	if release {
+		mu.Unlock()
+	}
+	defer mu.RUnlock()
+}
+
+// Mirror of the conditional-release mismatch above.
+func badRLockUnlockAfterConditionalRelease(mu *sync.RWMutex, release bool) {
+	// ruleid: cra-go-wrong-lock-unlock
+	mu.RLock()
+	if release {
+		mu.RUnlock()
+	}
+	defer mu.Unlock()
+}
+
 // Safe: Lock() + deferred closure calling Unlock() -- correct pair
 func okLockDeferredClosureUnlock(mu *sync.RWMutex) {
 	// ok: cra-go-wrong-lock-unlock

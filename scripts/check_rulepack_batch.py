@@ -47,6 +47,41 @@ CROSS_RULE_OK_ALLOWLIST = {
         "Wrapping the interpolated clause in text() avoids the narrow "
         "bare-string rule but is still SQL injection."
     ),
+    (
+        "python/flask/cra-python-flask-response-html-taint.py",
+        "cra-python-flask-open-redirect",
+        "cra-python-flask-response-html-taint",
+    ): (
+        "A redirect response is not an HTML-body XSS sink, but a request-controlled "
+        "redirect target is independently an open redirect."
+    ),
+    (
+        "go/tls/cra-go-tls-direct-dial-insecure.go",
+        "cra-go-tls-insecure",
+        "cra-go-tls-direct-dial-insecure",
+    ): (
+        "The narrow default rule abstains when a custom verification callback is "
+        "present. The broader experimental rule reports the configuration for "
+        "review because it does not evaluate the callback implementation."
+    ),
+    (
+        "php/deserialization/cra-php-global-unserialize-superglobal.php",
+        "cra-php-unserialize-superglobal",
+        "cra-php-global-unserialize-superglobal",
+    ): (
+        "The narrow default rule excludes a namespaced application function. "
+        "The broader experimental rule reports the same short-name call for "
+        "review because it does not resolve PHP namespace binding."
+    ),
+    (
+        "rust/tls/cra-rust-cratesio-reqwest-invalid-certs.rs",
+        "cra-rust-reqwest-invalid-certs",
+        "cra-rust-cratesio-reqwest-invalid-certs",
+    ): (
+        "The narrow default rule abstains on relative paths, variables, and "
+        "intermediate builder calls. The broader experimental rule reports "
+        "those method-name shapes without proving external crate ownership."
+    ),
 }
 
 

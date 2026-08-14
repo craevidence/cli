@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://craevidence.com/schemas/csharp-semantic-evidence-v1.json",
+  "title": "CRA Evidence C# semantic evidence envelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "language", "adapter", "isolation", "source", "analysis"],
+  "properties": {
+    "schema_version": {"const": "craevidence.csharp_semantic_evidence.v1"},
+    "language": {"const": "csharp"},
+    "adapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["profile", "analyzer_sha256", "dotnet_executable_sha256", "sdk_version", "runtime_version", "roslyn_version", "reference_pack_version", "reference_pack_sha256"],
+      "properties": {
+        "profile": {"const": "roslyn-direct-framework-symbols-v1"},
+        "analyzer_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "dotnet_executable_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sdk_version": {"const": "8.0.423"},
+        "runtime_version": {"type": "string", "minLength": 1},
+        "roslyn_version": {"type": "string", "minLength": 1},
+        "reference_pack_version": {"const": "8.0.29"},
+        "reference_pack_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "isolation": {
+      "const": {
+        "build_scripts_executed": false,
+        "projects_loaded": false,
+        "restore_executed": false,
+        "msbuild_executed": false,
+        "generators_loaded": false,
+        "target_code_executed": false,
+        "reference_source": "trusted-framework-pack-only"
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["tree_sha256", "files"],
+      "properties": {
+        "tree_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "mode", "sha256"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*//)(?!.*\\\\).+\\.cs$"},
+              "mode": {"type": "integer", "minimum": 0, "maximum": 4095},
+              "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+            }
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compiler_exit_code", "error_count", "compiler_options", "profile_sha256", "occurrences"],
+      "properties": {
+        "compiler_exit_code": {"const": 0},
+        "error_count": {"const": 0},
+        "compiler_options": {"const": ["/noconfig", "/nostdlib+", "/target:exe", "framework-reference-pack-only", "no-project-inputs", "sanitized-dotnet-environment", "invariant-globalization"]},
+        "profile_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "occurrences": {
+          "type": "array",
+          "maxItems": 2000000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "start_line", "start_column", "end_line", "end_column", "left_property", "left_type", "left_assembly", "left_assembly_version", "left_public_key_token", "right_property", "right_type", "right_assembly", "right_assembly_version", "right_public_key_token"],
+            "properties": {
+              "path": {"type": "string", "minLength": 1},
+              "start_line": {"type": "integer", "minimum": 1},
+              "start_column": {"type": "integer", "minimum": 1},
+              "end_line": {"type": "integer", "minimum": 1},
+              "end_column": {"type": "integer", "minimum": 1},
+              "left_property": {"type": "string", "minLength": 1},
+              "left_type": {"type": "string", "minLength": 1},
+              "left_assembly": {"type": "string", "minLength": 1},
+              "left_assembly_version": {"type": "string", "minLength": 1},
+              "left_public_key_token": {"type": "string"},
+              "right_property": {"type": "string", "minLength": 1},
+              "right_type": {"type": "string", "minLength": 1},
+              "right_assembly": {"type": "string", "minLength": 1},
+              "right_assembly_version": {"type": "string", "minLength": 1},
+              "right_public_key_token": {"type": "string"}
+            }
+          }
+        }
+      }
+    }
+  }
+}
