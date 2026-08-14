@@ -186,8 +186,10 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
         lines.extend(
             [
                 "",
-                "Run with -v for reviewed dimensions and scope notes; "
-                "--output json for the full machine report.",
+                (
+                    "Run with -v for reviewed dimensions and scope notes; "
+                    "--output json for the full machine report."
+                ),
             ]
         )
     lines.extend(["", data["exit_note"]])

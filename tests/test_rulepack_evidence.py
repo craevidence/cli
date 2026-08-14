@@ -692,6 +692,33 @@ def test_engine_identity_rejects_wrong_version(monkeypatch) -> None:
         verify_engine(Path("opengrep"))
 
 
+def test_engine_identity_resolves_default_binary_from_path(
+    tmp_path: Path, monkeypatch
+) -> None:
+    binary = tmp_path / "opengrep"
+    binary.write_text("#!/bin/sh\necho 1.26.0\n", encoding="utf-8")
+    binary.chmod(0o755)
+    verified = []
+    executed = []
+    completed = type(
+        "Completed",
+        (),
+        {"returncode": 0, "stdout": "1.26.0\n", "stderr": ""},
+    )()
+    monkeypatch.setattr("scripts.rulepack_engine.shutil.which", lambda command: str(binary))
+    monkeypatch.setattr(
+        "scripts.rulepack_engine._verified_asset", lambda path: verified.append(path)
+    )
+    monkeypatch.setattr(
+        "scripts.rulepack_engine.subprocess.run",
+        lambda command, **kwargs: executed.append(command) or completed,
+    )
+
+    assert verify_engine(Path("opengrep")) == "1.26.0"
+    assert verified == [binary]
+    assert executed == [[str(binary), "--version"]]
+
+
 def test_engine_identity_rejects_version_spoofing_wrapper(tmp_path: Path, monkeypatch) -> None:
     wrapper = tmp_path / "opengrep"
     wrapper.write_text("#!/bin/sh\necho 1.26.0\n", encoding="utf-8")
@@ -781,14 +808,57 @@ def test_benchmark_denominator_records_excluded_categories() -> None:
     }
 
 
-def test_corpus_fetch_rejects_duplicate_directories(tmp_path: Path) -> None:
+def test_corpus_fetch_rejects_conflicting_duplicate_directories(tmp_path: Path) -> None:
     real = tmp_path / "real.json"
     benchmark = tmp_path / "benchmark.json"
-    real.write_text(json.dumps({"projects": [{"directory": "same"}]}), encoding="utf-8")
-    benchmark.write_text(json.dumps({"benchmarks": [{"directory": "same"}]}), encoding="utf-8")
+    real.write_text(
+        json.dumps(
+            {
+                "projects": [
+                    {
+                        "directory": "same",
+                        "repository": "https://example.test/one.git",
+                        "commit": "a" * 40,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    benchmark.write_text(
+        json.dumps(
+            {
+                "benchmarks": [
+                    {
+                        "directory": "same",
+                        "repository": "https://example.test/two.git",
+                        "commit": "b" * 40,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    with pytest.raises(fetch_corpora.CorpusFetchError, match="must be unique"):
+    with pytest.raises(fetch_corpora.CorpusFetchError, match="conflicting corpus sources"):
         fetch_corpora._entries(real, benchmark)
+
+
+def test_corpus_fetch_deduplicates_matching_sources(tmp_path: Path) -> None:
+    source = {
+        "directory": "shared",
+        "repository": "https://example.test/shared.git",
+        "commit": "a" * 40,
+    }
+    real = tmp_path / "real.json"
+    benchmark = tmp_path / "benchmark.json"
+    real.write_text(json.dumps({"projects": [source]}), encoding="utf-8")
+    benchmark.write_text(
+        json.dumps({"benchmarks": [{**source, "name": "second-scorecard"}]}),
+        encoding="utf-8",
+    )
+
+    assert fetch_corpora._entries(real, benchmark) == [source]
 
 
 def test_corpus_fetch_rejects_parent_traversal_in_archive(tmp_path: Path) -> None:

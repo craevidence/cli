@@ -32,11 +32,45 @@ def _entries(real_projects: Path, benchmarks: Path) -> list[dict]:
     real = json.loads(real_projects.read_text(encoding="utf-8"))["projects"]
     benchmark = json.loads(benchmarks.read_text(encoding="utf-8"))["benchmarks"]
     entries = [*real, *benchmark]
-    directories = [str(entry["directory"]) for entry in entries]
-    if len(set(directories)) != len(directories):
-        message = "corpus directory names must be unique"
-        raise CorpusFetchError(message)
-    return entries
+    unique: dict[str, dict] = {}
+    identities: dict[str, tuple[str, ...]] = {}
+    for entry in entries:
+        directory = str(entry["directory"])
+        source_type = str(entry.get("source_type", "git"))
+        if source_type == "git":
+            identity = (
+                source_type,
+                str(entry.get("repository") or ""),
+                str(entry.get("commit") or ""),
+            )
+        elif source_type == "archive-preprocessed":
+            identity = (
+                source_type,
+                str(entry.get("repository") or ""),
+                str(entry.get("archive_file") or ""),
+                str(entry.get("archive_sha256") or ""),
+            )
+        elif source_type == "archive":
+            identity = (
+                source_type,
+                str(entry.get("archive_url") or ""),
+                str(entry.get("archive_file") or ""),
+                str(entry.get("archive_sha256") or ""),
+            )
+        else:
+            message = f"unsupported corpus source type: {source_type}"
+            raise CorpusFetchError(message)
+        if any(not part for part in identity[1:]):
+            message = f"incomplete corpus source identity: {directory}"
+            raise CorpusFetchError(message)
+        if directory in unique:
+            if identities[directory] != identity:
+                message = f"conflicting corpus sources reuse directory: {directory}"
+                raise CorpusFetchError(message)
+            continue
+        unique[directory] = entry
+        identities[directory] = identity
+    return list(unique.values())
 
 
 def _run(command: list[str]) -> None:
@@ -203,12 +237,32 @@ def _fetch_archive(entry: dict, output: Path) -> None:
     _repair_manifest(entry, target)
 
 
+def _fetch_preprocessed_archive(entry: dict, output: Path) -> None:
+    target = output / str(entry["directory"])
+    if target.exists():
+        message = f"refusing to reuse existing corpus path: {target}"
+        raise CorpusFetchError(message)
+    target.mkdir()
+    archive = target / str(entry["archive_file"])
+    _download(str(entry["archive_url"]), archive)
+    _verify_file(
+        archive,
+        size=int(entry["archive_bytes"]),
+        sha256=str(entry["archive_sha256"]),
+    )
+    _validate_zip(archive, expected_entries=int(entry["archive_entries"]))
+    with ZipFile(archive) as bundle:
+        bundle.extractall(target)
+
+
 def _fetch(entry: dict, output: Path) -> None:
     source_type = entry.get("source_type", "git")
     if source_type == "git":
         _fetch_git(entry, output)
     elif source_type == "archive":
         _fetch_archive(entry, output)
+    elif source_type == "archive-preprocessed":
+        _fetch_preprocessed_archive(entry, output)
     else:
         message = f"unsupported corpus source type: {source_type}"
         raise CorpusFetchError(message)

@@ -263,8 +263,10 @@ class TestFormatOutput:
                     "parser_outcome": "accepted_document_only",
                     "mapped_fields": [],
                     "manual_followups": [
-                        "Stored as document evidence; no structured compliance "
-                        "fields were auto-populated from this schema type."
+                        (
+                            "Stored as document evidence; no structured compliance "
+                            "fields were auto-populated from this schema type."
+                        )
                     ],
                 },
             }
@@ -480,8 +482,10 @@ class TestFormatOutput:
                     ],
                     "truncated": False,
                     "manual_followups": [
-                        "Supplier names from SBOM component metadata are review "
-                        "candidates only; they do not satisfy supplier due diligence."
+                        (
+                            "Supplier names from SBOM component metadata are review "
+                            "candidates only; they do not satisfy supplier due diligence."
+                        )
                     ],
                 },
             }
@@ -517,8 +521,10 @@ class TestFormatOutput:
                     "candidates": [],
                     "truncated": False,
                     "manual_followups": [
-                        "Supplier due diligence remains manual and must be "
-                        "supported by supplier_due_diligence evidence."
+                        (
+                            "Supplier due diligence remains manual and must be "
+                            "supported by supplier_due_diligence evidence."
+                        )
                     ],
                 },
             }

@@ -12,9 +12,9 @@ import tempfile
 from pathlib import Path
 
 try:
-    from scripts.rulepack_engine import verify_engine
+    from scripts.rulepack_engine import resolve_engine, verify_engine
 except ModuleNotFoundError:  # Direct execution: python scripts/check_rulepack_batch.py
-    from rulepack_engine import verify_engine
+    from rulepack_engine import resolve_engine, verify_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RULES = REPO_ROOT / "cra_evidence_cli" / "local" / "rules"
@@ -262,6 +262,7 @@ def main() -> int:
     parser.add_argument("--print-baseline", action="store_true")
     args = parser.parse_args()
 
+    args.opengrep = resolve_engine(args.opengrep)
     engine_version = verify_engine(args.opengrep)
 
     summary, first_results = _scan_once(args.opengrep, args.rules, args.fixtures)
@@ -286,6 +287,7 @@ def main() -> int:
             raise BatchGateError(message)
 
     if args.compare_opengrep is not None:
+        args.compare_opengrep = resolve_engine(args.compare_opengrep)
         verify_engine(args.compare_opengrep)
         candidate_summary, candidate_results = _scan_once(
             args.compare_opengrep, args.rules, args.fixtures

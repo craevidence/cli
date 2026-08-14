@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking changes
+
+- `code-check --fail-on` can now fail source that passed under 4.2.0 because
+  more rules are enabled by default. A finding at the configured threshold
+  exits 27, while missing required semantic evidence exits 29. The 50 broader
+  rules remain opt-in through `--include-experimental`.
+
 ### Added
 
 - A default JavaScript and TypeScript rule reports assigned odd integer

@@ -1007,8 +1007,10 @@ def _old_fork_run(*args, **kwargs):
             "old fork without sbom",
             "/usr/local/bin/grype",
             _old_fork_run,
-            "the installed CRA Evidence engine does not support the required "
-            "SBOM generation options",
+            (
+                "the installed CRA Evidence engine does not support the required "
+                "SBOM generation options"
+            ),
         ),
     ],
 )

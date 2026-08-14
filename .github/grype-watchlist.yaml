@@ -18,12 +18,12 @@
 # build_info_audit):
 #   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
 #   scanner: Grype 0.116.1
-#   database: schema v6.1.9, built 2026-08-09T06:23:06Z
-#   image: built 2026-08-09 from this repository's Dockerfile with bases
-#     dhi.io/python:3.14-dev@sha256:4e6d70f6819594aa6210ba629695eaec7e56f72cd1ec0dca22e9cf0699ff01d7
-#     and dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656018123b3eaf4f33f71ae902b7,
-#     with CRA Evidence Grype engine craevidence-v0.116.1-p3
-#   review date: 2026-08-09
+#   database: schema v6.1.9, built 2026-08-14T06:39:10Z
+#   image: built 2026-08-14 from this repository's Dockerfile with bases
+#     dhi.io/python:3.14-dev@sha256:4c0f2439fe118fa2b59b7276779654a8f0940b6c6d419e4e48bba7d902a31224
+#     and dhi.io/python:3.14@sha256:70dd4833ac657817f0abbd1b84b965bc4c190a2b2f348d53218689f8e7f1f681,
+#     with CRA Evidence Grype engine craevidence-v0.117.0-p2
+#   review date: 2026-08-14
 # Review at every release.
 
 watchlist:
@@ -38,6 +38,8 @@ watchlist:
         - { id: CVE-2026-5435, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-5928, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-6238, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-6791, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-6368, severity: Low, fix_state: wont-fix }
         - { id: CVE-2010-4756, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2018-20796, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010022, severity: Negligible, fix_state: not-fixed }
@@ -50,6 +52,7 @@ watchlist:
       also: [libexpat1-dev 2.8.2-1~deb13u1+dhi0]
       advisories:
         - { id: CVE-2025-66382, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-72522, severity: Medium, fix_state: not-fixed }
       note: "The refreshed base ships expat 2.8.2, which clears the previously listed expat findings; the remaining item has no Debian fix and no known code path in this image parses untrusted XML with expat."
     - package: libsqlite3-0 3.46.1-7+deb13u1+dhi2
       advisories:
@@ -88,12 +91,25 @@ watchlist:
         - { id: CVE-2026-42250, severity: Medium, fix_state: wont-fix }
       note: "Runtime base package, no Debian fix available."
 
+    - package: libxml2 2.12.7+dfsg+really2.9.14-2.1+deb13u3
+      advisories:
+        - { id: CVE-2026-6653, severity: Critical, fix_state: wont-fix }
+        - { id: CVE-2026-11979, severity: Negligible, fix_state: not-fixed }
+      note: "Debian marks the critical xmlSchemaValidate item wont-fix for trixie; no known code path in this image validates untrusted XML schemas, and the CLI parses no XML at runtime."
+    - package: libclang1-18 1:18.1.8-18+b1
+      also: [libclang-common-18-dev 1:18.1.8-18+b1, libllvm18 1:18.1.8-18+b1]
+      advisories:
+        - { id: CVE-2024-7883, severity: Low, fix_state: wont-fix }
+        - { id: CVE-2026-13573, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2026-13574, severity: Negligible, fix_state: not-fixed }
+      note: "The pinned libclang frontend for C and C++ semantic evidence. The advisories concern ARM CMSE code generation and LLVM IR edge cases; the frontend parses source for diagnostics and generates no code in this image."
+
   # Entries below come from the binaries' embedded Go build information, not
   # from the scanner output above. They record embedded dependencies the
   # scanner currently filters out, so the dependency stays visible.
   build_info_audit:
     - package: golang.org/x/crypto v0.54.0
-      source: go build info of CRA Evidence Grype engine craevidence-v0.116.1-p3
+      source: go build info of CRA Evidence Grype engine craevidence-v0.117.0-p2
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
       note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-07-31)."

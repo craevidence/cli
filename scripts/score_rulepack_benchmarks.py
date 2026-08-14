@@ -19,9 +19,9 @@ from pathlib import Path
 import yaml
 
 try:
-    from scripts.rulepack_engine import verify_engine
+    from scripts.rulepack_engine import resolve_engine, verify_engine
 except ModuleNotFoundError:  # Direct execution: python scripts/score_rulepack_benchmarks.py
-    from rulepack_engine import verify_engine
+    from rulepack_engine import resolve_engine, verify_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO_ROOT / "tests" / "rulepack_benchmarks.json"
@@ -1025,6 +1025,7 @@ def main() -> int:
     parser.add_argument("--require-promotion-ready", action="store_true")
     args = parser.parse_args()
 
+    args.opengrep = resolve_engine(args.opengrep)
     engine_version = verify_engine(args.opengrep)
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))

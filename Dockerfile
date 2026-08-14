@@ -52,12 +52,12 @@
 # Scan engine: grype fork with improvements. The default is the digest-pinned
 # engine artifact. An override must provide the same supported CRA Evidence
 # engine contract, including /grype, /LICENSE and /NOTICE.
-ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:700d2d2016ab95d5e06807629a55fdcac4571b93a79b1f064c8c9ee5660ef340
+ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:853c09e0032be737b6185e587d465d38aa4e3c4032701faa33b3ba31e11f403b
 
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:fe4ca3638379d1b3fa722e30a4fad0fecf61a2bf21464945bea5cb003f8739af
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:4c0f2439fe118fa2b59b7276779654a8f0940b6c6d419e4e48bba7d902a31224
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:8f20a4c351f7d4b8fc89b10d04d6089adac166e14aa4953b301db5b3a3b07ea2
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:70dd4833ac657817f0abbd1b84b965bc4c190a2b2f348d53218689f8e7f1f681
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
 FROM ${BASE_IMAGE_BUILDER} AS builder

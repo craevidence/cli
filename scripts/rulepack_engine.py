@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -41,24 +42,38 @@ def _verified_asset(binary: Path) -> str:
     return matches[0]
 
 
+def resolve_engine(binary: Path) -> Path:
+    candidate = binary
+    if not binary.is_absolute() and binary.parent == Path("."):
+        path_binary = shutil.which(str(binary))
+        if path_binary is not None:
+            candidate = Path(path_binary)
+    try:
+        return candidate.resolve(strict=True)
+    except OSError as exc:
+        message = f"cannot resolve Opengrep executable: {binary}"
+        raise EngineIdentityError(message) from exc
+
+
 def verify_engine(binary: Path) -> str:
-    _verified_asset(binary)
+    resolved = resolve_engine(binary)
+    _verified_asset(resolved)
     try:
         result = subprocess.run(  # noqa: S603
-            [str(binary), "--version"],
+            [str(resolved), "--version"],
             capture_output=True,
             text=True,
             timeout=15,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        message = f"cannot execute Opengrep: {binary}"
+        message = f"cannot execute Opengrep: {resolved}"
         raise EngineIdentityError(message) from exc
     output = (result.stdout or result.stderr or "").strip()
     actual = output.splitlines()[0].strip() if output else ""
     if result.returncode != 0 or actual != TESTED_OPENGREP_VERSION:
         message = (
             f"expected Opengrep {TESTED_OPENGREP_VERSION}, got "
-            f"{actual or 'no version output'} from {binary}"
+            f"{actual or 'no version output'} from {resolved}"
         )
         raise EngineIdentityError(message)
     return actual

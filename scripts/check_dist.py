@@ -181,8 +181,10 @@ def _check_engine_free_sdist(names: list[str]) -> list[str]:
     if not engine_entries:
         return []
     return [
-        "sdist: bundled engine executable must not ship in the source "
-        f"distribution: {engine_entries}"
+        (
+            "sdist: bundled engine executable must not ship in the source "
+            f"distribution: {engine_entries}"
+        )
     ]
 
 
@@ -237,12 +239,16 @@ def _check_opengrep_notice(label: str, notice_bytes: bytes) -> list[str]:
     stated_commit = match.group(1) if match else None
     if stated_commit is None or stated_commit.lower() != pinned_commit:
         return [
-            f"{label}: Opengrep NOTICE states source commit "
-            f"{stated_commit or 'none'}, release lock pins {pinned_commit}"
+            (
+                f"{label}: Opengrep NOTICE states source commit "
+                f"{stated_commit or 'none'}, release lock pins {pinned_commit}"
+            )
         ]
     return [
-        f"{label}: Opengrep NOTICE does not match the generated LGPL "
-        f"attribution text for commit {pinned_commit}"
+        (
+            f"{label}: Opengrep NOTICE does not match the generated LGPL "
+            f"attribution text for commit {pinned_commit}"
+        )
     ]
 
 
@@ -368,8 +374,10 @@ def _check_release_set(
     }
     if actual != expected:
         return [
-            "release distribution set mismatch: "
-            f"expected {sorted(expected)}, found {sorted(actual)}"
+            (
+                "release distribution set mismatch: "
+                f"expected {sorted(expected)}, found {sorted(actual)}"
+            )
         ]
 
     errors: list[str] = []

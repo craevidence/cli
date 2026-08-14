@@ -13,17 +13,19 @@
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
 # Derived from an unfiltered Grype 0.116.1 scan, most recently re-run
-# 2026-08-09 against DB schema v6.1.9 built 2026-08-09T06:23:06Z, on
+# 2026-08-14 against DB schema v6.1.9 built 2026-08-14T06:39:10Z, on
 # the image built from this Dockerfile with bases
-# dhi.io/python:3.14-dev@sha256:4e6d70f6819594aa6210ba629695eaec7e56f72cd1ec0dca22e9cf0699ff01d7
-# and dhi.io/python:3.14@sha256:7fa71fa6509c110456742c8505dfea44f0b4656018123b3eaf4f33f71ae902b7,
-# with CRA Evidence Grype engine craevidence-v0.116.1-p3. The exact gate
+# dhi.io/python:3.14-dev@sha256:4c0f2439fe118fa2b59b7276779654a8f0940b6c6d419e4e48bba7d902a31224
+# and dhi.io/python:3.14@sha256:70dd4833ac657817f0abbd1b84b965bc4c190a2b2f348d53218689f8e7f1f681,
+# with CRA Evidence Grype engine craevidence-v0.117.0-p2. The exact gate
 # reported no fixed High or Critical vulnerabilities, so there are no waivers.
 # The comparison scan with Grype 0.111.0 reports GO-2026-5158 at Medium for
 # go.opentelemetry.io/otel 1.43.0 in the shipped engine, while Grype 0.116.1
-# does not report that record against the same image and database. It remains
-# visible in the comparison inventory and must be resolved by rebuilding the
-# engine with the fixed dependency, not by adding an ignore entry here.
+# does not report that record against the same image and database. The same
+# comparison scan also lists GO-2026-6179 and GO-2026-6180 at Unknown severity
+# for golang.org/x/mod 0.38.0. All three remain visible in the comparison
+# inventory and must be resolved by rebuilding the engine with the fixed
+# dependencies, not by adding an ignore entry here.
 # Re-evaluate at every release.
 
 ignore: []

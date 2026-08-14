@@ -12,9 +12,9 @@ import time
 from pathlib import Path
 
 try:
-    from scripts.rulepack_engine import verify_engine
+    from scripts.rulepack_engine import resolve_engine, verify_engine
 except ModuleNotFoundError:  # Direct execution: python scripts/check_rulepack_real_projects.py
-    from rulepack_engine import verify_engine
+    from rulepack_engine import resolve_engine, verify_engine
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MANIFEST = REPO_ROOT / "tests" / "rulepack_real_projects.json"
@@ -209,6 +209,7 @@ def main() -> int:
     parser.add_argument("--require-complete-parsing", action="store_true")
     args = parser.parse_args()
 
+    args.opengrep = resolve_engine(args.opengrep)
     engine_version = verify_engine(args.opengrep)
 
     manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
