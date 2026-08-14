@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking changes
 
-- `code-check --fail-on` can now fail source that passed under 4.2.0 because
+- `code-check --fail-on` can now fail source that passed under 4.1.0 because
   more rules are enabled by default. A finding at the configured threshold
   exits 27, while missing required semantic evidence exits 29. The 50 broader
   rules remain opt-in through `--include-experimental`.
@@ -222,9 +222,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `eval` review rule is warning-level, and the Go descriptions state the
   syntactic limits that prevent security-intent claims.
 
-## [4.2.0] - 2026-08-08
-
-### Changed
 
 - SBOM generation and local vulnerability matching now require the compatible
   CRA Evidence Grype engine. The engine uses its embedded Syft library for
@@ -654,8 +651,7 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.2.0...HEAD
-[4.2.0]: https://github.com/craevidence/cli/compare/v4.1.0...v4.2.0
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.1.0...HEAD
 [4.1.0]: https://github.com/craevidence/cli/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/craevidence/cli/compare/v3.8.2...v4.0.0
 [3.8.2]: https://github.com/craevidence/cli/compare/v3.8.1...v3.8.2

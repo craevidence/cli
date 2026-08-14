@@ -4,7 +4,7 @@
   "default_tier_evidence": [
     {
       "rule_id": "cra-go-tls-direct-dial-insecure",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "exact crypto/tls import-bound call and Config qualifier",
@@ -19,7 +19,7 @@
     },
     {
       "rule_id": "cra-java-jdk-weak-message-digest-literal",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "A",
       "terminal_decision": "default",
       "precision": 1.0,
@@ -44,7 +44,7 @@
     },
     {
       "rule_id": "cra-php-global-unserialize-superglobal",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "literal fully qualified PHP global function name",
@@ -63,7 +63,7 @@
     },
     {
       "rule_id": "cra-csharp-framework-dangerous-certificate-validator",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "exact Roslyn ownership of both properties on the signed System.Net.Http HttpClientHandler type",
@@ -87,7 +87,7 @@
     },
     {
       "rule_id": "cra-rust-cratesio-reqwest-invalid-certs",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "Rust 2018, 2021, and 2024 absolute extern-prelude binding plus one exact crates.io reqwest 0.12.24 lock record and checksum",
@@ -122,7 +122,7 @@
     },
     {
       "rule_id": "cra-c-fixed-array-literal-oob-write",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "exact libclang C17 array-bounds diagnostic at the direct decimal-literal assignment range",
@@ -153,7 +153,7 @@
     },
     {
       "rule_id": "cra-c-printf-argv-format",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "active direct call bound by libclang to the system printf declaration in global main, with the complete format argument bound to that main declaration's second parameter",
@@ -178,7 +178,7 @@
     },
     {
       "rule_id": "cra-c-system-argv",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "active direct call bound by libclang to the system-header system function declaration in global main, with the complete command argument bound to that main declaration's second parameter",
@@ -203,7 +203,7 @@
     },
     {
       "rule_id": "cra-cpp-fixed-array-literal-oob-write",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "exact libclang C++17 array-bounds diagnostic at the direct decimal-literal assignment range",
@@ -235,7 +235,7 @@
     },
     {
       "rule_id": "cra-cpp-printf-argv-format",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "active direct call bound by libclang to the system printf declaration in global main, with the complete format argument bound to that main declaration's second parameter",
@@ -260,7 +260,7 @@
     },
     {
       "rule_id": "cra-cpp-system-argv",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "B",
       "terminal_decision": "default",
       "binding_basis": "active direct call bound by libclang to the system-header system function declaration in global main, with the complete command argument bound to that main declaration's second parameter",
@@ -285,7 +285,7 @@
     },
     {
       "rule_id": "cra-javascript-odd-unsafe-integer-literal",
-      "pack_version": "4.3.0",
+      "pack_version": "4.2.0",
       "evidence_route": "A",
       "terminal_decision": "default",
       "ownership_model": "language-intrinsic",
