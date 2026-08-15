@@ -479,6 +479,20 @@ def _copy_release_source(source: Path, destination: Path) -> None:
         "*.pyc",
     )
     shutil.copytree(source, destination, ignore=ignored)
+    # Normalize file modes so the built bytes do not depend on the checkout's
+    # umask history: a long-lived working tree can carry group-writable files
+    # while a fresh CI checkout creates 644, and the wheel records source
+    # modes in its zip entries. Directories and executables become 755 and
+    # regular files 644, matching a fresh checkout.
+    for path in sorted(destination.rglob("*")):
+        if path.is_symlink():
+            continue
+        if path.is_dir():
+            path.chmod(0o755)
+        elif path.stat().st_mode & 0o111:
+            path.chmod(0o755)
+        else:
+            path.chmod(0o644)
 
 
 def _validate_engine_free_source(release_src: Path) -> None:
@@ -544,7 +558,38 @@ def _build_platform_wheel(
             raise DistributionBuildError(msg)
         built = output_dir / wheels[0].name
         shutil.copy2(wheels[0], built)
+        _normalize_wheel(built)
         return built
+
+
+def _normalize_wheel(wheel: Path) -> None:
+    """Rewrite a built wheel with canonical entry modes.
+
+    Setuptools creates intermediate copies whose modes follow the build
+    host's umask, so the same source can yield 644 entries on one machine
+    and 664 on another. Rewriting every entry with 644 for regular files
+    and 755 for executables makes the archive bytes independent of the
+    host's umask and interpreter, matching the sdist normalization below.
+    """
+    source = wheel.with_suffix(".orig")
+    wheel.replace(source)
+    with zipfile.ZipFile(source) as archive:
+        entries = archive.infolist()
+        with zipfile.ZipFile(
+            wheel, "w", compression=zipfile.ZIP_DEFLATED
+        ) as output:
+            for entry in entries:
+                data = archive.read(entry.filename)
+                info = zipfile.ZipInfo(entry.filename, date_time=entry.date_time)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.create_system = entry.create_system
+                mode = (entry.external_attr >> 16) & 0o7777
+                normalized = 0o755 if mode & 0o111 else 0o644
+                info.external_attr = ((0o100000 | normalized) << 16) | (
+                    entry.external_attr & 0xFFFF
+                )
+                output.writestr(info, data)
+    source.unlink()
 
 
 def _binary_hash_in_wheel(wheel: Path, binary_name: str) -> str:
@@ -585,6 +630,10 @@ def _normalize_sdist(source: Path, destination: Path) -> None:
                         normalized.mtime = epoch
                         normalized.uid = 0
                         normalized.gid = 0
+                        if normalized.isdir() or normalized.mode & 0o111:
+                            normalized.mode = 0o755
+                        else:
+                            normalized.mode = 0o644
                         normalized.uname = ""
                         normalized.gname = ""
                         normalized.pax_headers = {}
