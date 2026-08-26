@@ -52,9 +52,27 @@ def validate_sbom_command(
             console.print("[bold red]Invalid[/bold red]")
 
         fmt = result.get("format")
+        serialization = result.get("serialization")
         spec = result.get("spec_version")
-        if fmt or spec:
-            console.print(f"Format: {fmt or 'unknown'}  Spec: {spec or 'unknown'}")
+        if fmt or serialization or spec:
+            console.print(
+                f"Format: {fmt or 'unknown'}  "
+                f"Serialization: {serialization or 'unknown'}  "
+                f"Spec: {spec or 'unknown'}"
+            )
+
+        detected = result.get("detected") or {}
+        if any(detected.get(key) for key in ("family", "serialization", "version")):
+            console.print(
+                "Detected: "
+                f"{detected.get('family') or 'unknown'} "
+                f"{detected.get('version') or 'unknown'} "
+                f"{detected.get('serialization') or 'unknown'}"
+            )
+
+        accepted = result.get("accepted_versions") or []
+        if accepted:
+            console.print(f"Accepted versions: {', '.join(accepted)}")
 
         component_count = result.get("component_count")
         purl_pct = result.get("purl_coverage_pct")
@@ -73,6 +91,10 @@ def validate_sbom_command(
 
         for error in result.get("errors") or []:
             console.print(f"[red]Error:[/red] {error}")
+
+        action = result.get("action")
+        if action:
+            console.print(f"Next step: {action}")
 
         if not valid:
             sys.exit(1)

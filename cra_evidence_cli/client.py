@@ -369,6 +369,16 @@ class CRAEvidenceClient:
         """
         if not file_path.exists():
             raise FileNotFoundError(str(file_path))
+        suffix = file_path.suffix.lower()
+        content_types = {
+            ".json": "application/json",
+            ".xml": "application/xml",
+        }
+        if suffix not in content_types:
+            raise APIError(
+                message="SBOM file must use a .json or .xml extension.",
+                status_code=422,
+            )
 
         # Client-side validation for upload metadata
         if release_notes and len(release_notes) > 5000:
@@ -396,7 +406,7 @@ class CRAEvidenceClient:
         kernel_f = None
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             with open(file_path, "rb") as sbom_f:
-                files: dict[str, Any] = {"file": (file_path.name, sbom_f, "application/json")}
+                files: dict[str, Any] = {"file": (file_path.name, sbom_f, content_types[suffix])}
 
                 # Attach kernel config as a separate multipart field if provided
                 if kernel_config_path is not None:
@@ -778,12 +788,22 @@ class CRAEvidenceClient:
         """
         if not file_path.exists():
             raise FileNotFoundError(str(file_path))
+        suffix = file_path.suffix.lower()
+        content_types = {
+            ".json": "application/json",
+            ".xml": "application/xml",
+        }
+        if suffix not in content_types:
+            raise APIError(
+                message="SBOM file must use a .json or .xml extension.",
+                status_code=422,
+            )
 
         await self._ensure_access_token()
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             with open(file_path, "rb") as f:
-                files = {"file": (file_path.name, f, "application/json")}
+                files = {"file": (file_path.name, f, content_types[suffix])}
 
                 endpoint = f"{self.base_url}/api/v1/sboms/validate"
                 try:

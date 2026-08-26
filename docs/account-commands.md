@@ -214,13 +214,17 @@ Source code is not uploaded.
 
 ## `upload-sbom`
 
-Upload a Software Bill of Materials. Accepts an existing SBOM file or generates one from a container image or source directory with the CRA Evidence engine.
+Upload a Software Bill of Materials. Accepts an existing `.json` or `.xml` SBOM
+file, or generates one from a container image or source directory with the CRA
+Evidence engine. Existing files are sent with the matching multipart media
+type. The server still identifies and validates the declared format and version;
+the filename extension alone does not make a document valid.
 
 ```
 craevidence upload-sbom
   --product <slug-or-id>
   --version <version-number>
-  --file <path>              # Upload existing file (mutually exclusive with --image, --source)
+  --file <path>              # Upload existing .json or .xml file (mutually exclusive with --image, --source)
   --image <container-image>  # Generate SBOM from an image (requires the CRA Evidence engine)
   --source <directory>       # Generate SBOM from source (requires the CRA Evidence engine)
   [--format cyclonedx|spdx]  # Generated SBOM format (default: cyclonedx). Ignored with --file.
@@ -1177,11 +1181,15 @@ craevidence show-profile
 
 ## `validate`
 
-Validate an SBOM file against the CRA Evidence ingestion pipeline. Reports format, spec version, component count, PURL coverage, and any warnings or errors.
+Validate a `.json` or `.xml` SBOM file against the CRA Evidence ingestion
+pipeline. Reports format, serialization, specification version, component
+count, PURL coverage, warnings, and errors. For an invalid document, text output
+also shows the detected identity and accepted versions when available, followed
+by the server-provided corrective action.
 
 ```
 craevidence validate
-  --sbom <path>
+  --sbom <path>              # Existing .json or .xml SBOM
 ```
 
 Exits with code 1 if the SBOM is invalid.

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `upload-sbom --file` and `validate --sbom` accept `.json` and `.xml` files,
+  send the matching multipart media type, and reject other filename suffixes
+  before a network request.
+- Human-readable `validate` output includes serialization, detected identity,
+  accepted versions, and the server-provided corrective action when available.
+  JSON output retains the complete server response.
+
 ## [4.2.0] - 2026-08-14
 
 ### Breaking changes

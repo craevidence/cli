@@ -213,6 +213,7 @@ async def test_upload_sbom_posts_target_markets(test_config, tmp_path, monkeypat
         async def post(self, url, headers, files, data):
             captured["url"] = url
             captured["file_name"] = files["file"][0]
+            captured["content_type"] = files["file"][2]
             captured["data"] = data
             return Response(
                 status_code=201,
@@ -234,8 +235,93 @@ async def test_upload_sbom_posts_target_markets(test_config, tmp_path, monkeypat
     assert result["artifact_id"] == "sbom-123"
     assert captured["url"] == "https://api.test.craevidence.com/api/v1/ci/upload"
     assert captured["file_name"] == "sbom.json"
+    assert captured["content_type"] == "application/json"
     assert captured["data"]["target_markets"] == "DE,ES"
     assert captured["data"]["component_version"] == "2.4.0"
+
+
+@pytest.mark.asyncio
+async def test_upload_sbom_uses_xml_multipart_media_type(test_config, tmp_path, monkeypatch):
+    sbom_file = tmp_path / "sbom.xml"
+    sbom_file.write_text("<bom/>")
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, files, data):
+            captured["content_type"] = files["file"][2]
+            return Response(status_code=201, json={"artifact_id": "sbom-xml"})
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    await CRAEvidenceClient(test_config).upload_sbom(
+        product="security-camera",
+        version="0.1.0",
+        file_path=sbom_file,
+    )
+
+    assert captured["content_type"] == "application/xml"
+
+
+@pytest.mark.asyncio
+async def test_upload_sbom_rejects_unknown_filename_extension(test_config, tmp_path):
+    sbom_file = tmp_path / "sbom.txt"
+    sbom_file.write_text("not an SBOM")
+
+    with pytest.raises(APIError, match=r"\.json or \.xml") as raised:
+        await CRAEvidenceClient(test_config).upload_sbom(
+            product="security-camera",
+            version="0.1.0",
+            file_path=sbom_file,
+        )
+
+    assert raised.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_validate_sbom_uses_xml_multipart_media_type(test_config, tmp_path, monkeypatch):
+    sbom_file = tmp_path / "sbom.xml"
+    sbom_file.write_text("<bom/>")
+    captured = {}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, files):
+            captured["content_type"] = files["file"][2]
+            return Response(status_code=200, json={"valid": True})
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    await CRAEvidenceClient(test_config).validate_sbom(sbom_file)
+
+    assert captured["content_type"] == "application/xml"
+
+
+@pytest.mark.asyncio
+async def test_validate_sbom_rejects_unknown_filename_extension(test_config, tmp_path):
+    sbom_file = tmp_path / "sbom.txt"
+    sbom_file.write_text("not an SBOM")
+
+    with pytest.raises(APIError, match=r"\.json or \.xml") as raised:
+        await CRAEvidenceClient(test_config).validate_sbom(sbom_file)
+
+    assert raised.value.status_code == 422
 
 
 @pytest.mark.asyncio
