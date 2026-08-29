@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.3.0] - 2026-08-29
+
 ### Changed
 
 - `upload-sbom --file` and `validate --sbom` accept `.json` and `.xml` files,
@@ -15,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Human-readable `validate` output includes serialization, detected identity,
   accepted versions, and the server-provided corrective action when available.
   JSON output retains the complete server response.
+- The bundled CRA Evidence Grype engine is updated to v0.117.0-p4. Generated
+  SBOMs can now identify supported components embedded in native ELF binaries;
+  component presence does not determine vulnerability applicability.
+- The hardened container uses refreshed Python 3.14 base-image digests, with
+  its fixed-vulnerability gate and no-fix inventory re-reviewed for the release.
 
 ## [4.2.0] - 2026-08-14
 
@@ -662,7 +669,8 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/craevidence/cli/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/craevidence/cli/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/craevidence/cli/compare/v4.0.0...v4.1.0
 [4.0.0]: https://github.com/craevidence/cli/compare/v3.8.2...v4.0.0
