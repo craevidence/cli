@@ -7,7 +7,7 @@ version. For version ``VERSION`` the two files are exactly:
   - sbom-VERSION-linux-arm64.cdx.json
 
 For each document it validates the structure (bomFormat CycloneDX, spec
-version 1.6, an integer document version of at least 1, a non-empty
+version 1.7, an integer document version of at least 1, a non-empty
 components list whose entries are objects) and the subject binding: the
 metadata component must name the canonical image repository and carry that
 platform's manifest digest as its version. It does not verify signatures or
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 EXPECTED_BOM_FORMAT = "CycloneDX"
-EXPECTED_SPEC_VERSION = "1.6"
+EXPECTED_SPEC_VERSION = "1.7"
 PLATFORMS = ("amd64", "arm64")
 
 

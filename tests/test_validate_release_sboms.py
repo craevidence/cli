@@ -23,7 +23,7 @@ LABEL = "sbom-under-test.cdx.json"
 def _sbom(image: str = IMAGE, digest: str = DIGEST_AMD64, **overrides: object) -> dict:
     document = {
         "bomFormat": "CycloneDX",
-        "specVersion": "1.6",
+        "specVersion": "1.7",
         "version": 1,
         "metadata": {
             "component": {"type": "container", "name": image, "version": digest},
@@ -79,6 +79,16 @@ def test_main_valid_pair_exits_zero(tmp_path, capsys):
     assert DIGEST_ARM64 in out
 
 
+def test_workflow_pins_cyclonedx_output_to_validator_spec():
+    workflow = (_MODULE_PATH.parent.parent / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+    pinned_output = f"cyclonedx-json@{vrs.EXPECTED_SPEC_VERSION}="
+
+    assert workflow.count(pinned_output) == 2
+    assert "cyclonedx-json=" not in workflow
+
+
 def test_wrong_bom_format_rejected():
     sbom = _sbom(bomFormat="SPDX")
     with pytest.raises(vrs.SbomValidationError) as excinfo:
@@ -88,13 +98,15 @@ def test_wrong_bom_format_rejected():
     assert "bomFormat" in message
 
 
-def test_wrong_spec_version_rejected():
-    sbom = _sbom(specVersion="1.5")
+@pytest.mark.parametrize("spec_version", ["1.5", "1.6", "1.8"])
+def test_unsupported_spec_version_rejected(spec_version):
+    sbom = _sbom(specVersion=spec_version)
     with pytest.raises(vrs.SbomValidationError) as excinfo:
         vrs.validate_sbom(sbom, IMAGE, DIGEST_AMD64, LABEL)
     message = str(excinfo.value)
     assert LABEL in message
     assert "specVersion" in message
+    assert spec_version in message
 
 
 def test_boolean_document_version_rejected():

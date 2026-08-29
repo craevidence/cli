@@ -441,7 +441,7 @@ jobs:
         run: |
           syft craevidence:${{ steps.version.outputs.version }} \
             --exclude '/var/lib/dpkg/status.d/**' \
-            -o cyclonedx-json=sbom.cdx.json
+            -o cyclonedx-json@1.7=sbom.cdx.json
 
       - name: Upload SBOM as artifact
         if: steps.ecr-login.outcome == 'success'
@@ -1095,7 +1095,7 @@ jobs:
             fi
             syft "registry:${repo}@${platform_digest}" \
               --exclude '/var/lib/dpkg/status.d/**' \
-              -o "cyclonedx-json=sbom-${version}-linux-${arch}.cdx.json"
+              -o "cyclonedx-json@1.7=sbom-${version}-linux-${arch}.cdx.json"
             echo "generated sbom-${version}-linux-${arch}.cdx.json from ${platform_digest} (index ${digest})"
           done
 

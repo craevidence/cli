@@ -118,7 +118,7 @@ a glance:
 3. The GitHub release carries `sbom-X.Y.Z-linux-amd64.cdx.json` and
    `sbom-X.Y.Z-linux-arm64.cdx.json`. Release and resume runs invoke
    `scripts/reconcile_release_sboms.sh` during the run, attaching a
-   `.cosign.bundle` signature per SBOM that `cosign verify-blob` accepts
+   `.cosign.bundle` signature per CycloneDX 1.7 SBOM that `cosign verify-blob` accepts
    under one of the two exact identities (releases published before this
    behavior, up to v3.8.1, carry unsigned SBOMs until reconciliation is
    re-run against them):
