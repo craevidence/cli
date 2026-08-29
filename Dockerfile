@@ -54,10 +54,10 @@
 # engine contract, including /grype, /LICENSE and /NOTICE.
 ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:02f1fbc3f1bdcc2c3354600f40d11aa4f5de3203f1933a30167d73c3f4ee211f
 
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:02173cae8b920c98ff9fab81eb1aefcadd229f158110553c6ed758dc935589dd
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:605fb5821aaa7d62c187110e66429b110379af0ba73e872afb5022504ba12178
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:0536ccad57c9be08128bd2a6f0982570086ec943a88033f4f53f7adffe407903
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:8be06a90a353d4f1bb9e44585ae183d6112e54dfbe8af6a06774c6f4285b221d
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
 FROM ${BASE_IMAGE_BUILDER} AS builder
