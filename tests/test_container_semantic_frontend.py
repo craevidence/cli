@@ -82,5 +82,5 @@ def test_release_ci_pins_arm64_emulation_before_release_buildx():
     assert release_workflow.count(qemu_action) == 1
     assert release_workflow.count(binfmt_image) == 1
     assert release_workflow.index(qemu_action) < release_workflow.index(
-        "docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c"
+        "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e"
     )
