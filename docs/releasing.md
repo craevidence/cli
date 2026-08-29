@@ -159,15 +159,16 @@ release and resume runs), SBOM assets are kept only when they verify
 against their signed bundles; an SBOM without
 a complete signed pair is replaced by a freshly generated, freshly signed
 document, and one that fails verification
-stops the run. Building anything new on a resume requires the GitHub release
-to be immutable, which the current publish-then-attach lifecycle does not
-produce, so in practice a resume never rebuilds. The run then performs only
-the missing operations: an object that already exists and matches is verified
-and kept, an absent object is created from authenticated inputs, and any
-mismatch fails the run. The exact bytes are checkpointed on the GitHub
-release before any PyPI upload, each distribution is published on its own,
-and an attestation sidecar lost with a failed runner is recovered from the
-accepted provenance PyPI serves.
+stops the run. Building anything new on a resume requires either an immutable
+GitHub release or exactly one completed GitHub release-event run whose recorded
+tag, workflow, and source commit match the once-resolved release source. A
+missing, ambiguous, or mismatched release-event record fails closed. The run
+then performs only the missing operations: an object that already exists and
+matches is verified and kept, an absent object is created from authenticated
+inputs, and any mismatch fails the run. The exact bytes are checkpointed on
+the GitHub release before any PyPI upload, each distribution is published on
+its own, and an attestation sidecar lost with a failed runner is recovered from
+the accepted provenance PyPI serves.
 
 Failure classes split cleanly. Transport, authentication, service, and
 approval failures are retryable: correct the cause and dispatch the resume

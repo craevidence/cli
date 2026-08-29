@@ -461,6 +461,7 @@ jobs:
     needs: [test, rulepack, build-and-sbom]
     if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.resume_release != '')
     permissions:
+      actions: read  # resolve the original release-event source anchor on resume
       contents: read
     outputs:
       version: ${{ steps.check.outputs.version }}
@@ -477,10 +478,10 @@ jobs:
       # current pipeline code against an exact already-published release; the
       # tag is resolved to a commit SHA exactly once, here, and every later
       # checkout uses that SHA, so a tag moved after validation can never
-      # change what gets built. Building anything NEW on a resume additionally
-      # requires the GitHub release to be immutable, because a mutable tag
-      # gives a rebuild no trustworthy source; completing already-published
-      # artifacts needs no rebuild and stays allowed.
+      # change what gets built. Building anything new on a resume additionally
+      # requires either an immutable release or one exact original release-event
+      # run whose recorded tag and source SHA match. A mutable tag alone is not
+      # a trustworthy source anchor.
       - name: Resolve and validate the release to publish
         id: check
         env:
@@ -548,13 +549,22 @@ jobs:
               exit 1
             fi
             if [ "${immutable}" = "true" ]; then
-              build_allowed="true"
+              source_anchor="immutable GitHub release"
             else
-              build_allowed="false"
+              gh api \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?event=release&branch=${tag}&per_page=100" \
+                > release-runs.json
+              release_run_id=$(python scripts/verify_release_run_anchor.py \
+                --tag "${tag}" \
+                --source-sha "${source_sha}" \
+                --workflow-path ".github/workflows/ci.yml" \
+                release-runs.json)
+              source_anchor="release event run ${release_run_id}"
             fi
+            build_allowed="true"
             VERSION="${tag#v}"
           fi
-          echo "publishing mode '${mode}' for tag '${tag}' (version ${VERSION}, source ${source_sha}, build_allowed ${build_allowed})"
+          echo "publishing mode '${mode}' for tag '${tag}' (version ${VERSION}, source ${source_sha}, build_allowed ${build_allowed}${source_anchor:+, anchor ${source_anchor}})"
           {
             echo "version=${VERSION}"
             echo "tag=${tag}"
@@ -1271,9 +1281,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Building fresh bytes needs a trusted source anchor: a release
-          # event, or an immutable release on resume. Without one, only
-          # already-published or checkpointed bytes may be used.
+          # Building fresh bytes needs the trusted source anchor established by
+          # validate-release. Without one, only already-published or
+          # checkpointed bytes may be used.
           flags=()
           if [ "${{ needs.validate-release.outputs.build_allowed }}" != "true" ]; then
             flags+=(--no-build)

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Failed releases can resume distribution publishing from the source commit
+  recorded by the original GitHub release event when release immutability is
+  not enabled. Missing, ambiguous, or mismatched event records fail closed.
+
 ## [4.3.0] - 2026-08-29
 
 ### Changed
