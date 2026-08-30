@@ -6,6 +6,7 @@ from httpx import Response
 
 from cra_evidence_cli.client import CRAEvidenceClient, mask_api_key
 from cra_evidence_cli.config import CRAEvidenceConfig
+from cra_evidence_cli.exceptions import APIError
 
 
 class TestMaskApiKey:
@@ -70,7 +71,7 @@ class TestRequestWithRetry:
         sleeps: list[float] = []
 
         class FakeAsyncClient:
-            def __init__(self, timeout=None):
+            def __init__(self, timeout=None, **_kwargs):
                 self.timeout = timeout
 
             async def __aenter__(self):
@@ -108,6 +109,25 @@ class TestRequestWithRetry:
         assert response.json() == {"ok": True}
         assert len(requests) == 2
         assert sleeps == [1.0]
+
+    @pytest.mark.asyncio
+    async def test_redirect_is_rejected_without_retry(self, monkeypatch):
+        requests, sleeps = self._patch_transport(
+            monkeypatch,
+            [
+                Response(
+                    status_code=307,
+                    headers={"Location": "https://other.example/api/v1/ci/status"},
+                )
+            ],
+        )
+        client = self._client()
+
+        with pytest.raises(APIError, match="Authenticated redirects are not followed"):
+            await client._request_with_retry("GET", self.URL)
+
+        assert len(requests) == 1
+        assert sleeps == []
 
     @pytest.mark.asyncio
     async def test_5xx_exhaustion_returns_last_response(self, monkeypatch):

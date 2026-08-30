@@ -3,6 +3,7 @@ Main CLI entry point and command group definitions.
 """
 
 import sys
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -54,9 +55,20 @@ console = Console()
 @click.option(
     "--url",
     envvar="CRA_EVIDENCE_URL",
-    default="https://api.craevidence.com",
-    show_default=True,
+    default=None,
+    show_default="https://api.craevidence.com",
     help="CRA Evidence API URL",
+)
+@click.option(
+    "--trusted-origin",
+    envvar="CRA_EVIDENCE_TRUSTED_ORIGIN",
+    help="Exact trusted API origin for a self-hosted CRA Evidence instance",
+)
+@click.option(
+    "--ca-bundle",
+    envvar="CRA_EVIDENCE_CA_BUNDLE",
+    type=click.Path(path_type=Path, dir_okay=False),
+    help="PEM CA bundle for CRA Evidence API TLS verification",
 )
 @click.option(
     "--output",
@@ -80,7 +92,9 @@ console = Console()
 def cli(
     ctx: click.Context,
     api_key: str | None,
-    url: str,
+    url: str | None,
+    trusted_origin: str | None,
+    ca_bundle: Path | None,
     output: str,
     verbose: bool,
     oidc: bool,
@@ -100,7 +114,14 @@ def cli(
     ctx.ensure_object(dict)
 
     try:
-        config = load_config(api_key=api_key, url=url, output_format=output, oidc_mode=oidc)
+        config = load_config(
+            api_key=api_key,
+            url=url,
+            trusted_origin=trusted_origin,
+            ca_bundle=ca_bundle,
+            output_format=output,
+            oidc_mode=oidc,
+        )
         ctx.obj["config"] = config
         ctx.obj["verbose"] = verbose
     except CRAEvidenceError as e:
@@ -124,7 +145,10 @@ def cli(
             "compliance-as-code",
             "version",
         ):
-            ctx.obj["config"] = CRAEvidenceConfig(url=url, output_format=output)
+            fallback_config = {"output_format": output}
+            if url is not None:
+                fallback_config["url"] = url
+            ctx.obj["config"] = CRAEvidenceConfig(**fallback_config)
             ctx.obj["verbose"] = verbose
             return
         console.print(f"[red]Configuration error:[/red] {e}")

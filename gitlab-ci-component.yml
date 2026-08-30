@@ -43,6 +43,14 @@ spec:
       description: 'CRA Evidence API URL'
       type: string
       default: 'https://api.craevidence.com'
+    trusted-origin:
+      description: 'Exact trusted API origin for a self-hosted CRA Evidence instance'
+      type: string
+      default: ''
+    ca-bundle:
+      description: 'Path to a PEM CA bundle for CRA Evidence API TLS verification'
+      type: string
+      default: ''
     # === Artifact Options ===
     artifact-type:
       description: 'Type of artifact: sbom, hbom, vex, or document'
@@ -150,6 +158,8 @@ spec:
   image: python:3.12-slim
   variables:
     CRA_BASE_URL: 'https://api.craevidence.com'
+    CRA_TRUSTED_ORIGIN: ''
+    CRA_CA_BUNDLE: ''
     CRA_ARTIFACT_TYPE: 'sbom'
     CRA_CREATE_PRODUCT: 'false'
     CRA_CREATE_VERSION: 'true'
@@ -196,6 +206,8 @@ spec:
 
       export CRA_EVIDENCE_API_KEY="${API_KEY}"
       export CRA_EVIDENCE_URL="${CRA_BASE_URL}"
+      export CRA_EVIDENCE_TRUSTED_ORIGIN="${CRA_TRUSTED_ORIGIN:-}"
+      export CRA_EVIDENCE_CA_BUNDLE="${CRA_CA_BUNDLE:-}"
       export CRA_EVIDENCE_SIGNATURE_IDENTITY="${CRA_SIGNATURE_IDENTITY:-}"
       export CRA_EVIDENCE_SIGNATURE_ISSUER="${CRA_SIGNATURE_ISSUER:-}"
 
@@ -298,6 +310,8 @@ cra-evidence-upload:
     CRA_VERSION: $[[ inputs.version ]]
     CRA_FILE: $[[ inputs.file ]]
     CRA_BASE_URL: $[[ inputs.api-url ]]
+    CRA_TRUSTED_ORIGIN: $[[ inputs.trusted-origin ]]
+    CRA_CA_BUNDLE: $[[ inputs.ca-bundle ]]
     CRA_ARTIFACT_TYPE: $[[ inputs.artifact-type ]]
     CRA_DOCUMENT_TYPE: $[[ inputs.document-type ]]
     CRA_TAGS: $[[ inputs.tags ]]

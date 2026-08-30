@@ -14,11 +14,11 @@ import sys
 from typing import Any
 
 import click
-import httpx
 from rich.console import Console
 from rich.table import Table
 
 from cra_evidence_cli.client import CRAEvidenceClient
+from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import APIError, AuthenticationError, CRAEvidenceError
 
 console = Console()
@@ -57,8 +57,9 @@ def components_list(
     output_format = config.output_format
     verbose = ctx.obj.get("verbose", False)
 
-    client = CRAEvidenceClient(config)
     try:
+        validate_config(config)
+        client = CRAEvidenceClient(config)
         data = asyncio.run(
             _fetch_components(
                 client=client,
@@ -123,7 +124,7 @@ async def _fetch_components(
     headers = client._get_headers()
     base_url = client.base_url
 
-    async with httpx.AsyncClient(timeout=client.timeout) as http:
+    async with client._http_client() as http:
         product_uuid = product
         # A UUID is exactly 36 chars with dashes. Anything else looks like
         # a slug - resolve by listing products and matching slug exactly.
@@ -134,6 +135,7 @@ async def _fetch_components(
                 f"{base_url}/api/v1/products",
                 headers=headers,
             )
+            client._raise_for_redirect(r)
             if r.status_code == 401:
                 msg = "Authentication failed (401). Check your API key or OIDC token."
                 raise AuthenticationError(msg)
@@ -161,6 +163,7 @@ async def _fetch_components(
             headers=headers,
             params=params,
         )
+        client._raise_for_redirect(r)
         if r.status_code == 401:
             msg = "Authentication failed (401). Check your API key or OIDC token."
             raise AuthenticationError(msg)

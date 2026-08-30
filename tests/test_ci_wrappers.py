@@ -22,6 +22,8 @@ def test_github_action_uses_cli_signing_path():
     assert action["inputs"]["signature-issuer"]["required"] is False
     assert action["inputs"]["fail-untrusted"]["default"] == "false"
     assert action["inputs"]["include-experimental"]["default"] == "false"
+    assert action["inputs"]["trusted-origin"]["default"] == ""
+    assert action["inputs"]["ca-bundle"]["default"] == ""
     assert "signature-trust-status" in action["outputs"]
     assert "response" in action["outputs"]
     assert "code-check" in action["inputs"]["command"]["description"]
@@ -33,6 +35,8 @@ def test_github_action_uses_cli_signing_path():
     assert "--target-markets" in action_text
     assert "target-markets such as DE,FR,ES" in action_text
     assert "--signature-bundle" in action_text
+    assert "CRA_EVIDENCE_TRUSTED_ORIGIN: ${{ inputs.trusted-origin }}" in action_text
+    assert "CRA_EVIDENCE_CA_BUNDLE: ${{ inputs.ca-bundle }}" in action_text
     assert "permissions: id-token: write" in action_text
     assert "exit \"${CLI_EXIT}\"" in action_text
     # Pinned by full commit SHA (supply-chain hardening), version-agnostic so a
@@ -58,6 +62,22 @@ def test_github_action_warns_on_branch_named_versions():
     assert "main|master|release/*)" in action_text
 
 
+def test_self_host_docs_keep_tls_and_runner_egress_explicit():
+    readme_text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    ci_text = (REPO_ROOT / "docs" / "ci-cd.md").read_text(encoding="utf-8")
+    documented = readme_text + ci_text
+
+    assert "CRA_EVIDENCE_TRUSTED_ORIGIN" in documented
+    assert "CRA_EVIDENCE_CA_BUNDLE" in documented
+    assert "SSL_CERT_FILE" in documented
+    assert "SSL_CERT_DIR" in documented
+    assert "## CI runner egress" in ci_text
+    assert "separate from self-hosted server egress" in ci_text
+    assert "no client-certificate option for mutual TLS" in ci_text
+    assert "CRA_NO_WARN" not in documented
+    assert "--insecure" not in documented
+
+
 def test_gitlab_component_uses_cli_signing_path():
     component_path = REPO_ROOT / "gitlab-ci-component.yml"
     component_text = component_path.read_text(encoding="utf-8")
@@ -78,6 +98,8 @@ def test_gitlab_component_uses_cli_signing_path():
     assert inputs["signature-identity"]["type"] == "string"
     assert inputs["signature-issuer"]["type"] == "string"
     assert inputs["fail-untrusted"]["default"] is False
+    assert inputs["trusted-origin"]["default"] == ""
+    assert inputs["ca-bundle"]["default"] == ""
 
     # The caller-selectable package spec is gone: the CLI is installed from a
     # version-pinned wheel verified by checksum.
@@ -93,6 +115,8 @@ def test_gitlab_component_uses_cli_signing_path():
     # Only the signing variant requests a Sigstore OIDC token.
     assert "id_tokens" not in upload_template
     assert upload_template["variables"]["CRA_TARGET_MARKETS"] == ""
+    assert upload_template["variables"]["CRA_TRUSTED_ORIGIN"] == ""
+    assert upload_template["variables"]["CRA_CA_BUNDLE"] == ""
 
     signed_template = content[".cra-evidence-upload-signed"]
     assert signed_template["extends"] == ".cra-evidence-upload"
@@ -112,6 +136,8 @@ def test_gitlab_component_uses_cli_signing_path():
 
     variables = content["cra-evidence-upload"]["variables"]
     assert variables["CRA_TARGET_MARKETS"] == "$[[ inputs.target-markets ]]"
+    assert variables["CRA_TRUSTED_ORIGIN"] == "$[[ inputs.trusted-origin ]]"
+    assert variables["CRA_CA_BUNDLE"] == "$[[ inputs.ca-bundle ]]"
     assert variables["CRA_SIGN"] == "$[[ inputs.sign ]]"
     assert variables["CRA_SIGNATURE_IDENTITY"] == "$[[ inputs.signature-identity ]]"
     assert variables["CRA_SIGNATURE_ISSUER"] == "$[[ inputs.signature-issuer ]]"
@@ -121,6 +147,8 @@ def test_gitlab_component_uses_cli_signing_path():
     assert "--target-markets" in component_text
     assert "CRA_TARGET_MARKETS is only safe when the product already exists" in component_text
     assert "--signature-bundle" in component_text
+    assert 'export CRA_EVIDENCE_TRUSTED_ORIGIN="${CRA_TRUSTED_ORIGIN:-}"' in component_text
+    assert 'export CRA_EVIDENCE_CA_BUNDLE="${CRA_CA_BUNDLE:-}"' in component_text
     assert "aud: sigstore" in component_text
     assert "/api/v1/ci/upload" not in component_text
     assert "curl -s" not in component_text

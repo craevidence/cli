@@ -10,7 +10,11 @@ from typing import Any
 import httpx
 
 from cra_evidence_cli import __version__
-from cra_evidence_cli.config import CRAEvidenceConfig
+from cra_evidence_cli.config import (
+    CRAEvidenceConfig,
+    _build_tls_context,
+    _normalize_origin,
+)
 from cra_evidence_cli.exceptions import APIError, AuthenticationError, ValidationError
 
 # Regex for stripping HTML tags from error responses
@@ -44,9 +48,34 @@ class CRAEvidenceClient:
 
     def __init__(self, config: CRAEvidenceConfig) -> None:
         self.config = config
-        self.base_url = config.url.rstrip("/")
+        self.base_url = _normalize_origin(config.url, setting_name="API URL")
         self.timeout = httpx.Timeout(config.timeout)
+        self._tls_context = _build_tls_context(config.ca_bundle)
         self._access_token: str | None = None
+
+    def _http_client(self) -> httpx.AsyncClient:
+        verification = self._tls_context if self._tls_context is not None else True
+        return httpx.AsyncClient(
+            timeout=self.timeout,
+            verify=verification,
+            follow_redirects=False,
+            trust_env=True,
+        )
+
+    @staticmethod
+    def _raise_for_redirect(response: httpx.Response) -> None:
+        if 300 <= response.status_code < 400:
+            location = response.headers.get("Location")
+            destination = " with a Location header" if location else ""
+            message = (
+                f"API returned HTTP {response.status_code} redirect{destination}. "
+                "Authenticated redirects are not followed; configure the exact API origin."
+            )
+            raise APIError(
+                message=message,
+                status_code=response.status_code,
+                request_id=response.headers.get("X-Request-ID"),
+            )
 
     async def _ensure_access_token(self) -> None:
         """Ensure we have a valid access token for OIDC mode."""
@@ -59,7 +88,7 @@ class CRAEvidenceClient:
         # Exchange OIDC token for CRA Evidence access token
         oidc_url = f"{self.base_url}/api/v1/oidc/token"
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             try:
                 response = await client.post(
                     oidc_url,
@@ -74,6 +103,7 @@ class CRAEvidenceClient:
                     message=f"Network error contacting {oidc_url}: {exc}",
                 ) from exc
 
+            self._raise_for_redirect(response)
             if response.status_code != 200:
                 error_detail = "OIDC token exchange failed"
                 try:
@@ -138,6 +168,7 @@ class CRAEvidenceClient:
             APIError: If API returns an error
         """
         request_id = response.headers.get("X-Request-ID")
+        self._raise_for_redirect(response)
 
         if response.status_code in (401, 403):
             if self.config.oidc_mode:
@@ -254,7 +285,7 @@ class CRAEvidenceClient:
         max_retries = 3
         backoff_seconds = [1, 2, 4]
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             last_response: httpx.Response | None = None
             for attempt in range(max_retries + 1):
                 try:
@@ -264,6 +295,7 @@ class CRAEvidenceClient:
                         message=f"Network error contacting {url}: {exc}",
                     ) from exc
                 last_response = response
+                self._raise_for_redirect(response)
 
                 if response.status_code == 429 or response.status_code >= 500:
                     if attempt < max_retries:
@@ -404,7 +436,7 @@ class CRAEvidenceClient:
         await self._ensure_access_token()
 
         kernel_f = None
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as sbom_f:
                 files: dict[str, Any] = {"file": (file_path.name, sbom_f, content_types[suffix])}
 
@@ -579,7 +611,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as f:
                 # Content-type follows the file format.
                 content_type = (
@@ -711,7 +743,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/json")}
                 data = {
@@ -801,7 +833,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, content_types[suffix])}
 
@@ -866,7 +898,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/json")}
 
@@ -931,7 +963,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/json")}
                 data = {"version_id": version_id}
@@ -974,7 +1006,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
         endpoint = f"{self.base_url}/api/v1/signing/attestation-trust-keys"
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             try:
                 response = await client.post(
                     endpoint,
@@ -1052,7 +1084,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(bundle_path, "rb") as bundle_f:
                 files = {
                     "signature_bundle": (
@@ -1172,7 +1204,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/octet-stream")}
                 data = {
@@ -1272,7 +1304,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             with open(file_path, "rb") as f:
                 files = {"file": (file_path.name, f, "application/x-yaml")}
                 data = {"doc_type": document_type}
@@ -1388,7 +1420,7 @@ class CRAEvidenceClient:
         """
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             endpoint = f"{self.base_url}/api/v1/ci/risk-assessment/review-cycles"
             try:
                 response = await client.post(
@@ -1463,7 +1495,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             endpoint = f"{self.base_url}/api/v1/ci/risk-assessment/review"
             try:
                 response = await client.post(
@@ -1501,7 +1533,7 @@ class CRAEvidenceClient:
         """
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             endpoint = f"{self.base_url}/api/v1/ci/risk-assessment/finalize"
             try:
                 response = await client.post(
@@ -1600,7 +1632,7 @@ class CRAEvidenceClient:
         # Deliberately not routed through _request_with_retry: that helper
         # replays 429 and 5xx responses, which is right for the reads above but
         # would risk repeating a create.
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             try:
                 response = await client.post(
                     endpoint,
@@ -1675,7 +1707,7 @@ class CRAEvidenceClient:
         """
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             form_data: dict[str, str] = {
                 "product": product,
                 "version": version,
@@ -1726,7 +1758,7 @@ class CRAEvidenceClient:
         if component:
             payload["component"] = component
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/api/v1/ci/scan",
@@ -1970,7 +2002,7 @@ class CRAEvidenceClient:
         """
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             payload: dict[str, Any] = {}
 
             if product:
@@ -2034,7 +2066,7 @@ class CRAEvidenceClient:
         await self._ensure_access_token()
 
         # PATCH uses a JSON body.
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             endpoint = (
                 f"{self.base_url}/api/v1/distributor/verifications/{verification_id}"
             )
@@ -2065,7 +2097,7 @@ class CRAEvidenceClient:
         """
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             endpoint = (
                 f"{self.base_url}/api/v1/distributor/verifications/"
                 f"{verification_id}/complete"
@@ -2098,7 +2130,7 @@ class CRAEvidenceClient:
         """
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             endpoint = (
                 f"{self.base_url}/api/v1/distributor/verifications/"
                 f"{verification_id}/stop-ship"
@@ -2321,7 +2353,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             endpoint = f"{self.base_url}/api/v1/products/{product_id}/cra-profile"
             try:
                 response = await client.put(
@@ -2407,7 +2439,7 @@ class CRAEvidenceClient:
 
         await self._ensure_access_token()
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with self._http_client() as client:
             try:
                 response = await client.post(
                     f"{self.base_url}/api/v1/sboms/verify",

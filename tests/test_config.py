@@ -2,12 +2,15 @@
 
 import os
 import tempfile
+import warnings
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 import yaml
+from click.testing import CliRunner
 
+from cra_evidence_cli.cli import cli
 from cra_evidence_cli.config import (
     CRAEvidenceConfig,
     get_config_file_path,
@@ -20,6 +23,8 @@ from cra_evidence_cli.exceptions import ConfigurationError
 _CRA_ENV_KEYS = [
     "CRA_EVIDENCE_API_KEY",
     "CRA_EVIDENCE_URL",
+    "CRA_EVIDENCE_TRUSTED_ORIGIN",
+    "CRA_EVIDENCE_CA_BUNDLE",
     "CRA_EVIDENCE_ORG",
     "CRA_EVIDENCE_TIMEOUT",
     "CRA_EVIDENCE_PRODUCT",
@@ -44,6 +49,8 @@ class TestCRAEvidenceConfig:
 
         assert config.api_key is None
         assert config.url == "https://api.craevidence.com"
+        assert config.trusted_origin is None
+        assert config.ca_bundle is None
         assert config.default_org is None
         assert config.output_format == "text"
         assert config.timeout == 60
@@ -73,6 +80,8 @@ class TestLoadConfig:
         env_vars = {
             "CRA_EVIDENCE_API_KEY": "env_api_key",
             "CRA_EVIDENCE_URL": "https://env.api.com",
+            "CRA_EVIDENCE_TRUSTED_ORIGIN": "https://env.api.com",
+            "CRA_EVIDENCE_CA_BUNDLE": "/etc/ssl/certs/internal.pem",
             "CRA_EVIDENCE_ORG": "env-org",
             "CRA_EVIDENCE_TIMEOUT": "90",
         }
@@ -83,6 +92,8 @@ class TestLoadConfig:
 
         assert config.api_key == "env_api_key"
         assert config.url == "https://env.api.com"
+        assert config.trusted_origin == "https://env.api.com"
+        assert config.ca_bundle == Path("/etc/ssl/certs/internal.pem")
         assert config.default_org == "env-org"
         assert config.timeout == 90
 
@@ -91,6 +102,8 @@ class TestLoadConfig:
         env_vars = {
             "CRA_EVIDENCE_API_KEY": "env_api_key",
             "CRA_EVIDENCE_URL": "https://env.api.com",
+            "CRA_EVIDENCE_TRUSTED_ORIGIN": "https://env.api.com",
+            "CRA_EVIDENCE_CA_BUNDLE": "/env/ca.pem",
         }
 
         with patch.dict(os.environ, env_vars, clear=False):
@@ -98,10 +111,14 @@ class TestLoadConfig:
                 config = load_config(
                     api_key="cli_api_key",
                     url="https://cli.api.com",
+                    trusted_origin="https://cli.api.com",
+                    ca_bundle=Path("/cli/ca.pem"),
                 )
 
         assert config.api_key == "cli_api_key"
         assert config.url == "https://cli.api.com"
+        assert config.trusted_origin == "https://cli.api.com"
+        assert config.ca_bundle == Path("/cli/ca.pem")
 
     def test_load_config_invalid_timeout(self):
         """Non-numeric CRA_EVIDENCE_TIMEOUT raises ConfigurationError."""
@@ -130,6 +147,30 @@ class TestLoadConfig:
         assert config.api_key == "env_api_key"
         # File should be used for URL (not in env)
         assert config.url == "https://file.api.com"
+
+    def test_cli_default_does_not_override_config_file_url(self, tmp_path):
+        config_dir = tmp_path / ".cra-evidence"
+        config_dir.mkdir()
+        config_path = config_dir / "config.yaml"
+        config_path.write_text("url: https://selfhost.example\n", encoding="utf-8")
+        config_path.chmod(0o600)
+
+        result = CliRunner().invoke(
+            cli,
+            ["--verbose", "version"],
+            env={"HOME": str(tmp_path)},
+        )
+
+        assert result.exit_code == 0
+        assert "API URL: https://selfhost.example" in result.output
+
+    def test_cli_help_lists_self_host_tls_options(self):
+        result = CliRunner().invoke(cli, ["--help"])
+
+        assert result.exit_code == 0
+        assert "--trusted-origin" in result.output
+        assert "--ca-bundle" in result.output
+        assert "https://api.craevidence.com" in result.output
 
 
 class TestValidateConfig:
@@ -160,8 +201,11 @@ class TestValidateConfig:
             url="https://api.craevidence.com",
         )
 
-        # Should not raise
-        validate_config(config)
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            validate_config(config)
+
+        assert captured == []
 
     def test_validate_http_url_allowed(self):
         """HTTP URLs (e.g. localhost) are accepted for local development."""
@@ -172,6 +216,101 @@ class TestValidateConfig:
 
         # Should not raise
         validate_config(config)
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://127.0.0.1:8000",
+            "http://[::1]:8000",
+        ],
+    )
+    def test_validate_http_ip_loopback_allowed(self, url):
+        config = CRAEvidenceConfig(api_key="test_key_123", url=url)
+
+        with pytest.warns(UserWarning, match="uses HTTP"):
+            validate_config(config)
+
+    @pytest.mark.parametrize(
+        ("url", "message"),
+        [
+            ("http://selfhost.example", "must use HTTPS"),
+            ("https://user@selfhost.example", "user information"),
+            ("https://selfhost.example/api", "must not contain a path"),
+            ("https://selfhost.example?tenant=one", "must not contain a query"),
+            ("https://selfhost.example#api", "must not contain a fragment"),
+        ],
+    )
+    def test_validate_api_url_rejects_non_origin_values(self, url, message):
+        config = CRAEvidenceConfig(api_key="test_key_123", url=url)
+
+        with pytest.raises(ConfigurationError, match=message):
+            validate_config(config)
+
+    def test_invalid_url_error_does_not_echo_embedded_credentials(self):
+        config = CRAEvidenceConfig(
+            api_key="test_key_123",
+            url="https://operator:private-value@selfhost.example:bad",
+        )
+
+        with pytest.raises(ConfigurationError) as raised:
+            validate_config(config)
+
+        assert "operator" not in str(raised.value)
+        assert "private-value" not in str(raised.value)
+
+    @pytest.mark.parametrize(
+        ("trusted_origin", "message"),
+        [
+            ("http://selfhost.example", "must use HTTPS"),
+            ("https://user@selfhost.example", "user information"),
+            ("https://selfhost.example/api", "must not contain a path"),
+            ("https://selfhost.example?tenant=one", "must not contain a query"),
+            ("https://selfhost.example#api", "must not contain a fragment"),
+        ],
+    )
+    def test_validate_trusted_origin_rejects_non_origin_values(
+        self, trusted_origin, message
+    ):
+        config = CRAEvidenceConfig(
+            api_key="test_key_123",
+            url="https://selfhost.example",
+            trusted_origin=trusted_origin,
+        )
+
+        with pytest.raises(ConfigurationError, match=message):
+            validate_config(config)
+
+    def test_exact_normalized_trusted_origin_suppresses_custom_host_warning(self):
+        config = CRAEvidenceConfig(
+            api_key="test_key_123",
+            url="https://SELFHOST.example:443/",
+            trusted_origin="https://selfhost.example",
+        )
+
+        with warnings.catch_warnings(record=True) as captured:
+            warnings.simplefilter("always")
+            validate_config(config)
+
+        assert not any("unintended server" in str(item.message) for item in captured)
+
+    def test_trusted_origin_mismatch_keeps_custom_host_warning(self):
+        config = CRAEvidenceConfig(
+            api_key="test_key_123",
+            url="https://selfhost-typo.example",
+            trusted_origin="https://selfhost.example",
+        )
+
+        with pytest.warns(UserWarning, match="unintended server"):
+            validate_config(config)
+
+    def test_missing_explicit_ca_bundle_is_rejected(self, tmp_path):
+        config = CRAEvidenceConfig(
+            api_key="test_key_123",
+            ca_bundle=tmp_path / "missing.pem",
+        )
+
+        with pytest.raises(ConfigurationError, match="CA bundle is not a readable file"):
+            validate_config(config)
 
 
 class TestConfigFilePath:

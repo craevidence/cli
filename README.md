@@ -183,19 +183,41 @@ You can override it with:
 export CRA_EVIDENCE_URL=https://api.craevidence.com
 ```
 
+For a self-hosted instance, configure the exact API origin and register the
+same normalized origin as trusted:
+
+```bash
+export CRA_EVIDENCE_URL=https://cra-api.internal.example
+export CRA_EVIDENCE_TRUSTED_ORIGIN=https://cra-api.internal.example
+export CRA_EVIDENCE_CA_BUNDLE=/etc/ssl/certs/cra-internal-ca.pem
+```
+
+The API URL and trusted origin must be origins only: scheme, host, and optional
+port, with no user information, path, query, or fragment. HTTPS is required
+except for loopback development URLs. The trusted-origin setting suppresses
+the custom-host typo warning only for an exact normalized match. It is a
+configuration safeguard, not a security boundary.
+
+`CRA_EVIDENCE_CA_BUNDLE` selects a PEM CA bundle for account API requests.
+Without it, the standard `SSL_CERT_FILE` and `SSL_CERT_DIR` variables remain
+available. TLS verification cannot be disabled. See the
+[CI/CD integration guide](https://github.com/craevidence/cli/blob/main/docs/ci-cd.md)
+for runner egress, proxy, GitHub Action, and GitLab Component examples.
+
 ## Environment Variables
 
 | Variable | Purpose |
 |---|---|
 | `CRA_EVIDENCE_API_KEY` | API key for account commands. |
 | `CRA_EVIDENCE_URL` | CRA Evidence API URL. Defaults to `https://api.craevidence.com`. |
+| `CRA_EVIDENCE_TRUSTED_ORIGIN` | Exact trusted API origin for a self-hosted instance. |
+| `CRA_EVIDENCE_CA_BUNDLE` | Path to a PEM CA bundle for API TLS verification. |
 | `CRA_EVIDENCE_ORG` | Default organization slug. |
 | `CRA_EVIDENCE_PRODUCT` | Default product slug for upload commands. |
 | `CRA_EVIDENCE_VERSION` | Default product version for upload commands. |
 | `CRA_EVIDENCE_COMPONENT` | Default component slug for component-aware uploads. |
 | `CRA_EVIDENCE_COMPONENT_VERSION` | Default component release version. |
 | `CRA_EVIDENCE_TIMEOUT` | HTTP request timeout in seconds for account commands. Defaults to `60`. |
-| `CRA_NO_WARN` | Set to any value to suppress API URL configuration warnings. |
 
 Credentials can also be stored in `~/.cra-evidence/config.yaml`. Keep that file
 private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.

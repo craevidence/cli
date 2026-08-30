@@ -188,7 +188,7 @@ async def test_client_posts_only_public_key_material(monkeypatch, tmp_path):
     posts = []
 
     class FakeAsyncClient:
-        def __init__(self, timeout=None):
+        def __init__(self, timeout=None, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):

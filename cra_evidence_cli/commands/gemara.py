@@ -445,7 +445,7 @@ TEMPLATE_BUILDERS = {
 
 async def _fetch_product(client: CRAEvidenceClient, product_identifier: str) -> dict:
     """Look up the full product dict (by slug or UUID) via the products list."""
-    async with httpx.AsyncClient(timeout=client.timeout) as http:
+    async with client._http_client() as http:
         response = await http.get(
             f"{client.base_url}/api/v1/products",
             headers=client._get_headers(),
@@ -460,7 +460,7 @@ async def _fetch_product(client: CRAEvidenceClient, product_identifier: str) -> 
 
 async def _fetch_latest_components(client: CRAEvidenceClient, product_id: str) -> list[dict]:
     """Fetch components from the most recent version's latest SBOM."""
-    async with httpx.AsyncClient(timeout=client.timeout) as http:
+    async with client._http_client() as http:
         versions_resp = await http.get(
             f"{client.base_url}/api/v1/products/{product_id}/versions",
             headers=client._get_headers(),
@@ -730,7 +730,7 @@ def validate(ctx: click.Context, file_path: Path, remote: bool) -> None:
         client = CRAEvidenceClient(config)
 
         async def _run() -> dict:
-            async with httpx.AsyncClient(timeout=client.timeout) as http:
+            async with client._http_client() as http:
                 with open(file_path, "rb") as f:
                     files = {"file": (file_path.name, f, "application/x-yaml")}
                     response = await http.post(

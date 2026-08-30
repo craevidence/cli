@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Self-hosted API origins can be registered as an exact trusted origin, and
+  private CA bundles can be selected from the CLI, environment, config file,
+  GitHub Action, or GitLab Component. Authenticated requests reject redirects
+  and keep standard proxy and certificate environment support.
+
 ### Changed
 
 - The known-answer rule-pack gate scans the existing isolated gosec cases in

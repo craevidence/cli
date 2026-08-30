@@ -579,7 +579,7 @@ class TestRaFinalize:
 
 
 class _FakeAsyncClient:
-    def __init__(self, timeout):
+    def __init__(self, timeout, **_kwargs):
         self.timeout = timeout
 
     async def __aenter__(self):

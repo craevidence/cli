@@ -81,6 +81,16 @@ inputs:
     default: 'https://api.craevidence.com'
     # Note: api.craevidence.com is the canonical endpoint
 
+  trusted-origin:
+    description: 'Exact trusted API origin for a self-hosted CRA Evidence instance'
+    required: false
+    default: ''
+
+  ca-bundle:
+    description: 'Path to a PEM CA bundle for CRA Evidence API TLS verification'
+    required: false
+    default: ''
+
   # === Artifact Options ===
   artifact-type:
     description: 'Type of artifact: sbom, hbom, vex, or document'
@@ -355,6 +365,8 @@ runs:
       env:
         CRA_EVIDENCE_API_KEY: ${{ inputs.api-key }}
         CRA_EVIDENCE_URL: ${{ inputs.api-url }}
+        CRA_EVIDENCE_TRUSTED_ORIGIN: ${{ inputs.trusted-origin }}
+        CRA_EVIDENCE_CA_BUNDLE: ${{ inputs.ca-bundle }}
         CRA_EVIDENCE_SIGNATURE_IDENTITY: ${{ inputs.signature-identity }}
         CRA_EVIDENCE_SIGNATURE_ISSUER: ${{ inputs.signature-issuer }}
         INPUT_PRODUCT: ${{ inputs.product }}

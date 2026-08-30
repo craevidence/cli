@@ -33,6 +33,95 @@ you pass `--create-product` (with `--target-markets`) to the CLI, or set
 GitLab CI component. Point pipelines at a product that already exists unless
 you deliberately want the pipeline to create it.
 
+## Self-hosted API configuration
+
+Self-hosted CI jobs use an API key. Configure an API origin with no path,
+query, fragment, or embedded user information:
+
+```bash
+export CRA_EVIDENCE_API_KEY=...
+export CRA_EVIDENCE_URL=https://cra-api.internal.example
+export CRA_EVIDENCE_TRUSTED_ORIGIN=https://cra-api.internal.example
+export CRA_EVIDENCE_CA_BUNDLE=/etc/ssl/certs/cra-internal-ca.pem
+```
+
+The trusted origin must exactly match the normalized API origin. Default HTTPS
+port `443`, host case, and a trailing root slash normalize to the same origin.
+Plain HTTP is accepted only for `localhost` or an IP loopback address. Account
+requests do not follow redirects, so configure the final API origin rather
+than an ingress URL that redirects.
+
+The explicit CA bundle applies to CRA Evidence API requests. If it is absent,
+httpx uses its normal trust environment, including `SSL_CERT_FILE` and
+`SSL_CERT_DIR`. Python HTTP calls also honor `HTTP_PROXY`, `HTTPS_PROXY`,
+`ALL_PROXY`, and `NO_PROXY`; add an internal API hostname to `NO_PROXY` when it
+must bypass a corporate proxy. The CLI has no option to disable TLS
+verification and no client-certificate option for mutual TLS.
+
+The same values can be saved in `~/.cra-evidence/config.yaml`:
+
+```yaml
+url: https://cra-api.internal.example
+trusted_origin: https://cra-api.internal.example
+ca_bundle: /etc/ssl/certs/cra-internal-ca.pem
+```
+
+For the GitHub Action, make the CA file available on the runner and pass its
+path:
+
+```yaml
+- uses: craevidence/cli@v4
+  with:
+    api-key: ${{ secrets.CRA_EVIDENCE_API_KEY }}
+    api-url: https://cra-api.internal.example
+    trusted-origin: https://cra-api.internal.example
+    ca-bundle: /etc/ssl/certs/cra-internal-ca.pem
+    product: my-product
+    version: ${{ github.ref_name }}
+    file: sbom.cdx.json
+```
+
+For the GitLab Component, pass the equivalent inputs:
+
+```yaml
+inputs:
+  api-url: https://cra-api.internal.example
+  trusted-origin: https://cra-api.internal.example
+  ca-bundle: /etc/ssl/certs/cra-internal-ca.pem
+```
+
+Use the CLI version named by a self-hosted release. Compatibility is not
+claimed for arbitrary CLI and backend release combinations. Every account
+request includes `X-CLI-Version` so the receiving deployment can identify the
+client version.
+
+| Deployment | CLI selection | Compatibility claim |
+|---|---|---|
+| Hosted CRA Evidence at the default API URL | Current published CLI release | Supported hosted path. |
+| Self-hosted CRA Evidence | Exact CLI version named by that self-hosted release | Limited to the named release pair. |
+| Any unlisted pairing | Any other CLI or backend release | No compatibility claim. |
+
+## CI runner egress
+
+CI runner egress is separate from self-hosted server egress. Firewall review
+must consider the commands and installation channel used by the runner:
+
+| Runner activity | Destination | When needed |
+|---|---|---|
+| Account commands | Configured CRA Evidence API origin | Uploads and account reads. |
+| `check` with Grype database refresh | `grype.anchore.io` | When the local Grype database is absent or stale. A pre-cached database with `GRYPE_DB_AUTO_UPDATE=false` avoids this refresh. |
+| `check` OSV fallback | `api.osv.dev` | When the Grype path is unavailable. |
+| `check` enrichment | `www.cisa.gov`, `api.first.org` | CISA KEV and FIRST EPSS enrichment. |
+| `eol-check` | `endoflife.date` | End-of-life data lookups. |
+| SBOM signing | Sigstore services and the CI identity provider | Only when signing is requested. Exact services follow the Sigstore trust configuration. |
+| PyPI installation | The configured Python package index and file host | When a job installs the CLI wheel. The supplied wrappers default to PyPI. |
+| Container installation | The selected container registry | When a job pulls the CLI image. |
+
+This table describes the runner. It does not describe network access required
+by a CRA Evidence server. A fully network-isolated `check` requires an existing
+SBOM, a compatible local Grype database, and automatic database updates
+disabled; other command paths in the table remain command-specific.
+
 ## Usage in CI/CD
 
 ### GitHub Action

@@ -308,7 +308,7 @@ async def test_client_posts_json_to_existing_product(monkeypatch) -> None:
     captured: dict = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -637,7 +637,7 @@ class _FakeAsyncClient:
     status_code = 201
     body: dict | None = None
 
-    def __init__(self, timeout):
+    def __init__(self, timeout, **_kwargs):
         self.timeout = timeout
 
     async def __aenter__(self):

@@ -18,6 +18,78 @@ def test_client_initialization(test_config):
     assert client.config.api_key == "test_key_12345"
 
 
+def test_client_normalizes_the_configured_api_origin():
+    from cra_evidence_cli.config import CRAEvidenceConfig
+
+    client = CRAEvidenceClient(
+        CRAEvidenceConfig(
+            api_key="test_key_12345",
+            url="https://SELFHOST.example:443/",
+        )
+    )
+
+    assert client.base_url == "https://selfhost.example"
+
+
+def test_http_client_keeps_environment_trust_and_rejects_redirects(test_config, monkeypatch):
+    captured = {}
+    sentinel = object()
+
+    def fake_async_client(**kwargs):
+        captured.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", fake_async_client)
+
+    result = CRAEvidenceClient(test_config)._http_client()
+
+    assert result is sentinel
+    assert captured["verify"] is True
+    assert captured["trust_env"] is True
+    assert captured["follow_redirects"] is False
+
+
+def test_http_client_uses_explicit_ca_context(test_config, monkeypatch):
+    captured = {}
+    tls_context = object()
+    sentinel = object()
+
+    test_config.ca_bundle = Path("/runner/internal-ca.pem")
+    monkeypatch.setattr(
+        "cra_evidence_cli.client._build_tls_context",
+        lambda _path: tls_context,
+    )
+    monkeypatch.setattr(
+        "cra_evidence_cli.client.httpx.AsyncClient",
+        lambda **kwargs: captured.update(kwargs) or sentinel,
+    )
+
+    result = CRAEvidenceClient(test_config)._http_client()
+
+    assert result is sentinel
+    assert captured["verify"] is tls_context
+    assert captured["trust_env"] is True
+    assert captured["follow_redirects"] is False
+
+
+def test_every_authenticated_async_client_uses_the_tls_factory():
+    root = Path(__file__).resolve().parents[1]
+    client_source = (root / "cra_evidence_cli" / "client.py").read_text(encoding="utf-8")
+    components_source = (
+        root / "cra_evidence_cli" / "commands" / "components.py"
+    ).read_text(encoding="utf-8")
+    gemara_source = (root / "cra_evidence_cli" / "commands" / "gemara.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert client_source.count("httpx.AsyncClient(") == 1
+    assert "httpx.AsyncClient(" not in components_source
+    assert "httpx.AsyncClient(" not in gemara_source
+    assert client_source.count("self._http_client()") == 24
+    assert components_source.count("client._http_client()") == 1
+    assert gemara_source.count("client._http_client()") == 3
+
+
 def test_client_headers(test_config):
     """Authorization and User-Agent headers are set correctly."""
     client = CRAEvidenceClient(test_config)
@@ -38,6 +110,27 @@ def test_handle_response_success(test_config, mock_api_response):
 
     result = client._handle_response(response)
     assert result == mock_api_response
+
+
+@pytest.mark.parametrize("content", [b"", b'{"detail":"moved"}'])
+def test_handle_response_rejects_redirects(test_config, content):
+    client = CRAEvidenceClient(test_config)
+    response = Response(
+        status_code=302,
+        content=content,
+        headers={
+            "Location": "https://other.example/api/v1/ci/status",
+            "X-Request-ID": "req-redirect",
+        },
+    )
+
+    with pytest.raises(APIError, match="Authenticated redirects are not followed") as raised:
+        client._handle_response(response)
+
+    assert raised.value.status_code == 302
+    assert raised.value.request_id == "req-redirect"
+    assert "Location header" in str(raised.value)
+    assert "other.example" not in str(raised.value)
 
 
 def test_handle_response_auth_error(test_config):
@@ -154,7 +247,7 @@ async def test_upload_attestation_posts_version_id_form(test_config, tmp_path, m
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -201,7 +294,7 @@ async def test_upload_sbom_posts_target_markets(test_config, tmp_path, monkeypat
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -247,7 +340,7 @@ async def test_upload_sbom_uses_xml_multipart_media_type(test_config, tmp_path, 
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -293,7 +386,7 @@ async def test_validate_sbom_uses_xml_multipart_media_type(test_config, tmp_path
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -337,7 +430,7 @@ async def test_upload_sbom_create_product_defaults_to_false_in_form(
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -376,7 +469,7 @@ async def test_upload_sbom_create_product_true_posts_true_in_form(
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -415,7 +508,7 @@ async def test_verify_sbom_signature_posts_bundle_and_policy(test_config, tmp_pa
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -611,7 +704,7 @@ async def test_oidc_get_exchanges_token_before_request(monkeypatch):
     calls = []
 
     class FakeAsyncClient:
-        def __init__(self, timeout=None):
+        def __init__(self, timeout=None, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
@@ -655,7 +748,7 @@ async def test_upload_vex_posts_ci_upload_form(test_config, tmp_path, monkeypatc
     captured = {}
 
     class FakeAsyncClient:
-        def __init__(self, timeout):
+        def __init__(self, timeout, **_kwargs):
             self.timeout = timeout
 
         async def __aenter__(self):
