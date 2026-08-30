@@ -1134,7 +1134,7 @@ jobs:
 
       # The SBOMs the release actually SERVES are validated, not the local
       # generations: both authenticated assets must be well-formed CycloneDX
-      # 1.6 documents whose subject is the canonical image at the matching
+      # 1.7 documents whose subject is the canonical image at the matching
       # platform digest.
       - name: Validate the published SBOM assets
         run: |
