@@ -572,23 +572,41 @@ def test_sard_truth_uses_exact_variables_and_plain_assignment(tmp_path: Path) ->
 def test_gosec_score_credits_only_the_declared_rule(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(benchmarks, "_gosec_cases", lambda path: [(["package p"], 1)])
     monkeypatch.setattr(benchmarks, "_rule_cwes", lambda rules: {"measured-rule": {109}})
+
+    def scan_other_rule(binary: Path, rules: Path, target: Path) -> dict:
+        source = target / "G109" / "case000" / "f0.go"
+        return {
+            "paths": {"scanned": [str(source)]},
+            "results": [
+                {
+                    "check_id": "other-rule",
+                    "path": str(source),
+                    "start": {"line": 1, "col": 1},
+                }
+            ],
+            "errors": [],
+        }
+
     monkeypatch.setattr(
         benchmarks,
         "_scan",
-        lambda binary, rules, target: {"results": [{"check_id": "other-rule"}]},
+        scan_other_rule,
     )
 
-    assert benchmarks._score_gosec(
+    score, findings, scan_seconds = benchmarks._score_gosec(
         Path("opengrep"),
         Path("rules"),
         tmp_path,
         {"G109": "sample.go"},
         {"G109": "measured-rule"},
         tmp_path / "work",
-    ) == {
+    )
+    assert score == {
         "cases_total": 1,
         "by_rule": {"G109": {"cases": 1, "vulnerable": 1, "detected": 0, "fp_on_safe": 0}},
     }
+    assert findings == [("G109/case000/f0.go", "other-rule", 1, 1)]
+    assert scan_seconds >= 0
 
     with pytest.raises(benchmarks.BenchmarkGateError, match="ownership differ"):
         benchmarks._score_gosec(
@@ -610,6 +628,209 @@ def test_gosec_score_credits_only_the_declared_rule(tmp_path: Path, monkeypatch)
             {"G109": "missing-rule"},
             tmp_path / "missing-work",
         )
+
+
+def test_gosec_score_batches_all_cases_in_one_scan(tmp_path: Path, monkeypatch) -> None:
+    def cases(path: Path) -> list[tuple[list[str], int]]:
+        if path.name == "g109.go":
+            return [(["package p", "package p"], 1), (["package p"], 0)]
+        return [(["package p"], 1)]
+
+    monkeypatch.setattr(benchmarks, "_gosec_cases", cases)
+    monkeypatch.setattr(
+        benchmarks,
+        "_rule_cwes",
+        lambda rules: {"parse-rule": {109}, "shell-rule": {78}},
+    )
+    scan_targets = []
+
+    def scan(binary: Path, rules: Path, target: Path) -> dict:
+        scan_targets.append(target)
+        files = sorted(target.rglob("*.go"))
+        return {
+            "paths": {"scanned": [str(path) for path in files]},
+            "results": [
+                {
+                    "check_id": "parse-rule",
+                    "path": str(target / "G109" / "case000" / "f1.go"),
+                    "start": {"line": 3, "col": 4},
+                },
+                {
+                    "check_id": "other-rule",
+                    "path": str(target / "G109" / "case001" / "f0.go"),
+                    "start": {"line": 5, "col": 6},
+                },
+                {
+                    "check_id": "shell-rule",
+                    "path": str(target / "G204" / "case000" / "f0.go"),
+                    "start": {"line": 7, "col": 8},
+                },
+            ],
+            "errors": [],
+        }
+
+    monkeypatch.setattr(benchmarks, "_scan", scan)
+    workdir = tmp_path / "work"
+    score, findings, _ = benchmarks._score_gosec(
+        Path("opengrep"),
+        Path("rules"),
+        tmp_path,
+        {"G109": "g109.go", "G204": "g204.go"},
+        {"G109": "parse-rule", "G204": "shell-rule"},
+        workdir,
+    )
+
+    assert scan_targets == [workdir]
+    assert sorted(path.relative_to(workdir).as_posix() for path in workdir.rglob("*.go")) == [
+        "G109/case000/f0.go",
+        "G109/case000/f1.go",
+        "G109/case001/f0.go",
+        "G204/case000/f0.go",
+    ]
+    assert score == {
+        "cases_total": 3,
+        "by_rule": {
+            "G109": {"cases": 2, "vulnerable": 1, "detected": 1, "fp_on_safe": 0},
+            "G204": {"cases": 1, "vulnerable": 1, "detected": 1, "fp_on_safe": 0},
+        },
+    }
+    assert findings == [
+        ("G109/case000/f1.go", "parse-rule", 3, 4),
+        ("G109/case001/f0.go", "other-rule", 5, 6),
+        ("G204/case000/f0.go", "shell-rule", 7, 8),
+    ]
+
+
+def test_gosec_score_rejects_engine_errors(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(benchmarks, "_gosec_cases", lambda path: [(["package p"], 1)])
+    monkeypatch.setattr(benchmarks, "_rule_cwes", lambda rules: {"measured-rule": {109}})
+    monkeypatch.setattr(
+        benchmarks,
+        "_scan",
+        lambda binary, rules, target: {
+            "paths": {"scanned": [str(target / "G109" / "case000" / "f0.go")]},
+            "results": [],
+            "errors": [{"message": "parse failure"}],
+        },
+    )
+
+    with pytest.raises(benchmarks.BenchmarkGateError, match="engine errors"):
+        benchmarks._score_gosec(
+            Path("opengrep"),
+            Path("rules"),
+            tmp_path,
+            {"G109": "sample.go"},
+            {"G109": "measured-rule"},
+            tmp_path / "work",
+        )
+
+
+def test_gosec_score_rejects_empty_materialization(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(benchmarks, "_gosec_cases", lambda path: [])
+    monkeypatch.setattr(benchmarks, "_rule_cwes", lambda rules: {"measured-rule": {109}})
+    monkeypatch.setattr(
+        benchmarks,
+        "_scan",
+        lambda binary, rules, target: pytest.fail("scan must not run"),
+    )
+
+    with pytest.raises(benchmarks.BenchmarkGateError, match="materialized zero files"):
+        benchmarks._score_gosec(
+            Path("opengrep"),
+            Path("rules"),
+            tmp_path,
+            {"G109": "sample.go"},
+            {"G109": "measured-rule"},
+            tmp_path / "work",
+        )
+
+
+@pytest.mark.parametrize(
+    ("scanned", "message"),
+    [
+        ("missing", "coverage differs"),
+        ("duplicate", "duplicate scanned paths"),
+        ("unknown", "unknown materialized file"),
+        ("outside", "outside the materialized root"),
+        ("traversal", "contains traversal"),
+        ("symlink", "symbolic path"),
+    ],
+)
+def test_gosec_score_requires_exact_scan_coverage(
+    tmp_path: Path, monkeypatch, scanned: str, message: str
+) -> None:
+    monkeypatch.setattr(benchmarks, "_gosec_cases", lambda path: [(["package p"], 1)])
+    monkeypatch.setattr(benchmarks, "_rule_cwes", lambda rules: {"measured-rule": {109}})
+
+    def scan(binary: Path, rules: Path, target: Path) -> dict:
+        expected = target / "G109" / "case000" / "f0.go"
+        symlink = target / "linked.go"
+        if scanned == "symlink":
+            symlink.symlink_to(expected)
+        paths = {
+            "missing": [],
+            "duplicate": [str(expected), str(expected)],
+            "unknown": [str(target / "G109" / "case999" / "f0.go")],
+            "outside": [str(tmp_path / "outside.go")],
+            "traversal": [str(target / "G109" / "case999" / ".." / "case000" / "f0.go")],
+            "symlink": [str(symlink)],
+        }[scanned]
+        return {"paths": {"scanned": paths}, "results": [], "errors": []}
+
+    monkeypatch.setattr(benchmarks, "_scan", scan)
+    with pytest.raises(benchmarks.BenchmarkGateError, match=message):
+        benchmarks._score_gosec(
+            Path("opengrep"),
+            Path("rules"),
+            tmp_path,
+            {"G109": "sample.go"},
+            {"G109": "measured-rule"},
+            tmp_path / "work",
+        )
+
+
+def test_gosec_score_rejects_unknown_finding_path(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(benchmarks, "_gosec_cases", lambda path: [(["package p"], 1)])
+    monkeypatch.setattr(benchmarks, "_rule_cwes", lambda rules: {"measured-rule": {109}})
+
+    def scan(binary: Path, rules: Path, target: Path) -> dict:
+        expected = target / "G109" / "case000" / "f0.go"
+        return {
+            "paths": {"scanned": [str(expected)]},
+            "results": [
+                {
+                    "check_id": "measured-rule",
+                    "path": str(target / "G109" / "case999" / "f0.go"),
+                    "start": {"line": 1, "col": 1},
+                }
+            ],
+            "errors": [],
+        }
+
+    monkeypatch.setattr(benchmarks, "_scan", scan)
+    with pytest.raises(benchmarks.BenchmarkGateError, match="unknown materialized file"):
+        benchmarks._score_gosec(
+            Path("opengrep"),
+            Path("rules"),
+            tmp_path,
+            {"G109": "sample.go"},
+            {"G109": "measured-rule"},
+            tmp_path / "work",
+        )
+
+
+def test_gosec_repeat_compares_finding_identity() -> None:
+    score = {"cases_total": 1, "by_rule": {}}
+    first = [("G109/case000/f0.go", "rule", 1, 1)]
+    second = [("G109/case000/f0.go", "rule", 2, 1)]
+
+    assert benchmarks._gosec_repeat_differences(score, first, score, first) == []
+    assert benchmarks._gosec_repeat_differences(score, first, score, second) == [
+        "repeated findings differ"
+    ]
+    assert benchmarks._gosec_repeat_differences(score, first, {}, first) == [
+        "repeated scoring differs"
+    ]
 
 
 def test_benchmark_rejects_unidentified_finding_path() -> None:

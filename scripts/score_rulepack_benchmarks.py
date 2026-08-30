@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -930,9 +931,8 @@ def _score_gosec(
     sample_files: dict[str, str],
     scored_rules: dict[str, str],
     workdir: Path,
-) -> dict:
+) -> tuple[dict, list[tuple[str, str, int, int]], float]:
     """Score our rules against gosec's labelled samples, per gosec rule id."""
-    actual: dict[str, dict[str, int]] = {}
     if set(sample_files) != set(scored_rules):
         message = "gosec sample files and scored-rule ownership differ"
         raise BenchmarkGateError(message)
@@ -941,36 +941,127 @@ def _score_gosec(
     if missing_rules:
         message = f"gosec scored rules are not present: {sorted(missing_rules)}"
         raise BenchmarkGateError(message)
-    total_cases = 0
+
+    root = workdir.resolve()
+    workdir = root
+    cases_by_rule: dict[str, list[tuple[list[str], int]]] = {}
+    file_owners: dict[Path, tuple[str, int]] = {}
     for gosec_rule, relative in sorted(sample_files.items()):
         cases = _gosec_cases(checkout / relative)
-        detected = 0
-        vulnerable = 0
-        fp_on_safe = 0
-        for index, (sources, expected) in enumerate(cases):
+        cases_by_rule[gosec_rule] = cases
+        for index, (sources, _expected) in enumerate(cases):
             case_dir = workdir / gosec_rule / f"case{index:03d}"
             case_dir.mkdir(parents=True, exist_ok=True)
             for position, source in enumerate(sources):
-                (case_dir / f"f{position}.go").write_text(source, encoding="utf-8")
-            document = _scan(binary, rules, case_dir)
-            found = sum(
-                str(result.get("check_id") or "") == scored_rules[gosec_rule]
-                for result in document.get("results") or []
+                target = case_dir / f"f{position}.go"
+                target.write_text(source, encoding="utf-8")
+                resolved = target.resolve()
+                if resolved in file_owners:
+                    message = f"gosec materialized duplicate file: {resolved}"
+                    raise BenchmarkGateError(message)
+                file_owners[resolved] = (gosec_rule, index)
+
+    if not file_owners:
+        message = "gosec benchmark materialized zero files"
+        raise BenchmarkGateError(message)
+
+    started = time.monotonic()
+    document = _scan(binary, rules, workdir)
+    scan_seconds = time.monotonic() - started
+    if document.get("errors"):
+        message = "gosec benchmark produced engine errors"
+        raise BenchmarkGateError(message)
+
+    def resolve_reported_file(value: object, source: str) -> Path:
+        raw_path = str(value or "")
+        if not raw_path:
+            message = f"gosec {source} has an empty path"
+            raise BenchmarkGateError(message)
+        reported = Path(raw_path)
+        if ".." in reported.parts:
+            message = f"gosec {source} path contains traversal: {raw_path}"
+            raise BenchmarkGateError(message)
+        absolute = Path(os.path.abspath(reported))
+        resolved = reported.resolve()
+        if absolute != resolved:
+            message = f"gosec {source} path resolves through a symbolic path: {raw_path}"
+            raise BenchmarkGateError(message)
+        try:
+            resolved.relative_to(root)
+        except ValueError as exc:
+            message = f"gosec {source} path is outside the materialized root: {raw_path}"
+            raise BenchmarkGateError(message) from exc
+        if resolved not in file_owners:
+            message = f"gosec {source} references an unknown materialized file: {raw_path}"
+            raise BenchmarkGateError(message)
+        return resolved
+
+    scanned_paths = document.get("paths", {}).get("scanned") or []
+    scanned = [resolve_reported_file(path, "scan") for path in scanned_paths]
+    if len(scanned) != len(set(scanned)):
+        message = "gosec benchmark reported duplicate scanned paths"
+        raise BenchmarkGateError(message)
+    expected_files = set(file_owners)
+    if set(scanned) != expected_files:
+        missing = sorted(
+            path.relative_to(root).as_posix() for path in expected_files - set(scanned)
+        )
+        extra = sorted(path.relative_to(root).as_posix() for path in set(scanned) - expected_files)
+        message = f"gosec benchmark scan coverage differs: missing={missing}, extra={extra}"
+        raise BenchmarkGateError(message)
+
+    owned_hits: set[tuple[str, int]] = set()
+    findings: list[tuple[str, str, int, int]] = []
+    for result in document.get("results") or []:
+        path = resolve_reported_file(result.get("path"), "finding")
+        gosec_rule, index = file_owners[path]
+        rule_id = str(result.get("check_id") or "")
+        start = result.get("start") or {}
+        findings.append(
+            (
+                path.relative_to(root).as_posix(),
+                rule_id,
+                int(start.get("line") or 0),
+                int(start.get("col") or 0),
             )
-            if expected > 0:
-                vulnerable += 1
-                if found:
-                    detected += 1
-            elif found:
-                fp_on_safe += 1
+        )
+        if rule_id == scored_rules[gosec_rule]:
+            owned_hits.add((gosec_rule, index))
+
+    actual: dict[str, dict[str, int]] = {}
+    total_cases = 0
+    for gosec_rule, cases in sorted(cases_by_rule.items()):
         total_cases += len(cases)
+        vulnerable = sum(expected > 0 for _, expected in cases)
+        detected = sum(
+            expected > 0 and (gosec_rule, index) in owned_hits
+            for index, (_, expected) in enumerate(cases)
+        )
+        fp_on_safe = sum(
+            expected == 0 and (gosec_rule, index) in owned_hits
+            for index, (_, expected) in enumerate(cases)
+        )
         actual[gosec_rule] = {
             "cases": len(cases),
             "vulnerable": vulnerable,
             "detected": detected,
             "fp_on_safe": fp_on_safe,
         }
-    return {"cases_total": total_cases, "by_rule": actual}
+    return {"cases_total": total_cases, "by_rule": actual}, sorted(findings), scan_seconds
+
+
+def _gosec_repeat_differences(
+    first_score: dict,
+    first_findings: list[tuple[str, str, int, int]],
+    second_score: dict,
+    second_findings: list[tuple[str, str, int, int]],
+) -> list[str]:
+    differences = []
+    if first_score != second_score:
+        differences.append("repeated scoring differs")
+    if first_findings != second_findings:
+        differences.append("repeated findings differ")
+    return differences
 
 
 def _ratio(numerator: int, denominator: int) -> str:
@@ -1313,7 +1404,7 @@ def main() -> int:
                 failures.append(f"{benchmark['name']}: sample file missing: {missing}")
                 continue
             with tempfile.TemporaryDirectory() as first_dir:
-                actual = _score_gosec(
+                actual, findings, first_scan_seconds = _score_gosec(
                     args.opengrep,
                     benchmark_rules,
                     checkout,
@@ -1322,7 +1413,7 @@ def main() -> int:
                     Path(first_dir),
                 )
             with tempfile.TemporaryDirectory() as second_dir:
-                repeat = _score_gosec(
+                repeat, repeat_findings, second_scan_seconds = _score_gosec(
                     args.opengrep,
                     benchmark_rules,
                     checkout,
@@ -1330,8 +1421,8 @@ def main() -> int:
                     benchmark["scored_rules"],
                     Path(second_dir),
                 )
-            if actual != repeat:
-                failures.append(f"{benchmark['name']}: repeated scoring differs")
+            for difference in _gosec_repeat_differences(actual, findings, repeat, repeat_findings):
+                failures.append(f"{benchmark['name']}: {difference}")
         else:
             failures.append(
                 f"{benchmark['name']}: unsupported benchmark type {benchmark_type}"
@@ -1379,6 +1470,7 @@ def main() -> int:
             continue
         if benchmark_type == "gosec-samples":
             print(f"{benchmark['name']}: {actual['cases_total']} cases")
+            print(f"  combined scans: {first_scan_seconds:.2f}s, {second_scan_seconds:.2f}s")
             for gosec_rule, values in sorted(actual["by_rule"].items()):
                 print(
                     f"  {gosec_rule}: cases={values['cases']} "

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The known-answer rule-pack gate scans the existing isolated gosec cases in
+  two combined deterministic passes instead of starting Opengrep once per case.
+  It now requires exact file coverage, rejects engine errors, and compares full
+  finding identities between repeats.
+
 ### Fixed
 
 - Failed releases can resume distribution publishing from the source commit

@@ -140,7 +140,7 @@ jobs:
           python scripts/check_rulepack_real_projects.py
           --corpus-root "${RUNNER_TEMP}/rulepack-corpora"
 
-      - name: Java known-answer rule-pack gate
+      - name: Known-answer rule-pack gate
         run: >-
           python scripts/score_rulepack_benchmarks.py
           --benchmark-root "${RUNNER_TEMP}/rulepack-corpora"
