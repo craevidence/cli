@@ -141,6 +141,38 @@ class TestCheckVulnerabilityThreshold:
         assert exc_info.value.exit_code == 10
         assert exc_info.value.count == 3
 
+    def test_applicability_pending_fails_closed(self):
+        """A pending applicability state fails the gate with exit 30 even when the
+        severity counts are all zero: a quarantined zero is not a clean result."""
+        from cra_evidence_cli.exceptions import ApplicabilityInconclusive
+
+        vulns = {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "applicability_pending": True,
+        }
+        with pytest.raises(ApplicabilityInconclusive) as exc_info:
+            check_vulnerability_threshold(vulns, "critical")
+        assert exc_info.value.exit_code == 30
+
+    def test_applicability_pending_ignored_for_none(self):
+        """fail_on 'none' does not gate on vulnerabilities, so a pending state does
+        not raise exit 30."""
+        check_vulnerability_threshold({"applicability_pending": True}, "none")
+
+    def test_applicability_not_pending_zero_passes(self):
+        """A zero-count summary with applicability_pending false still passes."""
+        vulns = {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "applicability_pending": False,
+        }
+        check_vulnerability_threshold(vulns, "critical")
+
 
 # format_output tests (basic rendering)
 
@@ -2353,7 +2385,10 @@ class TestUploadSbomFailOnGate:
         assert "did not complete within 120 seconds" in result.output
         assert mock_run.call_count == 2
 
-    def test_completed_scan_in_upload_response_gates_without_polling(self):
+    def test_completed_upload_reads_status_and_fails_closed_on_pending(self):
+        # An immediately completed upload still reads the canonical version
+        # status, because the inline upload response can omit
+        # applicability_pending. A pending status fails closed with exit 30.
         upload_response = {
             "artifact_id": "sbom-123",
             "artifact_type": "sbom",
@@ -2361,21 +2396,66 @@ class TestUploadSbomFailOnGate:
             "version": {"number": "1.0", "created": False},
             "scan_results": {
                 "status": "completed",
-                "vulnerabilities": {
-                    "critical": 1, "high": 0, "medium": 0, "low": 0,
-                },
+                "vulnerabilities": {"critical": 0, "high": 0, "medium": 0, "low": 0},
             },
         }
+        status_responses = [
+            {
+                "scan_state": "completed",
+                "vulnerability_summary": {
+                    "applicability_pending": True,
+                    "critical": 0,
+                    "high": 0,
+                    "medium": 0,
+                    "low": 0,
+                },
+            }
+        ]
 
         result, mock_run = self._invoke(
             upload_response,
-            [],
+            status_responses,
+            ["--scan", "--fail-on", "critical"],
+        )
+
+        assert result.exit_code == 30, result.output
+        assert mock_run.call_count == 2
+
+    def test_completed_upload_reads_status_and_gates_on_threshold_breach(self):
+        # The same completed/deduplicated path exits on a real threshold breach
+        # read from the canonical status, not the inline upload counts (which are
+        # zero here), proving the gate uses the status response.
+        upload_response = {
+            "artifact_id": "sbom-123",
+            "artifact_type": "sbom",
+            "product": {"name": "test", "created": False},
+            "version": {"number": "1.0", "created": False},
+            "scan_results": {
+                "status": "completed",
+                "vulnerabilities": {"critical": 0, "high": 0, "medium": 0, "low": 0},
+            },
+        }
+        status_responses = [
+            {
+                "scan_state": "completed",
+                "vulnerability_summary": {
+                    "applicability_pending": False,
+                    "critical": 1,
+                    "high": 0,
+                    "medium": 0,
+                    "low": 0,
+                },
+            }
+        ]
+
+        result, mock_run = self._invoke(
+            upload_response,
+            status_responses,
             ["--scan", "--fail-on", "critical"],
         )
 
         assert result.exit_code == 10, result.output
-        # only the upload call happened; no status polling was needed
-        assert mock_run.call_count == 1
+        assert mock_run.call_count == 2
 
     def test_failed_scan_in_upload_response_exits_3(self):
         upload_response = {

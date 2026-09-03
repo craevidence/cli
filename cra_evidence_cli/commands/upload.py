@@ -21,6 +21,7 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.display import humanize_field_path, humanize_identifier
 from cra_evidence_cli.exceptions import (
     APIError,
+    ApplicabilityInconclusive,
     CRAEvidenceError,
     SbomqsThresholdExceeded,
     SignatureVerificationUntrusted,
@@ -732,8 +733,21 @@ def format_sarif_output(data: dict, output_format: str) -> None:
     console.print()
 
 
+def _check_applicability_pending(vulnerability_summary: dict, fail_on: str) -> None:
+    """Fail closed when the server could not verify which findings apply to the
+    shipped version. A zero count under a pending scan is not a no-vulnerabilities
+    result, so a severity threshold cannot be certified. Read defensively so an
+    older server that omits the field does not break. Skipped for
+    fail_on == "none", which does not gate on vulnerabilities."""
+    if fail_on == "none":
+        return
+    if vulnerability_summary.get("applicability_pending"):
+        raise ApplicabilityInconclusive(fail_on)
+
+
 def check_vulnerability_threshold(vulnerability_summary: dict, fail_on: str) -> None:
     """Check vulnerability counts against threshold and raise if exceeded."""
+    _check_applicability_pending(vulnerability_summary, fail_on)
     if fail_on == "none":
         return
 
@@ -1544,17 +1558,17 @@ def upload_sbom(
         if fail_on:
             scan_results = data.get("scan_results") or {}
             scan_status = scan_results.get("status")
-            if scan_status == "completed":
-                check_vulnerability_threshold(
-                    scan_results.get("vulnerabilities") or {}, fail_on
-                )
-            elif scan_status in ("failed", "disabled"):
+            if scan_status in ("failed", "disabled"):
                 msg = (
                     f"Vulnerability scan {scan_status}; the --fail-on gate "
                     "cannot be evaluated."
                 )
                 raise APIError(message=msg)
             else:
+                # Evaluate the canonical version status for every path, including an
+                # immediately completed or deduplicated upload, so the gate observes
+                # applicability_pending, which the inline scan_results can omit. A
+                # completed scan returns from the first poll immediately.
                 vuln_summary = wait_for_scan_completion(
                     client, product, version_number, scan_timeout
                 )

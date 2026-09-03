@@ -17,6 +17,7 @@ from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.display import humanize_identifier
 from cra_evidence_cli.exceptions import (
+    ApplicabilityInconclusive,
     CRAEvidenceError,
     CRANonCompliantError,
     ReleasePolicyNotMetError,
@@ -54,6 +55,16 @@ def check_fail_on(
         CRANonCompliantError: If the CRA legal floor is not ready (exit 20)
         ReleasePolicyNotMetError: If the floor is met but the release policy is not (exit 24)
     """
+    # Applicability gate first: when the server could not verify which findings
+    # apply to the shipped version, a zero count is not a no-vulnerabilities
+    # result, so a severity threshold cannot be certified and the gate fails
+    # closed. Read defensively so an older server that omits the field does not
+    # break. Skipped for fail_on == "none", which does not gate on vulnerabilities.
+    if fail_on in ("critical", "high", "medium", "low") and vulnerability_summary.get(
+        "applicability_pending"
+    ):
+        raise ApplicabilityInconclusive(fail_on)
+
     critical = vulnerability_summary.get("critical", 0) or 0
     high = vulnerability_summary.get("high", 0) or 0
     medium = vulnerability_summary.get("medium", 0) or 0

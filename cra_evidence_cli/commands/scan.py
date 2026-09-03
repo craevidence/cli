@@ -15,6 +15,7 @@ from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import (
     APIError,
+    ApplicabilityInconclusive,
     CRAEvidenceError,
     VulnerabilityThresholdExceeded,
 )
@@ -90,6 +91,13 @@ def check_vulnerability_threshold(
         return
 
     vulns = data["vulnerabilities"]
+
+    # Applicability gate first: when the server could not verify which findings
+    # apply to the shipped version, a zero count is not a no-vulnerabilities
+    # result, so the gate cannot certify the threshold and fails closed. Read
+    # defensively so an older server that omits the field does not break.
+    if vulns.get("applicability_pending"):
+        raise ApplicabilityInconclusive(fail_on)
 
     critical = vulns.get("critical", 0)
     high = vulns.get("high", 0)

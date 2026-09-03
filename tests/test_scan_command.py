@@ -48,6 +48,37 @@ class TestScanThresholdChecking:
         """No --fail-on → never raises."""
         check_vulnerability_threshold(scan_response_completed, None)
 
+    def test_applicability_pending_fails_closed(self):
+        """A pending applicability state fails the gate with exit 30 even when the
+        severity counts are all zero: a quarantined zero is not a clean result."""
+        from cra_evidence_cli.exceptions import ApplicabilityInconclusive
+
+        data = {
+            "vulnerabilities": {
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "applicability_pending": True,
+            }
+        }
+        with pytest.raises(ApplicabilityInconclusive) as exc_info:
+            check_vulnerability_threshold(data, "critical")
+        assert exc_info.value.exit_code == 30
+
+    def test_applicability_not_pending_zero_passes(self):
+        """A zero-count summary with applicability_pending false still passes."""
+        data = {
+            "vulnerabilities": {
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "applicability_pending": False,
+            }
+        }
+        check_vulnerability_threshold(data, "critical")
+
     def test_critical_fails(self, scan_response_completed):
         """--fail-on critical fails when critical > 0."""
         with pytest.raises(VulnerabilityThresholdExceeded) as exc_info:

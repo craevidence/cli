@@ -75,6 +75,27 @@ class VulnerabilityThresholdExceeded(CRAEvidenceError):
         self.count = count
 
 
+class ApplicabilityInconclusive(CRAEvidenceError):
+    """Raised when --fail-on cannot certify a threshold because vulnerability
+    applicability was not verified for the version.
+
+    A zero count is not a no-vulnerabilities result when the server could not
+    verify which findings apply to the shipped version, so the gate fails closed
+    with exit code 30. The cause can be a pre-policy scan, an unknown-policy scan
+    the server cannot interpret, or an excluded knowledge-base finding; the remedy
+    depends on the cause, so the message does not prescribe a re-scan.
+    """
+
+    def __init__(self, fail_on: str) -> None:
+        super().__init__(
+            "Vulnerability applicability was not verified for this version, so "
+            f"--fail-on cannot certify no vulnerabilities at or above '{fail_on}'. "
+            "Verify or resolve the affected findings in CRA Evidence.",
+            exit_code=30,
+        )
+        self.fail_on = fail_on
+
+
 class KevGateExceeded(CRAEvidenceError):
     """Raised when the known-exploited vulnerability gate is exceeded."""
 

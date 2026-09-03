@@ -136,6 +136,28 @@ class TestCheckFailOn:
         """check_fail_on with a ready status and no vulns does not raise."""
         check_fail_on("critical", {}, "ready")  # Should not raise
 
+    def test_applicability_pending_fails_closed(self):
+        """A pending applicability state fails the gate with exit 30 even when the
+        severity counts are all zero and CRA status is ready."""
+        from cra_evidence_cli.exceptions import ApplicabilityInconclusive
+
+        summary = {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "applicability_pending": True,
+        }
+        with pytest.raises(ApplicabilityInconclusive) as exc_info:
+            check_fail_on("critical", summary, "ready")
+        assert exc_info.value.exit_code == 30
+
+    def test_applicability_pending_ignored_for_fail_on_none(self):
+        """fail_on 'none' does not gate on vulnerabilities, so a pending state does
+        not raise exit 30 from this path."""
+        summary = {"critical": 0, "applicability_pending": True}
+        check_fail_on("none", summary, "ready")  # Should not raise
+
     def test_non_compliant_fails_on_incomplete(self, status_response_incomplete):
         """Any fail_on value (e.g. critical) fails when CRA status is incomplete."""
         with pytest.raises(CRANonCompliantError) as exc_info:
