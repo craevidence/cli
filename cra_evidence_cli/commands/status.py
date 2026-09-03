@@ -91,6 +91,97 @@ def check_fail_on(
         raise CRANonCompliantError(cra_status)
 
 
+# The API metric counts validated declared identifiers. Scanner queries inferred
+# from package names or generated CPE candidates are a separate, less reliable path.
+_COVERAGE_INCOMPLETE_CAVEAT = (
+    "At least one component with a current projection declares only a generic or "
+    "unsupported PURL, or no supported identifier. The Grype scan may attempt package-name or "
+    "generated-CPE queries where possible, but an attempted query is not a "
+    "successful match and inferred identifiers can miss real vulnerabilities "
+    "or produce false matches. A zero-finding result does not mean those components "
+    "are clean."
+)
+
+_COVERAGE_LEGACY_SUBSET_CAVEAT = (
+    "One or more components use a legacy projection that predates CPE tracking. "
+    "Their declared-CPE coverage cannot be verified; re-upload the current SBOM "
+    "to refresh it."
+)
+
+_COVERAGE_NOT_VERIFIABLE_CAVEAT = (
+    "Matching-identifier coverage cannot be verified because one or more current "
+    "SBOM projections predate CPE tracking. Re-upload the current SBOM to get a "
+    "verifiable coverage figure."
+)
+
+_COVERAGE_NO_COMPONENTS_CAVEAT = (
+    "No components are available in the current source SBOMs, so matching-identifier "
+    "coverage cannot be measured. A zero-finding result does not mean the product "
+    "is clean."
+)
+
+_COVERAGE_UNRECOGNISED_CAVEAT = (
+    "This CLI does not recognise the coverage state reported by the server, so "
+    "it cannot interpret the matching-identifier coverage for this result. "
+    "Upgrade the CLI to read this result."
+)
+
+
+def _add_identifier_coverage_rows(table: Table, coverage: dict) -> None:
+    """Render declared matching-identifier coverage next to the vulnerability result.
+
+    Coverage reports how many components in the current source SBOMs declare a
+    supported ecosystem PURL or validated CPE. The reason code determines the
+    explanation; an unfamiliar or inconsistent state/reason pair fails closed.
+    """
+    state = coverage.get("state")
+    reason_code = coverage.get("reason_code")
+
+    if state == "incomplete" and reason_code == "components_without_matching_identifier":
+        total = coverage.get("total_components") or 0
+        supported_identifier_count = (coverage.get("ecosystem_purl") or 0) + (
+            coverage.get("declared_cpe") or 0
+        )
+        if (coverage.get("projection_unknown") or 0) > 0:
+            coverage_summary = (
+                f"{supported_identifier_count}/{total} stored component projections "
+                "contain a supported ecosystem PURL or validated CPE"
+            )
+        else:
+            coverage_summary = (
+                f"{supported_identifier_count}/{total} components declare "
+                "a supported ecosystem PURL or validated CPE"
+            )
+        table.add_row(
+            "  Matching Identifier Coverage",
+            f"[yellow]{coverage_summary}[/yellow]",
+        )
+        table.add_row("", f"[dim]{escape(_COVERAGE_INCOMPLETE_CAVEAT)}[/dim]")
+        if (coverage.get("projection_unknown") or 0) > 0:
+            table.add_row(
+                "",
+                f"[dim]{escape(_COVERAGE_LEGACY_SUBSET_CAVEAT)}[/dim]",
+            )
+    elif state == "incomplete" and reason_code == "no_components":
+        table.add_row(
+            "  Matching Identifier Coverage",
+            "[yellow]no components to measure[/yellow]",
+        )
+        table.add_row("", f"[dim]{escape(_COVERAGE_NO_COMPONENTS_CAVEAT)}[/dim]")
+    elif state == "unknown" and reason_code == "legacy_projection_unknown":
+        table.add_row("  Matching Identifier Coverage", "[dim]not verifiable[/dim]")
+        table.add_row("", f"[dim]{escape(_COVERAGE_NOT_VERIFIABLE_CAVEAT)}[/dim]")
+    else:
+        # A state this CLI version does not know. Fail closed, but do not
+        # attribute it to a cause we have not established: a newer server
+        # state is not evidence that the result predates coverage tracking.
+        table.add_row("  Matching Identifier Coverage", "[dim]unrecognised[/dim]")
+        table.add_row("", f"[dim]{escape(_COVERAGE_UNRECOGNISED_CAVEAT)}[/dim]")
+
+    if reason_code:
+        table.add_row("", f"[dim](reason_code: {escape(str(reason_code))})[/dim]")
+
+
 def format_status_output(data: dict, output_format: str, verbose: bool = False) -> None:
     if output_format == "json":
         console.print_json(json.dumps(data, indent=2))
@@ -159,6 +250,8 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
         table.add_row("  Status", "[dim]No SBOM uploaded[/dim]")
 
     # Vulnerabilities
+    coverage = data.get("version_matching_identifier_coverage")
+
     table.add_row("", "")
     table.add_row("[bold]Vulnerabilities[/bold]", "")
     if data.get("vulnerability_summary"):
@@ -170,7 +263,13 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
         total = vulns.get("total", critical + high + medium + low)
 
         if total == 0:
-            table.add_row("  Total", "[green]0 (clean)[/green]")
+            # A zero-finding total proves only that nothing was found in what
+            # could be checked. It does not prove the vulnerability database
+            # was fresh, that matching actually ran, or that the scanner did
+            # not error, so this never claims cleanliness, regardless of
+            # identifier coverage. Coverage state is reported separately
+            # below as measurement quality.
+            table.add_row("  Total", "[white]0 found[/white]")
         else:
             if critical > 0:
                 table.add_row("  Critical", f"[red bold]{critical}[/red bold]")
@@ -182,6 +281,13 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
                 table.add_row("  Low", f"[dim]{low}[/dim]")
     else:
         table.add_row("  Status", "[dim]No scan results[/dim]")
+
+    coverage_complete = bool(coverage) and (coverage.get("state"), coverage.get("reason_code")) == (
+        "complete",
+        "all_components_declare_matching_identifier",
+    )
+    if coverage and not coverage_complete:
+        _add_identifier_coverage_rows(table, coverage)
 
     # Documents checklist
     table.add_row("", "")
@@ -284,22 +390,18 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
             for b in _floor:
                 _id = b.get("cve_id") or b.get("identifier") or "?"
                 console.print(
-                    f"    [red]•[/red] {escape(str(_id))}: "
-                    f"{escape(str(b.get('reason', '')))}"
+                    f"    [red]•[/red] {escape(str(_id))}: {escape(str(b.get('reason', '')))}"
                 )
         if _policy:
             console.print("  [yellow]CRA Evidence default policy[/yellow] (above the floor):")
             for b in _policy:
                 _id = b.get("cve_id") or b.get("identifier") or "?"
                 console.print(
-                    f"    [yellow]•[/yellow] {escape(str(_id))}: "
-                    f"{escape(str(b.get('reason', '')))}"
+                    f"    [yellow]•[/yellow] {escape(str(_id))}: {escape(str(b.get('reason', '')))}"
                 )
         _floor_status = data.get("cra_floor_status")
         if _floor_status:
-            console.print(
-                f"  [dim]CRA legal-floor status: {escape(str(_floor_status))}[/dim]"
-            )
+            console.print(f"  [dim]CRA legal-floor status: {escape(str(_floor_status))}[/dim]")
     if retained_sources:
         console.print()
         console.print("[bold]Retained Source YAML[/bold]")
@@ -465,9 +567,7 @@ def wait_ready(
             elapsed = time.monotonic() - start
 
             if elapsed >= timeout:
-                console.print(
-                    f"[red]Timeout:[/red] version not CRA-ready after {int(elapsed)}s."
-                )
+                console.print(f"[red]Timeout:[/red] version not CRA-ready after {int(elapsed)}s.")
                 sys.exit(1)
 
             try:
@@ -511,9 +611,7 @@ def wait_ready(
 
                 remaining = timeout - (time.monotonic() - start)
                 if remaining <= 0:
-                    console.print(
-                        f"[red]Timeout:[/red] version not CRA-ready after {timeout}s."
-                    )
+                    console.print(f"[red]Timeout:[/red] version not CRA-ready after {timeout}s.")
                     sys.exit(1)
                 time.sleep(min(wait_duration, remaining))
                 continue
@@ -553,9 +651,7 @@ def wait_ready(
             # Check remaining time before sleeping
             remaining = timeout - (time.monotonic() - start)
             if remaining <= 0:
-                console.print(
-                    f"[red]Timeout:[/red] version not CRA-ready after {timeout}s."
-                )
+                console.print(f"[red]Timeout:[/red] version not CRA-ready after {timeout}s.")
                 sys.exit(1)
 
             sleep_for = min(current_interval + random.uniform(0, 2), remaining)  # noqa: S311

@@ -30,9 +30,17 @@ def load_sbom(path: Path) -> tuple[list[Component], dict[str, Any]]:
 
 def _parse_cyclonedx(data: dict[str, Any]) -> list[Component]:
     components: list[Component] = []
-    for item in data.get("components", []):
-        if not isinstance(item, dict):
-            continue
+
+    def visit(items: object) -> None:
+        if not isinstance(items, list):
+            return
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            parse(item)
+            visit(item.get("components"))
+
+    def parse(item: dict[str, Any]) -> None:
         licenses = []
         for license_item in item.get("licenses") or []:
             if isinstance(license_item, dict):
@@ -49,10 +57,13 @@ def _parse_cyclonedx(data: dict[str, Any]) -> list[Component]:
                 name=str(item.get("name") or item.get("bom-ref") or "unknown"),
                 version=item.get("version"),
                 purl=item.get("purl"),
+                cpe=item.get("cpe"),
                 supplier=supplier if isinstance(supplier, str) else None,
                 licenses=licenses,
             )
         )
+
+    visit(data.get("components"))
     return components
 
 
@@ -62,13 +73,31 @@ def _parse_spdx(data: dict[str, Any]) -> list[Component]:
         if not isinstance(item, dict):
             continue
         purl = None
+        # SPDX 2.2 and 2.3 spell the CPE referenceCategory differently
+        # (PACKAGE-MANAGER vs PACKAGE_MANAGER etc.), so - like the purl
+        # match above - this reads referenceType/referenceLocator directly
+        # rather than trusting referenceCategory. A cpe23Type locator is
+        # preferred over cpe22Type when a package declares both, since it
+        # is the more specific, current format; the first locator seen for
+        # whichever type wins is kept, mirroring the purl match's
+        # first-one-wins behavior.
+        cpe23 = None
+        cpe22 = None
         for ref in item.get("externalRefs") or []:
             if not isinstance(ref, dict):
                 continue
             locator = ref.get("referenceLocator")
-            if isinstance(locator, str) and locator.startswith("pkg:"):
+            if not isinstance(locator, str):
+                continue
+            if purl is None and locator.startswith("pkg:"):
                 purl = locator
-                break
+                continue
+            ref_type = ref.get("referenceType")
+            if cpe23 is None and ref_type == "cpe23Type":
+                cpe23 = locator
+            elif cpe22 is None and ref_type == "cpe22Type":
+                cpe22 = locator
+        cpe = cpe23 or cpe22
         license_value = item.get("licenseConcluded") or item.get("licenseDeclared")
         licenses = [str(license_value)] if license_value and license_value != "NOASSERTION" else []
         components.append(
@@ -76,6 +105,7 @@ def _parse_spdx(data: dict[str, Any]) -> list[Component]:
                 name=str(item.get("name") or "unknown"),
                 version=item.get("versionInfo"),
                 purl=purl,
+                cpe=cpe,
                 supplier=item.get("supplier") if isinstance(item.get("supplier"), str) else None,
                 licenses=licenses,
             )

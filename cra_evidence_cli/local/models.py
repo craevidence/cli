@@ -25,6 +25,7 @@ class Component:
     name: str
     version: str | None = None
     purl: str | None = None
+    cpe: str | None = None
     supplier: str | None = None
     licenses: list[str] = field(default_factory=list)
 
@@ -103,6 +104,7 @@ class LocalCheckResult:
     sources_consulted: list[str]
     baseline: dict[str, Any] | None = None
     suppressions: list[dict[str, Any]] = field(default_factory=list)
+    identifier_coverage: dict[str, Any] | None = None
 
     def to_dict(self, exit_code: int = 0) -> dict[str, Any]:
         summary = summarize_findings(self.findings)
@@ -130,6 +132,7 @@ class LocalCheckResult:
                 "cannot_tell_you": cannot_tell_you(),
             },
             "coverage": [source.to_dict() for source in self.coverage],
+            "identifier_coverage": self.identifier_coverage,
             "suppressions": self.suppressions,
             "provenance": self.provenance,
             "sources_consulted": self.sources_consulted,
@@ -182,3 +185,63 @@ def cannot_tell_you() -> list[str]:
         "Whether vulnerability handling, notification, and support processes operate in practice.",
         "Whether technical file review or sign-off has been completed.",
     ]
+
+
+# The local check measures field presence independently of the selected scanner.
+# Its note must not reuse the server's validated matching-identifier wording.
+_IDENTIFIER_FIELD_INCOMPLETE_NOTE = (
+    "Some components do not contain a non-blank PURL or CPE string. This "
+    "field-presence count does not validate PURL types or CPE syntax "
+    "and does not show which components the selected scanner could query. The "
+    "Grype path may generate CPE candidates from names and versions when CPEs "
+    "are absent; the OSV.dev fallback queries only declared PURLs. A "
+    "zero-finding result does not mean those components are clean."
+)
+
+_IDENTIFIER_FIELD_COMPLETE_NOTE = (
+    "Every component contains a non-blank PURL or CPE string. This field-presence "
+    "count does not validate PURL types or CPE syntax and does not establish "
+    "that the selected scanner could use every value. A zero-finding result does "
+    "not mean the components are safe or free of vulnerabilities beyond "
+    "what the consulted sources reported above."
+)
+
+
+def identifier_coverage(components: list[Component]) -> dict[str, Any] | None:
+    """How many parsed components contain a non-blank PURL or CPE string.
+
+    This is a field-presence count, independent of which scanner ran. It does
+    not check whether a PURL's type resolves to an ecosystem the scanner can
+    query, and it does not check whether a CPE is syntactically well-formed or
+    identifies anything. An unsupported PURL type or malformed CPE therefore
+    still counts as a populated field, never as a matching identifier.
+
+    CRA Evidence's server reports a separate matching-identifier metric with
+    PURL-ecosystem and CPE-syntax validation. Treat that server result and this
+    local field-presence count as different measurements, not interchangeable.
+
+    Returns None when there are no components to measure.
+    """
+    total = len(components)
+    if total == 0:
+        return None
+    components_with_identifier_field = sum(
+        1
+        for component in components
+        if any(
+            isinstance(value, str) and bool(value.strip())
+            for value in (component.purl, component.cpe)
+        )
+    )
+    all_components_have_identifier_field = components_with_identifier_field == total
+    note = (
+        _IDENTIFIER_FIELD_COMPLETE_NOTE
+        if all_components_have_identifier_field
+        else _IDENTIFIER_FIELD_INCOMPLETE_NOTE
+    )
+    return {
+        "total_components": total,
+        "components_with_identifier_field": components_with_identifier_field,
+        "all_components_have_identifier_field": all_components_have_identifier_field,
+        "note": note,
+    }

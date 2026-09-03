@@ -78,6 +78,7 @@ def print_text_report(
     console.print()
     console.print(Text("Summary", style=STYLE_TITLE))
     console.print(_summary_text(data["components"]["count"], summary))
+    _print_identifier_coverage(console, data)
 
     console.print()
     console.print(Text("Top actions", style=STYLE_TITLE))
@@ -130,6 +131,11 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
                 f" medium={summary['medium']}) | "
                 f"Known-exploited: {summary['known_exploited']}"
             ),
+        ]
+    )
+    lines.extend(_identifier_coverage_lines(data))
+    lines.extend(
+        [
             "",
             "Top actions",
             *_top_actions(data),
@@ -320,6 +326,32 @@ def _print_baseline(console: Console, data: dict[str, Any]) -> None:
     console.print(f"- Removed vulnerabilities: {len(removed)}")
 
 
+def _identifier_coverage_lines(data: dict[str, Any]) -> list[str]:
+    """Plain-text lines for identifier field presence when it is measured.
+
+    Printed for both complete and incomplete coverage, not only when partial:
+    a reader who never sees this line cannot tell full field presence apart
+    from a CLI version that does not measure it.
+    """
+    coverage = data.get("identifier_coverage")
+    if not coverage:
+        return []
+    return [
+        (
+            "Identifier field presence: "
+            f"{coverage['components_with_identifier_field']}/"
+            f"{coverage['total_components']} components contain a non-blank "
+            "PURL or CPE string."
+        ),
+        coverage["note"],
+    ]
+
+
+def _print_identifier_coverage(console: Console, data: dict[str, Any]) -> None:
+    for line in _identifier_coverage_lines(data):
+        console.print(line, style=STYLE_MUTED)
+
+
 def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
     results = []
     for finding in data["findings"]:
@@ -332,9 +364,7 @@ def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
                     "text": f"{finding['package']} {finding.get('version') or ''}: "
                     f"{finding.get('title') or finding['id']}"
                 },
-                "locations": [
-                    {"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}
-                ],
+                "locations": [{"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}],
                 "properties": finding,
             }
         )
@@ -349,6 +379,7 @@ def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
                         "informationUri": "https://craevidence.com",
                         "properties": {
                             "coverage": data["coverage"],
+                            "identifierCoverage": data.get("identifier_coverage"),
                             "provenance": data["provenance"],
                             "attributions": data["attributions"],
                             "vexSuppressions": data.get("suppressions") or [],

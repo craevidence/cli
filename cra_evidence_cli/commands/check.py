@@ -31,7 +31,12 @@ from cra_evidence_cli.local.enrich import (
     fetch_epss_scores,
     fetch_kev_catalog,
 )
-from cra_evidence_cli.local.models import CoverageSource, LocalCheckResult, summarize_findings
+from cra_evidence_cli.local.models import (
+    CoverageSource,
+    LocalCheckResult,
+    identifier_coverage,
+    summarize_findings,
+)
 from cra_evidence_cli.local.osv import OSVClient, OSVClientError
 from cra_evidence_cli.local.policy import ignored_set, load_policy
 from cra_evidence_cli.local.report import print_text_report, render
@@ -129,8 +134,7 @@ def _split_csv(value: str | None) -> list[str]:
     "output_file",
     type=click.Path(dir_okay=False, path_type=Path),
     help=(
-        "Write the machine-readable report to this file; "
-        "the human summary still prints to stdout."
+        "Write the machine-readable report to this file; the human summary still prints to stdout."
     ),
 )
 @click.option(
@@ -212,9 +216,7 @@ def check(
         vex_file = Path(policy.vex)
         if not vex_file.exists():
             msg = f"Policy 'vex' path does not exist: {vex_file} (from {policy.source_path})"
-            raise click.UsageError(
-                msg
-            )
+            raise click.UsageError(msg)
     ignore_ids = ignored_set(policy)
 
     if fail_on_new and not baseline:
@@ -318,9 +320,7 @@ def _effective(ctx: click.Context, name: str, cli_value: Any, policy_value: Any)
     return cli_value
 
 
-def _emit_annotations(
-    result: LocalCheckResult, choice: str, annotations_file: Path | None
-) -> None:
+def _emit_annotations(result: LocalCheckResult, choice: str, annotations_file: Path | None) -> None:
     import os
 
     mode = resolve_mode(choice)
@@ -402,9 +402,7 @@ def run_local_check(
         target_type = "image"
         target = image
     else:
-        generated_sbom = generate_sbom_from_directory(
-            str(target_path), verbose=verbose
-        )
+        generated_sbom = generate_sbom_from_directory(str(target_path), verbose=verbose)
         sbom_path = generated_sbom.file_path
 
     try:
@@ -468,6 +466,7 @@ def _run_local_check_on_sbom(
             click.echo(f"Wrote generated SBOM copy to {sbom_output}", err=True)
 
     components, _raw_sbom = load_sbom(sbom_path)
+    id_coverage = identifier_coverage(components)
     coverage: list[CoverageSource] = []
     sources_consulted: set[str] = set()
     scanner = GrypeLocalScanner()
@@ -579,6 +578,7 @@ def _run_local_check_on_sbom(
         sources_consulted=sorted(sources_consulted),
         baseline=_baseline_delta(baseline, findings) if baseline else None,
         suppressions=suppressions,
+        identifier_coverage=id_coverage,
     )
     if strict and any(source.status in {"stale", "unavailable"} for source in coverage):
         result.provenance["strict_failure"] = "stale or unavailable source"
@@ -617,9 +617,7 @@ def _enforce_gate(
         if violations:
             shown = ", ".join(violations[:5]) + ("…" if len(violations) > 5 else "")
             msg = f"{len(violations)} component license(s) match the deny policy: {shown}"
-            raise LicensePolicyExceeded(
-                msg
-            )
+            raise LicensePolicyExceeded(msg)
 
     # SBOM quality (exit 14) - only when sbomqs actually ran.
     if fail_on_score is not None:

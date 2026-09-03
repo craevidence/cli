@@ -15,7 +15,13 @@ from cra_evidence_cli.exceptions import (
     VulnerabilityThresholdExceeded,
 )
 from cra_evidence_cli.local.enrich import apply_cve_alias_enrichment
-from cra_evidence_cli.local.models import Component, CoverageSource, Finding, LocalCheckResult
+from cra_evidence_cli.local.models import (
+    Component,
+    CoverageSource,
+    Finding,
+    LocalCheckResult,
+    identifier_coverage,
+)
 from cra_evidence_cli.local.osv import OSVClient, OSVClientError
 from cra_evidence_cli.local.scanner import parse_grype_output
 from cra_evidence_cli.local.signal import build_dimensions, mark_stale_sources
@@ -196,9 +202,7 @@ def test_cra_dimensions_never_passed():
     )
 
     assert all(
-        item["result"] != "Passed"
-        for item in dimensions
-        if item["entry_id"].startswith("cra:")
+        item["result"] != "Passed" for item in dimensions if item["entry_id"].startswith("cra:")
     )
 
 
@@ -601,8 +605,13 @@ def test_explicit_flag_overrides_policy(monkeypatch, tmp_path):
         res = runner.invoke(
             cli,
             [
-                "--output", "json", "check",
-                "--sbom", str(sbom), "--fail-on", "critical",
+                "--output",
+                "json",
+                "check",
+                "--sbom",
+                str(sbom),
+                "--fail-on",
+                "critical",
             ],
         )
         assert res.exit_code == 10  # explicit critical overrode policy known-exploited
@@ -622,9 +631,7 @@ def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
     monkeypatch.setattr(
         check_module,
         "generate_sbom_from_directory",
-        lambda *a, **k: SBOMGenerationResult(
-            generated, 1, "cyclonedx", "craevidence-grype"
-        ),
+        lambda *a, **k: SBOMGenerationResult(generated, 1, "cyclonedx", "craevidence-grype"),
     )
     src = tmp_path / "src"
     src.mkdir()
@@ -650,9 +657,7 @@ def test_directory_without_manifests_gives_clear_error(monkeypatch, tmp_path):
     monkeypatch.setattr(
         check_module,
         "generate_sbom_from_directory",
-        lambda *a, **k: SBOMGenerationResult(
-            empty, 0, "cyclonedx", "craevidence-grype"
-        ),
+        lambda *a, **k: SBOMGenerationResult(empty, 0, "cyclonedx", "craevidence-grype"),
     )
     src = tmp_path / "src"
     src.mkdir()
@@ -688,9 +693,7 @@ def test_output_flag_on_check_subcommand(monkeypatch, tmp_path):
     assert res.exit_code == 0, res.output
     assert json.loads(res.stdout)["schema_version"] == "craevidence.local_check.v1"
     # Subcommand-level flag overrides the group-level flag.
-    res = runner.invoke(
-        cli, ["--output", "text", "check", "--sbom", str(sbom), "--output", "json"]
-    )
+    res = runner.invoke(cli, ["--output", "text", "check", "--sbom", str(sbom), "--output", "json"])
     assert res.exit_code == 0, res.output
     assert json.loads(res.stdout)["schema_version"] == "craevidence.local_check.v1"
     # Group-level flag still applies when the subcommand flag is absent.
@@ -698,9 +701,7 @@ def test_output_flag_on_check_subcommand(monkeypatch, tmp_path):
     assert res.exit_code == 0, res.output
     assert json.loads(res.stdout)["schema_version"] == "craevidence.local_check.v1"
     # The subcommand flag can switch back to text over a json group default.
-    res = runner.invoke(
-        cli, ["--output", "json", "check", "--sbom", str(sbom), "--output", "text"]
-    )
+    res = runner.invoke(cli, ["--output", "json", "check", "--sbom", str(sbom), "--output", "text"])
     assert res.exit_code == 0, res.output
     assert "Local SBOM Check" in res.stdout
 
@@ -877,8 +878,13 @@ def test_annotations_gitlab_writes_report(monkeypatch, tmp_path):
         res = runner.invoke(
             cli,
             [
-                "--output", "json", "check",
-                "--sbom", str(sbom), "--annotations", "gitlab",
+                "--output",
+                "json",
+                "check",
+                "--sbom",
+                str(sbom),
+                "--annotations",
+                "gitlab",
             ],
         )
         assert res.exit_code == 0, res.output
@@ -988,9 +994,7 @@ def _old_fork_run(*args, **kwargs):
             ),
             stderr="",
         )
-    return SimpleNamespace(
-        returncode=0, stdout="Usage:\n  grype [IMAGE] [flags]\n", stderr=""
-    )
+    return SimpleNamespace(returncode=0, stdout="Usage:\n  grype [IMAGE] [flags]\n", stderr="")
 
 
 @pytest.mark.parametrize(
@@ -1060,3 +1064,211 @@ def test_rejected_engine_warns_before_osv_fallback(
     payload = json.loads(res.stdout)
     assert payload["provenance"]["engine"] == "osv-online", scenario
     assert payload["provenance"]["osv.dev"]["status"] == "present", scenario
+
+
+# Identifier field presence gives context that a zero-finding result alone lacks.
+
+
+def _write_mixed_purl_sbom(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "components": [
+                    {"type": "library", "name": "internal-lib", "version": "1.0"},
+                    {
+                        "type": "library",
+                        "name": "jinja2",
+                        "version": "3.1.3",
+                        "purl": "pkg:pypi/jinja2@3.1.3",
+                    },
+                ],
+            }
+        )
+    )
+
+
+def _write_fully_identified_sbom(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "components": [
+                    {
+                        "type": "library",
+                        "name": "jinja2",
+                        "version": "3.1.3",
+                        "purl": "pkg:pypi/jinja2@3.1.3",
+                    },
+                    {
+                        "type": "library",
+                        "name": "click",
+                        "version": "8.1.7",
+                        "purl": "pkg:pypi/click@8.1.7",
+                    },
+                ],
+            }
+        )
+    )
+
+
+def test_identifier_coverage_computed_from_components() -> None:
+    """The pure measurement is field presence, independent of which engine ran."""
+    mixed = identifier_coverage(
+        [
+            Component(name="internal-lib", version="1.0", purl=None),
+            Component(name="jinja2", version="3.1.3", purl="pkg:pypi/jinja2@3.1.3"),
+        ]
+    )
+    assert mixed == {
+        "total_components": 2,
+        "components_with_identifier_field": 1,
+        "all_components_have_identifier_field": False,
+        "note": mixed["note"],
+    }
+    assert "does not mean those components are clean" in mixed["note"]
+
+    complete = identifier_coverage(
+        [Component(name="jinja2", version="3.1.3", purl="pkg:pypi/jinja2@3.1.3")]
+    )
+    assert complete["all_components_have_identifier_field"] is True
+    assert complete["components_with_identifier_field"] == complete["total_components"] == 1
+    assert "does not mean the components are safe" in complete["note"]
+
+    assert identifier_coverage([]) is None
+
+
+def test_identifier_coverage_counts_a_declared_cpe_without_a_purl() -> None:
+    """A component can carry a CPE with no PURL; its identifier field is present.
+
+    The field-presence metric counts either field without claiming the CPE is
+    usable for matching.
+    """
+    coverage = identifier_coverage(
+        [
+            Component(name="no-identifier", version="1.0", purl=None, cpe=None),
+            Component(
+                name="legacy-cpe-only",
+                version="2.0",
+                purl=None,
+                cpe="cpe:2.3:a:vendor:legacy-cpe-only:2.0:*:*:*:*:*:*:*",
+            ),
+        ]
+    )
+    assert coverage["total_components"] == 2
+    assert coverage["components_with_identifier_field"] == 1
+    assert coverage["all_components_have_identifier_field"] is False
+
+
+def test_identifier_coverage_counts_generic_purl_as_presence_not_matchability() -> None:
+    coverage = identifier_coverage(
+        [
+            Component(
+                name="firmware.bin",
+                version="1.0",
+                purl="pkg:generic/example/firmware.bin@1.0",
+            )
+        ]
+    )
+
+    assert coverage["components_with_identifier_field"] == 1
+    assert coverage["all_components_have_identifier_field"] is True
+    assert "does not validate PURL types" in coverage["note"]
+    assert "does not establish that the selected scanner could use every value" in coverage["note"]
+
+
+def test_identifier_field_presence_requires_strings_and_counts_each_component_once() -> None:
+    coverage = identifier_coverage(
+        [
+            Component(name="whitespace", purl="  ", cpe="\t"),
+            Component(name="non-string", purl=123, cpe=False),
+            Component(
+                name="both-fields",
+                purl="pkg:npm/both-fields@1.0.0",
+                cpe="cpe:2.3:a:example:both-fields:1.0.0:*:*:*:*:*:*:*",
+            ),
+        ]
+    )
+
+    assert coverage["total_components"] == 3
+    assert coverage["components_with_identifier_field"] == 1
+    assert coverage["all_components_have_identifier_field"] is False
+    assert "non-blank PURL or CPE string" in coverage["note"]
+
+
+def test_check_zero_findings_reports_identifier_coverage_for_mixed_sbom(monkeypatch, tmp_path):
+    """A zero-finding result on a partly-unidentified SBOM must say so, not just '0'."""
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [])
+    sbom = tmp_path / "sbom.json"
+    _write_mixed_purl_sbom(sbom)
+
+    result = _run_check(["--sbom", str(sbom)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["total"] == 0
+    coverage = payload["identifier_coverage"]
+    assert coverage["total_components"] == 2
+    assert coverage["components_with_identifier_field"] == 1
+    assert coverage["all_components_have_identifier_field"] is False
+    assert "does not mean those components are clean" in coverage["note"]
+
+
+def test_check_incomplete_coverage_note_bounds_the_grype_generation_claim(monkeypatch, tmp_path):
+    """The rendered note must not claim Grype always generates a CPE candidate.
+
+    The engine has explicit no-generation paths (for example a model package,
+    or a component with no candidate product to build a CPE from), so the
+    note a customer reads has to say "may generate", not "generates".
+    """
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [])
+    sbom = tmp_path / "sbom.json"
+    _write_mixed_purl_sbom(sbom)
+
+    result = _run_check(["--sbom", str(sbom)])
+
+    assert result.exit_code == 0, result.output
+    note = json.loads(result.stdout)["identifier_coverage"]["note"]
+    assert "may generate CPE candidates" in note
+    assert "path generates CPE candidates" not in note
+
+
+def test_check_zero_findings_full_field_presence_never_claims_a_pass(monkeypatch, tmp_path):
+    """Full identifier field presence on a zero-finding run must not read as clean."""
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [])
+    sbom = tmp_path / "sbom.json"
+    _write_fully_identified_sbom(sbom)
+
+    result = _run_check(["--sbom", str(sbom)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["summary"]["total"] == 0
+    coverage = payload["identifier_coverage"]
+    assert coverage["total_components"] == 2
+    assert coverage["components_with_identifier_field"] == 2
+    assert coverage["all_components_have_identifier_field"] is True
+    assert "does not mean the components are safe" in coverage["note"]
+    assert "(clean)" not in result.stdout
+
+
+def test_check_gate_exit_code_unaffected_by_identifier_coverage(monkeypatch, tmp_path):
+    """Adding identifier-coverage reporting must not change gate evaluation or exit codes."""
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [_critical_finding()])
+    sbom = tmp_path / "sbom.json"
+    _write_mixed_purl_sbom(sbom)
+
+    passing = _run_check(["--sbom", str(sbom)])
+    assert passing.exit_code == 0, passing.output
+
+    failing = _run_check(["--sbom", str(sbom), "--fail-on", "critical"])
+    assert failing.exit_code == 10, failing.output
+    payload = json.loads(failing.stdout)
+    # The gate outcome is unchanged; coverage is additive reporting only.
+    assert payload["identifier_coverage"]["all_components_have_identifier_field"] is False

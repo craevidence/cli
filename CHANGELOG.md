@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Local `check` reports raw non-blank PURL/CPE field presence separately from
+  validated matching-identifier coverage. JSON and SARIF expose the additive
+  `components_with_identifier_field` and `all_components_have_identifier_field`
+  fields without treating generic or malformed identifiers as scanner matches.
 - The known-answer rule-pack gate scans the existing isolated gosec cases in
   two combined deterministic passes instead of starting Opengrep once per case.
   It now requires exact file coverage, rejects engine errors, and compares full
@@ -23,6 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `status` no longer renders a zero-finding result as "(clean)". Coverage
+  explanations follow the stable reason code, and unfamiliar or inconsistent
+  state/reason pairs fail closed without inventing a legacy cause.
 - Failed releases can resume distribution publishing from the source commit
   recorded by the original GitHub release event when release immutability is
   not enabled. Missing, ambiguous, or mismatched event records fail closed.

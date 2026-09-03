@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from cra_evidence_cli.local.models import Finding, LocalCheckResult
+from cra_evidence_cli.local.models import Component, Finding, LocalCheckResult, identifier_coverage
 from cra_evidence_cli.local.report import print_text_report, render
 
 
@@ -147,9 +147,9 @@ def test_sarif_location_uses_sbom_path_not_tmp() -> None:
         Finding(id="CVE-2026-0002", package="pkg", version="1.0.0", severity="medium")
     ]
     doc = json.loads(render(result, "sarif"))
-    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
-        "artifactLocation"
-    ]["uri"]
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"][
+        "uri"
+    ]
     assert uri == "build/sbom.json"
     assert not uri.startswith("/tmp")  # noqa: S108
 
@@ -158,13 +158,11 @@ def test_sarif_location_falls_back_when_sbom_path_is_tmp() -> None:
     """When sbom_path is a /tmp absolute path, the URI falls back to 'sbom.json'."""
     result = _result()
     result.sbom_path = Path("/tmp/syft-12345/sbom.json")  # noqa: S108
-    result.findings = [
-        Finding(id="CVE-2026-0003", package="pkg", version="1.0.0", severity="low")
-    ]
+    result.findings = [Finding(id="CVE-2026-0003", package="pkg", version="1.0.0", severity="low")]
     doc = json.loads(render(result, "sarif"))
-    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
-        "artifactLocation"
-    ]["uri"]
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"][
+        "uri"
+    ]
     assert uri == "sbom.json"
     assert not uri.startswith("/tmp")  # noqa: S108
 
@@ -174,13 +172,11 @@ def test_sarif_location_uses_sbom_output_from_provenance() -> None:
     result = _result()
     result.sbom_path = None
     result.provenance = {"engine": "grype-local", "sbom_output": "out/generated.json"}
-    result.findings = [
-        Finding(id="CVE-2026-0004", package="pkg", version="1.0.0", severity="low")
-    ]
+    result.findings = [Finding(id="CVE-2026-0004", package="pkg", version="1.0.0", severity="low")]
     doc = json.loads(render(result, "sarif"))
-    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
-        "artifactLocation"
-    ]["uri"]
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"][
+        "uri"
+    ]
     assert uri == "out/generated.json"
 
 
@@ -272,3 +268,133 @@ def test_verbose_text_mentions_output_json_in_provenance_note() -> None:
     text = render(_result(), "text", verbose=True)
     assert "--output json" in text
     assert "full machine report" in text
+
+
+# Identifier field presence
+
+
+def _result_with_components(components: list[Component]) -> LocalCheckResult:
+    result = _result()
+    result.components = components
+    result.identifier_coverage = identifier_coverage(components)
+    return result
+
+
+_MIXED_COMPONENTS = [
+    Component(name="internal-lib", version="1.0", purl=None),
+    Component(name="requests", version="2.31.0", purl="pkg:pypi/requests@2.31.0"),
+]
+_FULLY_IDENTIFIED_COMPONENTS = [
+    Component(name="requests", version="2.31.0", purl="pkg:pypi/requests@2.31.0"),
+    Component(name="flask", version="3.0.0", purl="pkg:pypi/flask@3.0.0"),
+]
+_GENERIC_IDENTIFIER_COMPONENTS = [
+    Component(
+        name="firmware.bin",
+        version="1.0",
+        purl="pkg:generic/example/firmware.bin@1.0",
+    )
+]
+
+
+def test_local_identifier_coverage_describes_field_presence() -> None:
+    coverage = identifier_coverage(_MIXED_COMPONENTS)
+    assert "field-presence count" in coverage["note"]
+    assert "does not validate PURL types or CPE syntax" in coverage["note"]
+
+
+def test_identifier_coverage_absent_when_no_components() -> None:
+    """No components to measure means no coverage row, not a claim of completeness."""
+    result = _result_with_components([])
+    assert result.identifier_coverage is None
+    for fmt in ("text", "markdown"):
+        assert "Identifier field presence" not in render(result, fmt)
+    data = json.loads(render(result, "json"))
+    assert data["identifier_coverage"] is None
+    sarif = json.loads(render(result, "sarif"))
+    assert sarif["runs"][0]["tool"]["driver"]["properties"]["identifierCoverage"] is None
+
+
+def test_identifier_coverage_incomplete_shown_in_text_with_caveat() -> None:
+    text = render(_result_with_components(_MIXED_COMPONENTS), "text")
+    assert (
+        "Identifier field presence: 1/2 components contain a non-blank PURL or CPE string" in text
+    )
+    assert "does not mean those components are clean" in text
+
+
+def test_identifier_coverage_incomplete_shown_in_markdown() -> None:
+    text = render(_result_with_components(_MIXED_COMPONENTS), "markdown")
+    assert (
+        "Identifier field presence: 1/2 components contain a non-blank PURL or CPE string" in text
+    )
+    assert "field-presence count" in text
+
+
+def test_identifier_coverage_incomplete_shown_in_json() -> None:
+    data = json.loads(render(_result_with_components(_MIXED_COMPONENTS), "json"))
+    coverage = data["identifier_coverage"]
+    assert coverage["total_components"] == 2
+    assert coverage["components_with_identifier_field"] == 1
+    assert coverage["all_components_have_identifier_field"] is False
+    assert "field-presence count" in coverage["note"]
+
+
+def test_identifier_coverage_incomplete_shown_in_sarif_properties() -> None:
+    sarif = json.loads(render(_result_with_components(_MIXED_COMPONENTS), "sarif"))
+    coverage = sarif["runs"][0]["tool"]["driver"]["properties"]["identifierCoverage"]
+    assert coverage["total_components"] == 2
+    assert coverage["components_with_identifier_field"] == 1
+    assert coverage["all_components_have_identifier_field"] is False
+    assert "field-presence count" in coverage["note"]
+
+
+def test_full_identifier_field_presence_is_still_shown() -> None:
+    """Full field presence still prints a row, distinct from 'not measured'."""
+    text = render(_result_with_components(_FULLY_IDENTIFIED_COMPONENTS), "text")
+    assert (
+        "Identifier field presence: 2/2 components contain a non-blank PURL or CPE string" in text
+    )
+
+
+def test_generic_purl_presence_is_not_called_matchable() -> None:
+    text = render(_result_with_components(_GENERIC_IDENTIFIER_COMPONENTS), "text")
+
+    assert "Identifier field presence: 1/1" in text
+    assert "does not validate PURL types" in text
+    assert "matchable identifier" not in text
+
+
+def test_full_identifier_field_presence_never_reads_as_a_pass() -> None:
+    """Full field presence must never be phrased as clean, safe, or passing.
+
+    A component list where every entry has a PURL can still produce zero
+    findings because nothing was found in what could be checked, not because
+    the components are proven safe.
+    """
+    result = _result_with_components(_FULLY_IDENTIFIED_COMPONENTS)
+    for fmt in ("text", "markdown"):
+        rendered = render(result, fmt)
+        # The disclaimer is present, and it is a negation ("does not mean"),
+        # never an unqualified claim of safety, cleanliness, or a pass.
+        assert "does not mean the components are safe" in rendered
+        assert "(clean)" not in rendered
+        assert "Passed" not in rendered
+    data = json.loads(render(result, "json"))
+    coverage = data["identifier_coverage"]
+    assert coverage["all_components_have_identifier_field"] is True
+    assert coverage["components_with_identifier_field"] == coverage["total_components"] == 2
+    assert "does not mean the components are safe" in coverage["note"]
+    sarif = json.loads(render(result, "sarif"))
+    sarif_coverage = sarif["runs"][0]["tool"]["driver"]["properties"]["identifierCoverage"]
+    assert sarif_coverage["all_components_have_identifier_field"] is True
+    assert "does not mean the components are safe" in sarif_coverage["note"]
+
+
+def test_identifier_coverage_does_not_change_exit_note() -> None:
+    """Coverage reporting is additive and never alters the exit-code wording."""
+    complete = _result_with_components(_FULLY_IDENTIFIED_COMPONENTS)
+    incomplete = _result_with_components(_MIXED_COMPONENTS)
+    for result in (complete, incomplete):
+        assert "Exit 0 means no configured blocking findings" in render(result, "text", exit_code=0)
+        assert "Exit 10:" in render(result, "text", exit_code=10)

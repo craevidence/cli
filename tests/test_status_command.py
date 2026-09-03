@@ -1,10 +1,14 @@
 """Tests for status command: fail-on threshold logic, exit codes, and text output rendering."""
 
+import json
 from io import StringIO
+from unittest.mock import AsyncMock, patch
 
 import pytest
+from click.testing import CliRunner
 from rich.console import Console
 
+from cra_evidence_cli.cli import cli
 from cra_evidence_cli.commands import status as status_module
 from cra_evidence_cli.commands.status import check_fail_on, format_status_output
 from cra_evidence_cli.exceptions import (
@@ -12,6 +16,11 @@ from cra_evidence_cli.exceptions import (
     ReleasePolicyNotMetError,
     VulnerabilityThresholdExceeded,
 )
+
+BASE_ENV = {
+    "CRA_EVIDENCE_API_KEY": "test_key_123",
+    "CRA_EVIDENCE_URL": "http://localhost:8000",
+}
 
 # Fixtures - mock responses matching CIStatusResponse schema
 
@@ -138,10 +147,7 @@ class TestCheckFailOn:
         assert exc_info.value.exit_code == 20
 
     def test_non_compliant_fails_on_incomplete_vulnerable(self, status_response_vulnerable):
-        (
-            "Any fail_on value (e.g. critical) fails when CRA status is "
-            "incomplete (with vulns fixture)."
-        )
+        """Any fail_on value (e.g. critical) fails when CRA status is incomplete (vulns fixture)."""
         with pytest.raises(CRANonCompliantError):
             check_fail_on(
                 "critical",
@@ -165,7 +171,8 @@ class TestCheckFailOn:
         """A legal-floor failure raises CRANonCompliantError (exit 20)."""
         with pytest.raises(CRANonCompliantError) as exc_info:
             check_fail_on(
-                "critical", {},
+                "critical",
+                {},
                 "incomplete",
                 cra_floor_status="incomplete",
                 release_policy_status="incomplete",
@@ -176,7 +183,8 @@ class TestCheckFailOn:
         """Floor met but release policy not met raises ReleasePolicyNotMetError (exit 24)."""
         with pytest.raises(ReleasePolicyNotMetError) as exc_info:
             check_fail_on(
-                "critical", {},
+                "critical",
+                {},
                 "incomplete",
                 cra_floor_status="ready",
                 release_policy_status="incomplete",
@@ -186,7 +194,8 @@ class TestCheckFailOn:
     def test_floor_and_policy_both_ready_passes(self):
         """Floor and release policy both ready -> no failure."""
         check_fail_on(
-            "critical", {},
+            "critical",
+            {},
             "ready",
             cra_floor_status="ready",
             release_policy_status="ready",
@@ -350,9 +359,7 @@ class TestFormatStatusOutput:
         """Text format renders an incomplete version without raising."""
         format_status_output(status_response_incomplete, "text")
 
-    def test_text_output_renders_retained_gemara_sources(
-        self, status_response_clean, monkeypatch
-    ):
+    def test_text_output_renders_retained_gemara_sources(self, status_response_clean, monkeypatch):
         """Status text uses explicit source URLs for download hints."""
         out = StringIO()
         monkeypatch.setattr(
@@ -366,9 +373,7 @@ class TestFormatStatusOutput:
                 "doc_type": "risk_assessment",
                 "filename": "risk-catalog.pdf",
                 "review_status": "pending_review",
-                "gemara_source_download_url": (
-                    "/api/v1/documents/doc-123/gemara-source/download"
-                ),
+                "gemara_source_download_url": ("/api/v1/documents/doc-123/gemara-source/download"),
             }
         ]
 
@@ -507,31 +512,412 @@ class TestFormatStatusOutput:
         format_status_output(data, "text")
 
 
+class TestIdentifierCoverage:
+    """Tests for version_matching_identifier_coverage rendering.
+
+    The API reports validated declared matching-identifier coverage alongside the
+    vulnerability result. A zero-finding result must never read as an
+    unqualified clean or pass verdict when coverage is not complete: this
+    directly encodes the risk that an SBOM can list only generic identifiers
+    and return no findings.
+    """
+
+    def _render(self, data, monkeypatch, width=160):
+        out = StringIO()
+        monkeypatch.setattr(
+            status_module,
+            "console",
+            Console(file=out, force_terminal=False, width=width, color_system=None),
+        )
+        format_status_output(data, "text")
+        # Collapse whitespace/line wraps so phrase assertions do not depend on
+        # exactly where the terminal table wraps long caveat text.
+        return " ".join(out.getvalue().split())
+
+    def _render_json(self, data, monkeypatch):
+        """Render through the real production formatter, not a bare Console.
+
+        Asserting against a locally constructed Console.print_json would test
+        rich, not this CLI: the json branch of format_status_output could be
+        deleted and such a test would still pass.
+        """
+        out = StringIO()
+        monkeypatch.setattr(
+            status_module,
+            "console",
+            Console(file=out, force_terminal=False, width=160, color_system=None),
+        )
+        format_status_output(data, "json")
+        return out.getvalue()
+
+    def test_complete_coverage_renders_no_extra_rows(self, status_response_clean, monkeypatch):
+        """A complete-coverage result adds nothing beyond the existing vuln output.
+
+        Complete coverage proves supported identifiers were declared. It does not prove the
+        vulnerability database was fresh, that matching actually ran, or that the
+        scanner did not error, so a zero-finding total still renders as the
+        neutral "0 found" and never as a "clean" claim, even here.
+        """
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 142,
+            "ecosystem_purl": 140,
+            "declared_cpe": 2,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "complete",
+            "reason_code": "all_components_declare_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" not in rendered
+        assert "0 found" in rendered
+        assert "0 (clean)" not in rendered
+
+    def test_incomplete_coverage_qualifies_zero_finding_result(
+        self, status_response_clean, monkeypatch
+    ):
+        """A zero-finding result with incomplete coverage never claims 'clean'.
+
+        The two components declare only generic PURLs. Incomplete coverage means
+        they have no validated declared matching identifier, so zero findings
+        cannot be presented as a clean result.
+        """
+        status_response_clean["vulnerability_summary"] = {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "total": 0,
+        }
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 2,
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 2,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "0 (clean)" not in rendered
+        assert "0 found" in rendered
+        assert "Matching Identifier Coverage" in rendered
+        assert "0/2 components declare a supported ecosystem PURL or validated CPE" in rendered
+        # The caveat explaining that this is not a clean claim still prints.
+        assert "does not mean those components are clean" in rendered
+        assert "an attempted query is not a successful match" in rendered
+        assert "are still matched" not in rendered
+        assert "reason_code: components_without_matching_identifier" in rendered
+
+    def test_incomplete_coverage_shown_alongside_nonzero_findings(
+        self, status_response_vulnerable, monkeypatch
+    ):
+        """Incomplete coverage is surfaced even when findings are non-zero.
+
+        Findings exist, but some components lack a validated declared matching
+        identifier, so the caveat applies regardless of vulnerability count.
+        """
+        status_response_vulnerable["version_matching_identifier_coverage"] = {
+            "total_components": 200,
+            "ecosystem_purl": 150,
+            "declared_cpe": 10,
+            "generic_or_unsupported_purl_only": 30,
+            "no_supported_purl_or_cpe": 10,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_vulnerable, monkeypatch)
+
+        assert "Matching Identifier Coverage" in rendered
+        assert "160/200 components declare a supported ecosystem PURL or validated CPE" in rendered
+        # A non-zero finding count is unaffected by the coverage-aware wording:
+        # the severity breakdown still renders and no zero-finding text appears.
+        assert "0 (clean)" not in rendered
+        assert "0 found" not in rendered
+        assert "Critical" in rendered
+
+    def test_incomplete_coverage_qualifies_a_legacy_subset(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 2,
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 1,
+            "no_supported_purl_or_cpe": 1,
+            "projection_unknown": 1,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert (
+            "0/2 stored component projections contain a supported ecosystem PURL "
+            "or validated CPE" in rendered
+        )
+        assert "At least one component with a current projection" in rendered
+        assert "legacy projection that predates CPE tracking" in rendered
+        assert "Their declared-CPE coverage cannot be verified" in rendered
+        assert "Components outside this count declare only" not in rendered
+        assert "0 (clean)" not in rendered
+
+    def test_unknown_coverage_is_neutral_and_not_blaming(self, status_response_clean, monkeypatch):
+        """Legacy projection state gets neutral wording, with no fault implied."""
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": None,
+            "ecosystem_purl": None,
+            "declared_cpe": None,
+            "generic_or_unsupported_purl_only": None,
+            "no_supported_purl_or_cpe": None,
+            "projection_unknown": None,
+            "state": "unknown",
+            "reason_code": "legacy_projection_unknown",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" in rendered
+        assert "not verifiable" in rendered
+        assert "predate CPE tracking" in rendered
+        assert "Re-upload the current SBOM" in rendered
+        # Unmeasured coverage never claims cleanliness, even neutrally worded.
+        assert "0 (clean)" not in rendered
+        assert "0 found" in rendered
+        # No blame or fault language directed at the customer.
+        assert "you did" not in rendered.lower()
+        assert "your fault" not in rendered.lower()
+        assert "error" not in rendered.lower()
+
+    def test_unknown_state_with_unrecognised_reason_does_not_invent_legacy_history(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": None,
+            "ecosystem_purl": None,
+            "declared_cpe": None,
+            "generic_or_unsupported_purl_only": None,
+            "no_supported_purl_or_cpe": None,
+            "projection_unknown": None,
+            "state": "unknown",
+            "reason_code": "future_unknown_reason",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" in rendered
+        assert "unrecognised" in rendered
+        assert "does not recognise the coverage state" in rendered
+        assert "predate CPE tracking" not in rendered
+        assert "Re-upload the current SBOM" not in rendered
+
+    def test_inconsistent_complete_pair_fails_closed(self, status_response_clean, monkeypatch):
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 2,
+            "ecosystem_purl": 2,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "complete",
+            "reason_code": "future_complete_reason",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" in rendered
+        assert "unrecognised" in rendered
+        assert "0 found" in rendered
+        assert "0 (clean)" not in rendered
+
+    def test_no_components_is_not_described_as_unidentified_components(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 0,
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "no_components",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "no components to measure" in rendered
+        assert "coverage cannot be measured" in rendered
+        assert "Components outside this count" not in rendered
+        assert "does not mean the product is clean" in rendered
+
+    def test_no_components_explanation_is_selected_by_reason_code(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 7,
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "no_components",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "no components to measure" in rendered
+        assert "Components outside this count" not in rendered
+
+    def test_unrecognized_state_fails_closed_without_inventing_a_cause(
+        self, status_response_clean, monkeypatch
+    ):
+        """An unrecognised state fails closed but is never given a cause we have not established.
+
+        Telling the user the result "predates coverage tracking" would assert a
+        history that a newer server state is no evidence of.
+        """
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 5,
+            "ecosystem_purl": 5,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "some_future_state",
+            "reason_code": "future_reason",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" in rendered
+        assert "does not recognise the coverage state" in rendered
+        # The invented history must not be offered for a state we cannot read.
+        assert "predates coverage tracking" not in rendered
+        assert "Re-upload the current SBOM" not in rendered
+        # An unrecognised state is never treated as complete for the clean claim.
+        assert "0 (clean)" not in rendered
+        assert "0 found" in rendered
+
+    def test_absent_coverage_field_says_nothing_extra(self, status_response_clean, monkeypatch):
+        """When the field is absent (e.g. an older server), no coverage rows render.
+
+        Absence must never be read as coverage being complete: fail closed and
+        never print the unqualified clean claim.
+        """
+        assert "version_matching_identifier_coverage" not in status_response_clean
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" not in rendered
+        assert "0 (clean)" not in rendered
+        assert "0 found" in rendered
+
+    def test_null_coverage_field_says_nothing_extra(self, status_response_clean, monkeypatch):
+        """An explicit null coverage value is handled the same as an absent field."""
+        status_response_clean["version_matching_identifier_coverage"] = None
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" not in rendered
+        assert "0 (clean)" not in rendered
+        assert "0 found" in rendered
+
+    def test_json_output_passes_coverage_through_verbatim(self, status_response_clean, monkeypatch):
+        """JSON output is additive: the coverage object round-trips unchanged."""
+        coverage = {
+            "total_components": 2,
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 2,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+        status_response_clean["version_matching_identifier_coverage"] = coverage
+
+        rendered = self._render_json(status_response_clean, monkeypatch)
+
+        assert '"version_matching_identifier_coverage"' in rendered
+        # Parse it back: the coverage object must survive the real json branch
+        # unchanged, which a substring check alone would not establish.
+        assert json.loads(rendered)["version_matching_identifier_coverage"] == coverage
+
+    @pytest.mark.parametrize(
+        "coverage_state",
+        ["complete", "incomplete", "unknown", "some_future_state", None],
+    )
+    def test_clean_claim_never_appears_in_any_output_path(
+        self, status_response_clean, status_response_vulnerable, monkeypatch, coverage_state
+    ):
+        """The literal phrase "(clean)" must never appear, regardless of coverage state.
+
+        A zero-finding total proves only that nothing was found in what could be
+        checked; it does not prove the vulnerability database was fresh, that
+        matching actually ran, or that the scanner did not error. This guards
+        against the claim resurfacing for any coverage state, including states
+        this CLI version does not recognize.
+        """
+        for data in (status_response_clean, status_response_vulnerable):
+            if coverage_state is None:
+                data.pop("version_matching_identifier_coverage", None)
+            else:
+                data["version_matching_identifier_coverage"] = {
+                    "total_components": 1,
+                    "ecosystem_purl": 1,
+                    "declared_cpe": 0,
+                    "generic_or_unsupported_purl_only": 0,
+                    "no_supported_purl_or_cpe": 0,
+                    "projection_unknown": 0,
+                    "state": coverage_state,
+                    "reason_code": "all_components_declare_matching_identifier",
+                }
+
+            rendered = self._render(data, monkeypatch)
+            assert "(clean)" not in rendered
+
+            assert "(clean)" not in self._render_json(data, monkeypatch)
+
+
 class TestWaitReadyGateLabel:
-    """Tests that wait-ready labels its success/progress messages by the gated field."""
+    """Tests that wait-ready labels its success message by the gated field.
+
+    Invokes the real `wait-ready` command end to end, mocking only the HTTP
+    client. A test that reimplements the label ternary locally and asserts
+    against its own copy cannot fail when the command itself regresses; this
+    exercises the production code path instead.
+    """
+
+    def _invoke(self, response: dict):
+        with patch.object(status_module, "CRAEvidenceClient") as client_class:
+            client = client_class.return_value
+            client.get_version_status = AsyncMock(return_value=response)
+            return CliRunner().invoke(
+                cli,
+                ["wait-ready", "--product", "test-product", "--version", "1.0.0"],
+                env=BASE_ENV,
+            )
 
     def test_gate_field_identified_by_release_policy_status(self):
         """When release_policy_status is set, the gate label is 'Policy Status'."""
-        # The wait-ready command labels its output based on which field controls
-        # the gate. This test verifies the status module computes gate_label
-        # correctly given different response shapes.
-        from cra_evidence_cli.commands.status import wait_ready as _wait_ready_cmd  # noqa: F401
+        result = self._invoke({"cra_status": "ready", "release_policy_status": "ready"})
 
-        # Verify the module-level logic: release_policy_status present -> Policy Status label.
-        # We simulate the label-selection logic from the command directly.
-        data_with_policy = {
-            "cra_status": "ready",
-            "release_policy_status": "incomplete",
-        }
-        release_policy_status = data_with_policy.get("release_policy_status")
-        gate_label_policy = "Policy Status" if release_policy_status else "CRA Status"
-        assert gate_label_policy == "Policy Status"
+        assert result.exit_code == 0, result.output
+        assert "Policy Status: READY" in result.output
+        assert "CRA Status: READY" not in result.output
 
     def test_gate_label_falls_back_to_cra_status(self):
         """When release_policy_status is absent, the gate label is 'CRA Status'."""
-        data_no_policy = {
-            "cra_status": "ready",
-        }
-        release_policy_status = data_no_policy.get("release_policy_status")
-        gate_label_no_policy = "Policy Status" if release_policy_status else "CRA Status"
-        assert gate_label_no_policy == "CRA Status"
+        result = self._invoke({"cra_status": "ready"})
+
+        assert result.exit_code == 0, result.output
+        assert "CRA Status: READY" in result.output
