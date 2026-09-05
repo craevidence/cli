@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.4.0] - 2026-09-05
+
 ### Added
 
 - Self-hosted API origins can be registered as an exact trusted origin, and
@@ -16,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The bundled CRA Evidence Grype engine is updated to v0.117.0-p6. Its gRPC,
+  x/crypto, and x/text dependencies use their reviewed fixed releases.
+- The hardened Python 3.14 builder and runtime base-image digests are refreshed
+  and remain pinned by digest.
 - Local `check` reports raw non-blank PURL/CPE field presence separately from
   validated matching-identifier coverage. JSON and SARIF expose the additive
   `components_with_identifier_field` and `all_components_have_identifier_field`
@@ -27,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Severity gates exit 30 when vulnerability applicability has not been
+  verified, instead of treating zero verified findings as satisfying the
+  configured threshold.
 - `status` no longer renders a zero-finding result as "(clean)". Coverage
   explanations follow the stable reason code, and unfamiliar or inconsistent
   state/reason pairs fail closed without inventing a legacy cause.
@@ -696,7 +705,8 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.4.0...HEAD
+[4.4.0]: https://github.com/craevidence/cli/compare/v4.3.0...v4.4.0
 [4.3.0]: https://github.com/craevidence/cli/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/craevidence/cli/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/craevidence/cli/compare/v4.0.0...v4.1.0

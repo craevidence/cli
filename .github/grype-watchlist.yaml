@@ -18,13 +18,14 @@
 # build_info_audit):
 #   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
 #   scanner: Grype 0.116.1
-#   database: schema v6.1.9, built 2026-08-29T06:26:37Z
-#   image: built 2026-08-29 from the then-current Dockerfile with bases
-#     dhi.io/python:3.14-dev@sha256:605fb5821aaa7d62c187110e66429b110379af0ba73e872afb5022504ba12178
-#     and dhi.io/python:3.14@sha256:8be06a90a353d4f1bb9e44585ae183d6112e54dfbe8af6a06774c6f4285b221d,
-#     with CRA Evidence Grype engine craevidence-v0.117.0-p4
-#   image ID: sha256:29b08e6c6f1fdecad62fcece6c7d0fa905846f96adf452850c09118343c06a0c
-#   review date: 2026-08-29
+#   database: schema v6.1.9, built 2026-09-05T06:27:00Z
+#   image: built 2026-09-05 from the 4.4.0 release tree with bases
+#     dhi.io/python:3.14-dev@sha256:f1e8ebcc3ba8d0dc43885ed2852d9b80159044a8d2e3baf0b30c4c726de37c55
+#     and dhi.io/python:3.14@sha256:9062bae24604a79f5233ce8fa70095dbc3033ac073ef6db23ae1019668fc1fa1,
+#     with CRA Evidence Grype engine craevidence-v0.117.0-p6
+#   image ID: sha256:20790f08413ab256c5a98a4f586012ac60d27870359d95b0ed5a27d83b5e1d69
+#   unfiltered JSON sha256: 6fa1c8891c2859e92d3a76df7bcc0c6a94eabbd8aa6d7ac800d85d1c79d8e0df
+#   review date: 2026-09-05
 # Review at every release.
 
 watchlist:
@@ -40,10 +41,10 @@ watchlist:
         - { id: CVE-2026-5928, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-6238, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-6791, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-18374, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-18374, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-6368, severity: Low, fix_state: wont-fix }
         - { id: CVE-2026-19542, severity: Unknown, fix_state: wont-fix }
-        - { id: CVE-2026-19499, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-19499, severity: Unknown, fix_state: wont-fix }
         - { id: CVE-2026-77117, severity: Unknown, fix_state: wont-fix }
         - { id: CVE-2026-80489, severity: Unknown, fix_state: wont-fix }
         - { id: CVE-2010-4756, severity: Negligible, fix_state: not-fixed }
@@ -68,7 +69,7 @@ watchlist:
         - { id: CVE-2026-11824, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-50812, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-50813, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-39113, severity: Unknown, fix_state: wont-fix }
+        - { id: CVE-2026-39113, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2021-45346, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2025-70873, severity: Negligible, fix_state: not-fixed }
       note: "The higher-severity items require opening a crafted SQLite database and executing FTS5 MATCH; no known code path in this image opens user-supplied SQLite databases."
@@ -81,11 +82,16 @@ watchlist:
     - package: libuuid1 2.41.5-0+deb13u1+dhi2
       advisories:
         - { id: CVE-2026-3184, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-76642, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-78408, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-78409, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-78410, severity: High, fix_state: wont-fix }
         - { id: CVE-2022-0563, severity: Negligible, fix_state: not-fixed }
       note: "util-linux issues; the CLI runs as a non-root user and performs no privileged util-linux operations."
-    - package: zlib1g 1:1.3.dfsg+really1.3.1-1+dhi2
-      also: [zlib1g-dev 1:1.3.dfsg+really1.3.1-1+dhi2]
+    - package: zlib1g 1:1.3.dfsg+really1.3.1-1+dhi3
+      also: [zlib1g-dev 1:1.3.dfsg+really1.3.1-1+dhi3]
       advisories:
+        - { id: CVE-2026-85091, severity: High, fix_state: not-fixed }
         - { id: CVE-2026-27171, severity: Medium, fix_state: wont-fix }
       note: "Runtime base package, no Debian fix available."
     - package: libbz2-1.0 1.0.8-6+dhi2
@@ -110,11 +116,11 @@ watchlist:
   # from the scanner output above. They record embedded dependencies the
   # scanner currently filters out, so the dependency stays visible.
   build_info_audit:
-    - package: golang.org/x/crypto v0.54.0
-      source: go build info of CRA Evidence Grype engine craevidence-v0.117.0-p4
+    - package: golang.org/x/crypto v0.56.0
+      source: go build info of CRA Evidence Grype engine craevidence-v0.117.0-p6
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
-      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-07-31)."
+      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-09-05)."
 
   resolved_since_last_review:
     - id: CVE-2026-72522
