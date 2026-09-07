@@ -15,6 +15,11 @@ The CLI has two modes:
 - Local commands that run without a CRA Evidence account or API key.
 - Account commands that upload evidence or read release state from CRA Evidence.
 
+Both modes accept an SBOM you already have. If you do not have one, the CLI
+generates it from a directory or a container image with its bundled engine, so
+no separate SBOM tool is required. See
+[Generating an SBOM](#generating-an-sbom).
+
 This page covers the public command basics. The full reference lives in
 [docs/](https://github.com/craevidence/cli/blob/main/docs/README.md).
 Registered CRA Evidence users can also sign in to view the command
@@ -57,7 +62,8 @@ covered in the [installation guide](https://github.com/craevidence/cli/blob/main
 
 `craevidence check` scans a directory, container image, or existing SBOM and
 reports known vulnerability signals that can block CI when a threshold is met.
-It does not require an account and does not upload your project to CRA Evidence.
+Given a directory or an image, it generates the SBOM first. It does not require
+an account and does not upload your project to CRA Evidence.
 
 ```bash
 craevidence check .
