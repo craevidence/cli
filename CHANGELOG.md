@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.5.0] - 2026-09-07
 
+### Documentation
+
+- The README now documents SBOM generation: `check` and `upload-sbom` build the
+  SBOM from a directory or container image with the bundled engine, `--sbom-output`
+  keeps a copy, generated output is CycloneDX JSON with `--format spdx` as the
+  alternative, XML is not generated, and `--file` uploads an SBOM produced
+  elsewhere. The CI guide replaces its placeholder build step with a real command,
+  states that the GitHub Action and GitLab Component upload a file rather than
+  generating one, and drops a duplicated Docker example. The local-command
+  reference now names both SBOM parse errors accurately and says that local
+  commands read JSON only.
+
 ### Fixed
 
 - The `--fail-on` gate in `upload`, `scan`, and `status` now fails closed with

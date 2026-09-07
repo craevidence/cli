@@ -147,8 +147,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build SBOM
         run: |
-          # Replace this with the SBOM command your build already uses.
-          your-sbom-command > sbom.cdx.json
+          pipx install craevidence
+          craevidence check . --sbom-output sbom.cdx.json
       - uses: craevidence/cli@v4
         with:
           api-key: ${{ secrets.CRA_EVIDENCE_API_KEY }}
@@ -166,6 +166,11 @@ jobs:
 
 For first setup, run once without `fail-untrusted`, copy the signer identity
 and issuer printed by the CLI, then pin those values in the action inputs.
+
+The Action and the GitLab Component upload an SBOM file: their `file:` input
+maps to `upload-sbom --file`, and neither exposes `--image` or `--source`. Produce
+the SBOM in a prior step, as above, or use the Docker image form further down,
+which can generate and upload in one command.
 
 ### GitLab Component
 
@@ -219,7 +224,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upload to CRA Evidence
+      - name: Generate an SBOM from the image and upload it
         run: |
           docker run --rm \
             -e CRA_EVIDENCE_API_KEY=${{ secrets.CRA_EVIDENCE_API_KEY }} \
@@ -233,23 +238,9 @@ jobs:
               --fail-on high
 ```
 
-Generating an SBOM directly from a built Docker image (set `IMAGE_NAME` in the
-job-level `env:` block or replace with the literal image reference):
-
-```yaml
-      - name: Generate and Upload SBOM from Image
-        run: |
-          docker run --rm \
-            -e CRA_EVIDENCE_API_KEY=${{ secrets.CRA_EVIDENCE_API_KEY }} \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            craevidence/cli:latest \
-            upload-sbom \
-              --product my-product \
-              --version ${{ github.ref_name }} \
-              --image ${{ env.IMAGE_NAME }}:${{ github.sha }} \
-              --scan \
-              --fail-on high
-```
+`--image` generates the SBOM with the bundled engine and uploads it in one
+step. Set `IMAGE_NAME` in the job-level `env:` block or use a literal image
+reference. The socket mount is what lets the engine read the local image.
 
 ### GitLab CI (Docker)
 

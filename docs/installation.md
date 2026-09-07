@@ -125,4 +125,9 @@ The delivery profile is fixed and versioned, so `SYFT_REGISTRY_AUTH_*` and other
 `SYFT_*` variables, a Syft config file, an explicit target platform, custom
 TLS/CA or insecure-registry settings, path exclusions and source name/version
 aliases have no effect. If you need any of those, generate the SBOM with your
-own tooling and upload it with `--file`.
+own tooling and upload it with `--file`, for example:
+
+```bash
+syft ghcr.io/acme/app:1.4.2 -o cyclonedx-json > sbom.cdx.json
+craevidence upload-sbom --product my-product --version 1.0.0 --file sbom.cdx.json
+```

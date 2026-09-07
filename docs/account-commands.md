@@ -220,6 +220,10 @@ Evidence engine. Existing files are sent with the matching multipart media
 type. The server still identifies and validates the declared format and version;
 the filename extension alone does not make a document valid.
 
+`--image` and `--source` write the generated SBOM to a temporary directory that
+is removed once the upload finishes, so no local copy is left behind. Use
+`check --sbom-output <path>` when you also want the file on disk.
+
 ```
 craevidence upload-sbom
   --product <slug-or-id>

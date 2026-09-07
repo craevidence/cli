@@ -75,6 +75,51 @@ FIRST EPSS enrichment are reported as unavailable if they cannot be reached.
 Verbose output includes a section named **What this local snapshot cannot tell
 you**. The JSON output keeps the same review context in machine-readable form.
 
+## Generating an SBOM
+
+The CLI generates the SBOM itself when you point it at a directory or a
+container image. It uses the bundled CRA Evidence Grype engine, which embeds
+the Syft library for package cataloguing, so no separate SBOM tool is needed.
+
+```bash
+craevidence check .
+craevidence check --image ghcr.io/acme/app:1.4.2
+craevidence check . --sbom-output sbom.cdx.json
+```
+
+`--sbom-output` keeps the generated file as a CI artifact. It is ignored when
+the SBOM was supplied with `--sbom`.
+
+`upload-sbom` generates the same way from `--image` or `--source`:
+
+```bash
+craevidence upload-sbom --product my-product --version 1.0.0 --image ghcr.io/acme/app:1.4.2
+craevidence upload-sbom --product my-product --version 1.0.0 --source ./src
+```
+
+Both write to a temporary directory that is removed after the upload, so no
+local copy remains. Use `check --sbom-output` when you want to keep one.
+
+Generated output is CycloneDX JSON. `upload-sbom --format spdx` selects SPDX
+JSON instead. The CLI does not generate XML.
+
+Generation and local matching need the engine, which the supported PyPI
+platform wheels and the published Docker image bundle. Editable and
+source-distribution installs do not bundle it, and native Windows generation is
+not supported. `--file` uploads an SBOM you already have and needs no engine,
+so a build that produces its own SBOM can skip generation entirely:
+
+```bash
+syft ghcr.io/acme/app:1.4.2 -o cyclonedx-json > sbom.cdx.json
+craevidence upload-sbom --product my-product --version 1.0.0 --file sbom.cdx.json
+```
+
+Use your own tool when you need XML, a specific cataloguer, path exclusions, or
+Syft configuration, none of which the bundled engine exposes. `check --sbom`,
+`eol-check --sbom`, `egress-check --sbom`, and `draft --sbom` read CycloneDX
+JSON or SPDX JSON only; `upload-sbom --file` and `validate --sbom` also accept
+`.xml`, which the server validates.
+
 ## Free Commands
 
 These commands do not need `CRA_EVIDENCE_API_KEY`:
@@ -124,8 +169,12 @@ Commands that upload evidence or read CRA Evidence release state need an API key
 export CRA_EVIDENCE_API_KEY=...
 craevidence create-version --product my-product --version 1.0.0
 craevidence upload-sbom --product my-product --version 1.0.0 --file sbom.cdx.json
+craevidence upload-sbom --product my-product --version 1.0.0 --image ghcr.io/acme/app:1.4.2
 craevidence status --product my-product --version 1.0.0
 ```
+
+`upload-sbom` takes an SBOM you already have with `--file`, or generates one
+from `--image` or `--source`. See [Generating an SBOM](#generating-an-sbom).
 
 `create-version` creates a draft under an existing product without uploading
 new evidence. CRA Evidence automatically links reusable product-level

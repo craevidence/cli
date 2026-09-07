@@ -106,7 +106,10 @@ Notes:
 - Pointing `check` at a directory that contains no recognised dependency manifests exits 1 with
   an explanatory message listing the manifest types it looks for (for example `requirements.txt`,
   `poetry.lock`, `package-lock.json`, `go.mod`, `pom.xml`, `Cargo.lock`, `Gemfile.lock`).
-  A genuinely malformed file passed via `--sbom` exits 1 with `Unsupported SBOM format`.
+  `--sbom` reads CycloneDX JSON or SPDX JSON. A file that is not JSON exits 1 with
+  `Failed to parse SBOM`; JSON that carries neither CycloneDX `components` nor SPDX
+  `packages` exits 1 with `Unsupported SBOM format`. XML is not read locally, so convert it
+  or send it to the server with `upload-sbom --file`.
 
 The result is a local snapshot, not a compliance verdict. `exit 0` means no
 blocking findings were found under the selected local gate.
