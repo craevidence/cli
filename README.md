@@ -254,7 +254,7 @@ private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.
 | 27 | Code-check findings at or above the configured --fail-on level. |
 | 28 | Risk assessment review is still pending for the version (`ra status --fail-on unreviewed`, or `ra review --non-interactive` with unresolved review items). |
 | 29 | Code-check parser coverage is degraded while an explicit --fail-on gate is enabled. This takes precedence over exit 27 because the result is incomplete. |
-| 30 | Vulnerability applicability was not verified for the version, so a --fail-on gate cannot certify the severity threshold. Verify or resolve the affected findings in CRA Evidence. |
+| 30 | The --fail-on gate cannot certify the severity threshold because the result is inconclusive: either vulnerability applicability was not verified for the version, or the vulnerability assessment is incomplete because some packages were not assessed. The message names which. Verify or resolve the affected findings, or re-run the scan once the server reports it complete. |
 
 Exit 0 != compliance. Local output is a snapshot for review and CI policy, not
 a legal conclusion.

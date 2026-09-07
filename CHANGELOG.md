@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `--fail-on` gate in `upload`, `scan`, and `status` now fails closed with
+  exit 30 when the server reports the vulnerability assessment as incomplete
+  (`scan_incomplete`). Some packages were not assessed, so a zero count could
+  not certify the threshold, yet the gate previously exited 0. Older servers
+  that omit the field are unaffected.
+
 ## [4.4.0] - 2026-09-05
 
 ### Added

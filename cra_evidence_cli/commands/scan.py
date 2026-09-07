@@ -16,6 +16,7 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.exceptions import (
     APIError,
     ApplicabilityInconclusive,
+    AssessmentIncomplete,
     CRAEvidenceError,
     VulnerabilityThresholdExceeded,
 )
@@ -98,6 +99,11 @@ def check_vulnerability_threshold(
     # defensively so an older server that omits the field does not break.
     if vulns.get("applicability_pending"):
         raise ApplicabilityInconclusive(fail_on)
+
+    # Same rule for an incomplete assessment: some packages were not assessed,
+    # so a zero count cannot certify the threshold.
+    if vulns.get("scan_incomplete"):
+        raise AssessmentIncomplete(fail_on)
 
     critical = vulns.get("critical", 0)
     high = vulns.get("high", 0)

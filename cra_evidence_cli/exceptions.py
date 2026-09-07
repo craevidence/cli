@@ -96,6 +96,28 @@ class ApplicabilityInconclusive(CRAEvidenceError):
         self.fail_on = fail_on
 
 
+class AssessmentIncomplete(CRAEvidenceError):
+    """Raised when --fail-on cannot certify a threshold because the server
+    reports the vulnerability assessment as incomplete.
+
+    Some packages in the version were not assessed, so a zero count is not a
+    no-vulnerabilities result and the gate fails closed with exit code 30, the
+    same inconclusive-result code as an unverified applicability state. The two
+    causes are reported with different messages so the remedy is clear.
+    """
+
+    def __init__(self, fail_on: str) -> None:
+        super().__init__(
+            "The vulnerability assessment for this version is incomplete: some "
+            "packages were not assessed, so --fail-on cannot certify no "
+            f"vulnerabilities at or above '{fail_on}'. Re-run the scan once the "
+            "server reports it complete, or review the unassessed packages in "
+            "CRA Evidence.",
+            exit_code=30,
+        )
+        self.fail_on = fail_on
+
+
 class KevGateExceeded(CRAEvidenceError):
     """Raised when the known-exploited vulnerability gate is exceeded."""
 

@@ -943,3 +943,33 @@ class TestWaitReadyGateLabel:
 
         assert result.exit_code == 0, result.output
         assert "CRA Status: READY" in result.output
+
+
+class TestScanIncompleteGate:
+    def test_scan_incomplete_fails_closed(self):
+        """An incomplete assessment fails the gate with exit 30 even when the
+        severity counts are all zero and CRA status is ready."""
+        from cra_evidence_cli.exceptions import AssessmentIncomplete
+
+        summary = {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0,
+            "applicability_pending": False,
+            "scan_incomplete": True,
+        }
+        with pytest.raises(AssessmentIncomplete) as exc_info:
+            check_fail_on("critical", summary, "ready")
+        assert exc_info.value.exit_code == 30
+        assert "incomplete" in str(exc_info.value)
+
+    def test_scan_incomplete_ignored_for_fail_on_none(self):
+        """fail_on 'none' does not gate on vulnerabilities."""
+        summary = {"critical": 0, "scan_incomplete": True}
+        check_fail_on("none", summary, "ready")
+
+    def test_older_server_without_field_is_unaffected(self):
+        """A summary that omits scan_incomplete behaves as before."""
+        summary = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        check_fail_on("critical", summary, "ready")

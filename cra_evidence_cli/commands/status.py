@@ -18,6 +18,7 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.display import humanize_identifier
 from cra_evidence_cli.exceptions import (
     ApplicabilityInconclusive,
+    AssessmentIncomplete,
     CRAEvidenceError,
     CRANonCompliantError,
     ReleasePolicyNotMetError,
@@ -64,6 +65,12 @@ def check_fail_on(
         "applicability_pending"
     ):
         raise ApplicabilityInconclusive(fail_on)
+    # Same rule for an incomplete assessment: some packages were not assessed,
+    # so a zero count cannot certify the threshold.
+    if fail_on in ("critical", "high", "medium", "low") and vulnerability_summary.get(
+        "scan_incomplete"
+    ):
+        raise AssessmentIncomplete(fail_on)
 
     critical = vulnerability_summary.get("critical", 0) or 0
     high = vulnerability_summary.get("high", 0) or 0

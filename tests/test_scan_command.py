@@ -363,3 +363,31 @@ class TestScanFailOnGate:
 
         assert result.exit_code == 0, result.output
         assert mock_run.call_count == 1
+
+
+class TestScanIncompleteGate:
+    def test_scan_incomplete_fails_closed(self):
+        """An incomplete assessment fails the gate with exit 30 even when the
+        severity counts are all zero."""
+        from cra_evidence_cli.commands.scan import check_vulnerability_threshold
+        from cra_evidence_cli.exceptions import AssessmentIncomplete
+
+        data = {
+            "vulnerabilities": {
+                "critical": 0,
+                "high": 0,
+                "medium": 0,
+                "low": 0,
+                "applicability_pending": False,
+                "scan_incomplete": True,
+            }
+        }
+        with pytest.raises(AssessmentIncomplete) as exc_info:
+            check_vulnerability_threshold(data, "critical")
+        assert exc_info.value.exit_code == 30
+
+    def test_older_server_without_field_is_unaffected(self):
+        from cra_evidence_cli.commands.scan import check_vulnerability_threshold
+
+        data = {"vulnerabilities": {"critical": 0, "high": 0, "medium": 0, "low": 0}}
+        check_vulnerability_threshold(data, "critical")

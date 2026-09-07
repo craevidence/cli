@@ -22,6 +22,7 @@ from cra_evidence_cli.display import humanize_field_path, humanize_identifier
 from cra_evidence_cli.exceptions import (
     APIError,
     ApplicabilityInconclusive,
+    AssessmentIncomplete,
     CRAEvidenceError,
     SbomqsThresholdExceeded,
     SignatureVerificationUntrusted,
@@ -745,9 +746,21 @@ def _check_applicability_pending(vulnerability_summary: dict, fail_on: str) -> N
         raise ApplicabilityInconclusive(fail_on)
 
 
+def _check_assessment_incomplete(vulnerability_summary: dict, fail_on: str) -> None:
+    """Fail closed when the server reports the assessment as incomplete. Some
+    packages were not assessed, so a zero count cannot certify a severity
+    threshold. Read defensively so an older server that omits the field does not
+    break. Skipped for fail_on == "none"."""
+    if fail_on == "none":
+        return
+    if vulnerability_summary.get("scan_incomplete"):
+        raise AssessmentIncomplete(fail_on)
+
+
 def check_vulnerability_threshold(vulnerability_summary: dict, fail_on: str) -> None:
     """Check vulnerability counts against threshold and raise if exceeded."""
     _check_applicability_pending(vulnerability_summary, fail_on)
+    _check_assessment_incomplete(vulnerability_summary, fail_on)
     if fail_on == "none":
         return
 
