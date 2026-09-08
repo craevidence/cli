@@ -47,7 +47,7 @@ dev = [
     "types-PyYAML",
     # Pinned build frontend so scripts/check_dist.py and the documented
     # release checks run in a fresh development environment.
-    "build==1.5.0",
+    "build==1.6.0",
     # Test-only: validates emitted CSAF documents against the official CSAF 2.0
     # schema. The [format] extra enables the uri/date-time format checks.
     "jsonschema[format]>=4.18",
