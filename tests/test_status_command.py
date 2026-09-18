@@ -910,6 +910,418 @@ class TestIdentifierCoverage:
             assert "(clean)" not in self._render_json(data, monkeypatch)
 
 
+class TestPackageMatchingCoverage:
+    """Tests for version_package_matching_coverage rendering.
+
+    Newer servers report this object alongside the older all-entries
+    version_matching_identifier_coverage. It counts only entries the scan
+    engine treats as packages, so a files-only or mostly-files SBOM must not
+    read as incomplete coverage: files, operating-system, and container
+    entries are excluded from both the numerator and the denominator.
+    """
+
+    def _render(self, data, monkeypatch, width=160):
+        out = StringIO()
+        monkeypatch.setattr(
+            status_module,
+            "console",
+            Console(file=out, force_terminal=False, width=width, color_system=None),
+        )
+        format_status_output(data, "text")
+        return " ".join(out.getvalue().split())
+
+    def _render_json(self, data, monkeypatch):
+        out = StringIO()
+        monkeypatch.setattr(
+            status_module,
+            "console",
+            Console(file=out, force_terminal=False, width=160, color_system=None),
+        )
+        format_status_output(data, "json")
+        return out.getvalue()
+
+    def test_new_object_preferred_when_both_present(self, status_response_clean, monkeypatch):
+        """When both coverage objects are present, the package-based one wins."""
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 999,
+            "ecosystem_purl": 1,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 998,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 6132,
+            "package_candidates": 2,
+            "inventory_kind_counts": {
+                "package_candidate": 2,
+                "file": 5691,
+                "context": 1,
+                "data": 0,
+                "engine_unsupported": 0,
+                "unknown": 0,
+            },
+            "ecosystem_purl": 1,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 1,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "1/2 packages declare a supported ecosystem PURL or validated CPE" in rendered
+        # The old object's counts must not leak through if the new object is used.
+        assert "999" not in rendered
+        assert "1/999" not in rendered
+
+    def test_falls_back_to_old_object_when_new_key_absent(self, status_response_clean, monkeypatch):
+        assert "version_package_matching_coverage" not in status_response_clean
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 2,
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 2,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "0/2 components declare a supported ecosystem PURL or validated CPE" in rendered
+        assert "packages declare" not in rendered
+
+    def test_falls_back_to_old_object_when_new_is_null(self, status_response_clean, monkeypatch):
+        status_response_clean["version_package_matching_coverage"] = None
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 2,
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 2,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "0/2 components declare a supported ecosystem PURL or validated CPE" in rendered
+        assert "packages declare" not in rendered
+
+    def test_complete_reason_code_renders_no_extra_rows(self, status_response_clean, monkeypatch):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 440,
+            "package_candidates": 440,
+            "inventory_kind_counts": {"package_candidate": 440},
+            "ecosystem_purl": 440,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "complete",
+            "reason_code": "all_components_declare_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" not in rendered
+        assert "0 found" in rendered
+        assert "0 (clean)" not in rendered
+
+    def test_components_without_matching_identifier_renders_package_wording(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 6132,
+            "package_candidates": 440,
+            "inventory_kind_counts": {"package_candidate": 440, "file": 5691, "context": 1},
+            "ecosystem_purl": 426,
+            "declared_cpe": 13,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 1,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" in rendered
+        assert "439/440 packages declare a supported ecosystem PURL or validated CPE" in rendered
+        assert "the scan engine treats as packages" in rendered
+        assert "Files, operating-system entries, and container entries" in rendered
+        assert "not counted toward it" in rendered
+        assert "reason_code: components_without_matching_identifier" in rendered
+        # The file count must never be presented as if it were part of coverage.
+        assert "5691" not in rendered
+        assert "6132" not in rendered
+
+    def test_components_without_matching_identifier_adds_legacy_subset_caveat(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 3,
+            "package_candidates": 2,
+            "inventory_kind_counts": {"package_candidate": 2, "file": 1},
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 1,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 1,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "0/2 packages declare a supported ecosystem PURL or validated CPE" in rendered
+        assert "legacy projection that predates CPE tracking" in rendered
+
+    def test_no_components_renders_documented_row(self, status_response_clean, monkeypatch):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 0,
+            "package_candidates": 0,
+            "inventory_kind_counts": {},
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "no_components",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "no components to measure" in rendered
+        assert "coverage cannot be measured" in rendered
+        assert "reason_code: no_components" in rendered
+
+    def test_no_package_candidates_renders_documented_row(self, status_response_clean, monkeypatch):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 5691,
+            "package_candidates": 0,
+            "inventory_kind_counts": {"package_candidate": 0, "file": 5691},
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "no_package_candidates",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "no packages to measure" in rendered
+        assert "The SBOM lists 5691 entries but none is a package" in rendered
+        assert "vulnerability matching had nothing to check" in rendered
+        assert "reason_code: no_package_candidates" in rendered
+
+    def test_legacy_projection_unknown_renders_documented_row(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": None,
+            "total_components": None,
+            "package_candidates": None,
+            "inventory_kind_counts": None,
+            "ecosystem_purl": None,
+            "declared_cpe": None,
+            "generic_or_unsupported_purl_only": None,
+            "no_supported_purl_or_cpe": None,
+            "projection_unknown": None,
+            "state": "unknown",
+            "reason_code": "legacy_projection_unknown",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "not verifiable" in rendered
+        assert "predate CPE tracking" in rendered
+        assert "reason_code: legacy_projection_unknown" in rendered
+
+    def test_package_projection_pending_renders_documented_row_without_blaming_sbom(
+        self, status_response_clean, monkeypatch
+    ):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": None,
+            "package_candidates": None,
+            "inventory_kind_counts": None,
+            "ecosystem_purl": None,
+            "declared_cpe": None,
+            "generic_or_unsupported_purl_only": None,
+            "no_supported_purl_or_cpe": None,
+            "projection_unknown": None,
+            "state": "unknown",
+            "reason_code": "package_projection_pending",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "not yet classified" in rendered
+        assert "has not finished classifying this SBOM" in rendered
+        assert "Run status again in a moment" in rendered
+        assert "reason_code: package_projection_pending" in rendered
+        # This state is the server still working, not a defect in the SBOM.
+        assert "predate" not in rendered
+        assert "legacy" not in rendered.lower()
+
+    def test_unrecognised_reason_code_fails_closed(self, status_response_clean, monkeypatch):
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 5,
+            "package_candidates": 5,
+            "inventory_kind_counts": {"package_candidate": 5},
+            "ecosystem_purl": 5,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "some_future_state",
+            "reason_code": "some_future_reason",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "unrecognised" in rendered
+        assert "does not recognise the coverage state" in rendered
+        assert "0 found" in rendered
+        assert "0 (clean)" not in rendered
+
+    def test_empty_new_object_fails_closed_instead_of_silence(
+        self, status_response_clean, monkeypatch
+    ):
+        # The server sent the package object, so it wins over the old one
+        # even when it is empty: an empty object is an unrecognised state
+        # and must render the fail-closed row, never nothing and never the
+        # old object's rows.
+        status_response_clean["version_package_matching_coverage"] = {}
+        status_response_clean["version_matching_identifier_coverage"] = {
+            "total_components": 5,
+            "ecosystem_purl": 2,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 3,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "Matching Identifier Coverage" in rendered
+        assert "unrecognised" in rendered
+        assert "does not recognise the coverage state" in rendered
+        assert "2/5 components declare" not in rendered
+        assert "reason_code:" not in rendered
+
+    def test_no_package_candidates_with_data_entries_does_not_claim_files_only(
+        self, status_response_clean, monkeypatch
+    ):
+        # The inventory can hold data or engine-unsupported entries without a
+        # single package; the explanation must not call them files or
+        # operating-system entries.
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 3,
+            "package_candidates": 0,
+            "inventory_kind_counts": {"package_candidate": 0, "data": 3},
+            "ecosystem_purl": 0,
+            "declared_cpe": 0,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 0,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "no_package_candidates",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "no packages to measure" in rendered
+        assert "The SBOM lists 3 entries but none is a package" in rendered
+        assert "files or other non-package inventory" in rendered
+        assert "operating-system, or container entries only" not in rendered
+
+    def test_category_counts_use_package_candidates_as_denominator(
+        self, status_response_clean, monkeypatch
+    ):
+        """A files-heavy SBOM measures coverage against packages, not total entries."""
+        status_response_clean["version_package_matching_coverage"] = {
+            "classifier_version": 2,
+            "total_components": 6132,
+            "package_candidates": 440,
+            "inventory_kind_counts": {
+                "package_candidate": 440,
+                "file": 5691,
+                "context": 1,
+                "data": 0,
+                "engine_unsupported": 0,
+                "unknown": 0,
+            },
+            "ecosystem_purl": 426,
+            "declared_cpe": 13,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 1,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+
+        rendered = self._render(status_response_clean, monkeypatch)
+
+        assert "439/440 packages" in rendered
+        assert "440/6132" not in rendered
+        assert "5691/" not in rendered
+
+    def test_json_output_contains_both_objects_unchanged(self, status_response_clean, monkeypatch):
+        old_coverage = {
+            "total_components": 6132,
+            "ecosystem_purl": 5000,
+            "declared_cpe": 100,
+            "generic_or_unsupported_purl_only": 1000,
+            "no_supported_purl_or_cpe": 32,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+        new_coverage = {
+            "classifier_version": 2,
+            "total_components": 6132,
+            "package_candidates": 440,
+            "inventory_kind_counts": {"package_candidate": 440, "file": 5691},
+            "ecosystem_purl": 426,
+            "declared_cpe": 13,
+            "generic_or_unsupported_purl_only": 0,
+            "no_supported_purl_or_cpe": 1,
+            "projection_unknown": 0,
+            "state": "incomplete",
+            "reason_code": "components_without_matching_identifier",
+        }
+        status_response_clean["version_matching_identifier_coverage"] = old_coverage
+        status_response_clean["version_package_matching_coverage"] = new_coverage
+
+        rendered = self._render_json(status_response_clean, monkeypatch)
+        parsed = json.loads(rendered)
+
+        assert parsed["version_matching_identifier_coverage"] == old_coverage
+        assert parsed["version_package_matching_coverage"] == new_coverage
+
+
 class TestWaitReadyGateLabel:
     """Tests that wait-ready labels its success message by the gated field.
 

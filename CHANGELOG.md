@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `status` now prefers the server's package-based matching-identifier coverage
+  when the server provides it, so file, operating-system, and container
+  entries listed in an SBOM no longer count against coverage. Older servers
+  that only send the previous all-entries coverage object keep the
+  previous rendering.
+
 ## [4.5.0] - 2026-09-07
 
 ### Documentation

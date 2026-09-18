@@ -200,6 +200,86 @@ def _add_identifier_coverage_rows(table: Table, coverage: dict) -> None:
         table.add_row("", f"[dim](reason_code: {escape(str(reason_code))})[/dim]")
 
 
+_COVERAGE_PACKAGE_INCOMPLETE_CAVEAT = (
+    "This coverage figure counts only the components the scan engine treats as "
+    "packages. Files, operating-system entries, and container entries listed in "
+    "the SBOM are not counted toward it."
+)
+
+_COVERAGE_NO_PACKAGE_CANDIDATES_CAVEAT = (
+    "The SBOM lists {total} entries but none is a package the scanner can match "
+    "(files or other non-package inventory); vulnerability matching had nothing "
+    "to check."
+)
+
+_COVERAGE_PACKAGE_PENDING_CAVEAT = (
+    "The server has not finished classifying this SBOM's entries into "
+    "packages, files, and other kinds yet. Run status again in a moment."
+)
+
+
+def _add_package_matching_coverage_rows(table: Table, coverage: dict) -> None:
+    """Render package-based matching-identifier coverage next to the vulnerability result.
+
+    This coverage object counts only entries the scan engine treats as packages;
+    files, operating-system, and container entries are excluded from the
+    denominator. The reason code determines the explanation; an unfamiliar or
+    inconsistent state/reason pair fails closed.
+    """
+    state = coverage.get("state")
+    reason_code = coverage.get("reason_code")
+
+    if state == "incomplete" and reason_code == "components_without_matching_identifier":
+        package_candidates = coverage.get("package_candidates") or 0
+        supported_identifier_count = (coverage.get("ecosystem_purl") or 0) + (
+            coverage.get("declared_cpe") or 0
+        )
+        coverage_summary = (
+            f"{supported_identifier_count}/{package_candidates} packages declare "
+            "a supported ecosystem PURL or validated CPE"
+        )
+        table.add_row(
+            "  Matching Identifier Coverage",
+            f"[yellow]{coverage_summary}[/yellow]",
+        )
+        table.add_row("", f"[dim]{escape(_COVERAGE_PACKAGE_INCOMPLETE_CAVEAT)}[/dim]")
+        if (coverage.get("projection_unknown") or 0) > 0:
+            table.add_row(
+                "",
+                f"[dim]{escape(_COVERAGE_LEGACY_SUBSET_CAVEAT)}[/dim]",
+            )
+    elif state == "incomplete" and reason_code == "no_components":
+        table.add_row(
+            "  Matching Identifier Coverage",
+            "[yellow]no components to measure[/yellow]",
+        )
+        table.add_row("", f"[dim]{escape(_COVERAGE_NO_COMPONENTS_CAVEAT)}[/dim]")
+    elif state == "incomplete" and reason_code == "no_package_candidates":
+        total = coverage.get("total_components") or 0
+        table.add_row(
+            "  Matching Identifier Coverage",
+            "[yellow]no packages to measure[/yellow]",
+        )
+        table.add_row(
+            "",
+            f"[dim]{escape(_COVERAGE_NO_PACKAGE_CANDIDATES_CAVEAT.format(total=total))}[/dim]",
+        )
+    elif state == "unknown" and reason_code == "legacy_projection_unknown":
+        table.add_row("  Matching Identifier Coverage", "[dim]not verifiable[/dim]")
+        table.add_row("", f"[dim]{escape(_COVERAGE_NOT_VERIFIABLE_CAVEAT)}[/dim]")
+    elif state == "unknown" and reason_code == "package_projection_pending":
+        table.add_row("  Matching Identifier Coverage", "[dim]not yet classified[/dim]")
+        table.add_row("", f"[dim]{escape(_COVERAGE_PACKAGE_PENDING_CAVEAT)}[/dim]")
+    else:
+        # A state this CLI version does not know. Fail closed, but do not
+        # attribute it to a cause we have not established.
+        table.add_row("  Matching Identifier Coverage", "[dim]unrecognised[/dim]")
+        table.add_row("", f"[dim]{escape(_COVERAGE_UNRECOGNISED_CAVEAT)}[/dim]")
+
+    if reason_code:
+        table.add_row("", f"[dim](reason_code: {escape(str(reason_code))})[/dim]")
+
+
 def format_status_output(data: dict, output_format: str, verbose: bool = False) -> None:
     if output_format == "json":
         console.print_json(json.dumps(data, indent=2))
@@ -268,7 +348,13 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
         table.add_row("  Status", "[dim]No SBOM uploaded[/dim]")
 
     # Vulnerabilities
-    coverage = data.get("version_matching_identifier_coverage")
+    # Newer servers report a package-based coverage object that excludes
+    # files, operating-system, and container entries from the denominator.
+    # Older servers only ever send the all-entries object; fall back to it.
+    coverage = data.get("version_package_matching_coverage")
+    use_package_coverage = isinstance(coverage, dict)
+    if not use_package_coverage:
+        coverage = data.get("version_matching_identifier_coverage")
 
     table.add_row("", "")
     table.add_row("[bold]Vulnerabilities[/bold]", "")
@@ -304,8 +390,13 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
         "complete",
         "all_components_declare_matching_identifier",
     )
-    if coverage and not coverage_complete:
-        _add_identifier_coverage_rows(table, coverage)
+    # A package coverage object the server did send is always rendered, even
+    # when empty: an empty object is an unrecognised state and fails closed.
+    if (coverage or use_package_coverage) and not coverage_complete:
+        if use_package_coverage:
+            _add_package_matching_coverage_rows(table, coverage)
+        else:
+            _add_identifier_coverage_rows(table, coverage)
 
     # Documents checklist
     table.add_row("", "")
