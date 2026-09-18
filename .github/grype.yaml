@@ -13,17 +13,32 @@
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
 # Derived from an unfiltered Grype 0.116.1 scan, most recently re-run
-# 2026-09-05 against DB schema v6.1.9 built 2026-09-05T06:27:00Z, on
-# local image sha256:20790f08413ab256c5a98a4f586012ac60d27870359d95b0ed5a27d83b5e1d69
-# built from the 4.4.0 release tree with bases
-# dhi.io/python:3.14-dev@sha256:f1e8ebcc3ba8d0dc43885ed2852d9b80159044a8d2e3baf0b30c4c726de37c55
-# and dhi.io/python:3.14@sha256:9062bae24604a79f5233ce8fa70095dbc3033ac073ef6db23ae1019668fc1fa1,
+# 2026-09-18 against DB schema v6.1.9 built 2026-09-18T06:30:15Z, on
+# local image sha256:90721357f0740f3c5b35b346bac861768d0936154bcf13adeee9ac5c3ec268f9
+# built from the 4.6.0 release tree with bases
+# dhi.io/python:3.14-dev@sha256:d8b5d4db6510d666e22d4fa87d4545ad0bb11a7ef9ecb54aee40a12388a65ab9
+# and dhi.io/python:3.14@sha256:71245bfb85e3632288e5f9816dd9fb809e65b10e1e20f25bedf4d1a92b0a4ddd,
 # with CRA Evidence Grype engine craevidence-v0.117.0-p6. The exact gate
-# reported no fixed High or Critical vulnerabilities, so there are no waivers.
-# The comparison scan with Grype 0.111.0 lists GO-2026-6179 and GO-2026-6180
-# at High severity for golang.org/x/mod 0.38.0 in /usr/local/bin/grype, fixed
-# in v0.40.0. They remain visible in the comparison inventory and must be
-# resolved by a future governed engine rebuild, not by an ignore entry here.
+# reported one fixed High finding, waived below. The comparison scan with
+# Grype 0.111.0 lists GO-2026-6179 and GO-2026-6180 at High severity for
+# golang.org/x/mod 0.38.0 in /usr/local/bin/grype, fixed in v0.40.0. They
+# remain visible in the comparison inventory and must be resolved by a
+# future governed engine rebuild, not by an ignore entry here.
 # Re-evaluate at every release.
 
-ignore: []
+ignore:
+  # GHSA-2v4p-qf9q-27wj (CVE-2026-84445), google.golang.org/grpc v1.83.1 in
+  # /usr/local/bin/grype, fixed in 1.83.2. The advisory is a denial of
+  # service in gRPC-Go servers created with xds.NewGRPCServer(): a request
+  # without :authority and Host headers panics the server. The shipped
+  # engine is a command-line scanner that never starts a gRPC server and
+  # never imports the xds package; grpc is an indirect module dependency of
+  # its container-registry and SBOM libraries. No network listener exists in
+  # the image. Waived for the exact observed version only. Removal trigger:
+  # the next governed engine build, which must move grpc to 1.83.2 or newer;
+  # this entry then fails to match and is deleted.
+  - vulnerability: GHSA-2v4p-qf9q-27wj
+    package:
+      name: google.golang.org/grpc
+      version: v1.83.1
+      location: /usr/local/bin/grype
