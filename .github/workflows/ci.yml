@@ -170,7 +170,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       # Login to the DHI registry to pull pinned base images. When DHI_REGISTRY_USERNAME
       # or DHI_REGISTRY_TOKEN is absent (e.g., forks or PRs without repository secrets),
@@ -191,7 +191,7 @@ jobs:
       - name: Configure AWS credentials for the engine pull
         id: ecr-creds
         continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c  # v6.2.3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_ECR_ENGINE_ROLE_ARN }}
           aws-region: eu-west-1
@@ -761,13 +761,13 @@ jobs:
       # both image stages, so an amd64 runner needs arm64 binfmt support before
       # Buildx can produce the declared arm64 image.
       - name: Set up QEMU for ARM64
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
         with:
           image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       # The canonical release image must come from the hardened base, so a
       # failed DHI login fails the release here.
@@ -782,7 +782,7 @@ jobs:
       # This login is non-optional: a failed OIDC/ECR step fails the release,
       # exactly like the hardened-base requirement above.
       - name: Configure AWS credentials for the engine pull
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c  # v6.2.3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_ECR_ENGINE_ROLE_ARN }}
           aws-region: eu-west-1
@@ -894,7 +894,7 @@ jobs:
       - name: Build and push the canonical multi-arch image to GHCR
         if: steps.existing.outputs.digest == ''
         id: build-ghcr
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: ./release-src
           platforms: linux/amd64,linux/arm64
