@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING:** The `distributor` command group (`create`, `update`,
+  `complete`, `stop-ship`, `list`, `get`). The server no longer serves the
+  `/api/v1/distributor/verifications` routes these commands called, so every
+  one of them failed against a current server. Any pipeline or script that
+  still invokes `craevidence distributor ...` must remove that call; the
+  command group no longer exists. The `--cra-role` option on upload and
+  version commands is unaffected: `manufacturer`, `importer`, and
+  `distributor` remain valid per-product role values.
+
 ## [4.6.0] - 2026-09-18
 
 ### Changed

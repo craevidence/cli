@@ -52,7 +52,7 @@ covered in the [installation guide](https://github.com/craevidence/cli/blob/main
 | Page | Contents |
 |---|---|
 | [Local commands](https://github.com/craevidence/cli/blob/main/docs/local-commands.md) | `check`, `eol-check`, `egress-check`, `secrets-check`, `config-check`, `code-check`, `draft`, `assessment`, `db`, and the offline template scaffold. |
-| [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Version creation, uploads, scan, status, risk assessment status, release lifecycle, distributor, profiles, validation, and verification. |
+| [Account commands](https://github.com/craevidence/cli/blob/main/docs/account-commands.md) | Version creation, uploads, scan, status, risk assessment status, release lifecycle, profiles, validation, and verification. |
 | [CI/CD integration](https://github.com/craevidence/cli/blob/main/docs/ci-cd.md) | GitHub Action, GitLab Component, Docker, Jenkins, OpenSSF Scorecard, and complyctl. |
 | [Installation](https://github.com/craevidence/cli/blob/main/docs/installation.md) | PyPI, Docker, container registries, and from source. |
 | [Troubleshooting](https://github.com/craevidence/cli/blob/main/docs/troubleshooting.md) | Common errors and fixes. |

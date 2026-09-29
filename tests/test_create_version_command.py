@@ -950,7 +950,7 @@ async def test_reuse_existing_does_not_recover_unrelated_conflict(monkeypatch) -
 
 @pytest.mark.asyncio
 async def test_only_product_and_version_endpoints_are_contacted(monkeypatch) -> None:
-    """No upload, scan, release, risk-assessment, or due-diligence endpoint."""
+    """No upload, scan, release, or risk-assessment endpoint."""
     client = _client()
     client._request_with_retry = AsyncMock(return_value=_products_response())
     recorder = _recorder()
@@ -961,7 +961,7 @@ async def test_only_product_and_version_endpoints_are_contacted(monkeypatch) -> 
     urls = [call.args[1] for call in client._request_with_retry.await_args_list]
     urls += [post["url"] for post in recorder.posts]
     assert urls == [PRODUCTS_URL, VERSIONS_URL]
-    for fragment in ("/sarif", "/scan", "release-state", "risk-assessment", "distributor"):
+    for fragment in ("/sarif", "/scan", "release-state", "risk-assessment"):
         assert not any(fragment in url for url in urls)
 
 

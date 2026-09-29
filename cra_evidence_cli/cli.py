@@ -20,7 +20,6 @@ from cra_evidence_cli.commands import (
     create_version,
     db,
     diagram,
-    distributor,
     draft,
     egress,
     eol,
@@ -199,8 +198,6 @@ cli.add_command(code_evidence.code_evidence)
 
 cli.add_command(export.export)
 cli.add_command(compare.compare)
-
-cli.add_command(distributor.distributor)
 
 cli.add_command(profile.setup_profile)
 cli.add_command(profile.show_profile)

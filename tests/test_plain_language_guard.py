@@ -54,12 +54,9 @@ ALLOWED: dict[str, list[str]] = {
     "cra_evidence_cli/assessment/templates/operating-system.yaml": [r"Annex I\b"],
     "cra_evidence_cli/assessment/templates/router-gateway.yaml": [r"Annex I\b"],
     "cra_evidence_cli/assessment/templates/vpn.yaml": [r"Annex I\b"],
-    "cra_evidence_cli/client.py": [r"Annex III/IV", r"CRA Article 20\b"],
+    "cra_evidence_cli/client.py": [r"Annex III/IV"],
     "cra_evidence_cli/commands/assessment.py": [r"Annex I\b"],
     "cra_evidence_cli/commands/diagram.py": [r"Annex VII, point 2\(a\)", r"Annex VII\b"],
-    "cra_evidence_cli/commands/distributor.py": [
-        r"Article 20\(3\)", r"CRA Article 20\b",
-    ],
     "cra_evidence_cli/commands/export.py": [r"Annex VII\b"],
     "cra_evidence_cli/commands/profile.py": [
         r"Article 32\(1\)\([a-d]\)", r"Article 13\(8\)", r"Annex I\b",
@@ -167,7 +164,7 @@ def test_guard_catches_known_regression_shapes() -> None:
         ("README.md", "per Annex I \u00a71(b) rules"),
         ("docs/local-commands.md", "see Annex 7 for details"),
         ("cra_evidence_cli/commands/profile.py", "Article 32(99) applies"),
-        ("cra_evidence_cli/commands/distributor.py", "CRA Article 20(99)"),
+        ("cra_evidence_cli/client.py", "CRA Article 20(99)"),
         ("cra_evidence_cli/commands/upload.py", "CRA Annex III/VI subcategory"),
         ("CHANGELOG.md", "Article 32-99 range"),
         ("README.md", "Annex I/IX mapping"),

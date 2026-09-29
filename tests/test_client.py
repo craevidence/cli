@@ -85,7 +85,7 @@ def test_every_authenticated_async_client_uses_the_tls_factory():
     assert client_source.count("httpx.AsyncClient(") == 1
     assert "httpx.AsyncClient(" not in components_source
     assert "httpx.AsyncClient(" not in gemara_source
-    assert client_source.count("self._http_client()") == 24
+    assert client_source.count("self._http_client()") == 20
     assert components_source.count("client._http_client()") == 1
     assert gemara_source.count("client._http_client()") == 3
 
