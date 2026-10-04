@@ -52,7 +52,7 @@
 # Scan engine: grype fork with improvements. The default is the digest-pinned
 # engine artifact. An override must provide the same supported CRA Evidence
 # engine contract, including /grype, /LICENSE and /NOTICE.
-ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:ee7e003df4e8a21a734338ea7b431ed2a7085985fba8f9374d0db253c920dc70
+ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:b7c16dbc0b244034a39309653ea2324e4cf25e50648027511beb2e67f63bc0a8
 
 ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:2862b68470650afe57e569b24695d6df9184105ee298fdf83ca7572ea076fe5e
 # Declared here (before the first FROM) because Docker only resolves ARGs in

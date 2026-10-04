@@ -284,7 +284,7 @@ def test_release_packaging_reuses_the_promoted_engine_artifact():
         for step in publish_steps
     )
 
-    digest = "sha256:ee7e003df4e8a21a734338ea7b431ed2a7085985fba8f9374d0db253c920dc70"
+    digest = "sha256:b7c16dbc0b244034a39309653ea2324e4cf25e50648027511beb2e67f63bc0a8"
     assert workflow_text.count(digest) == 4
     assert '"${payload}/IMAGE_DIGEST"' in workflow_text
     assert "actual=$(cat engine/IMAGE_DIGEST)" in workflow_text

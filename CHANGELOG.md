@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The bundled CRA Evidence Grype engine is updated to v0.117.0-p14. When a
+  package version cannot be compared with an advisory, the engine reports the
+  package as not fully assessed instead of treating it as unaffected or fixed,
+  and keeps the results of queries that did complete. Its gRPC and x/mod
+  dependencies use their fixed releases.
 - The hardened Python 3.14 builder and runtime base-image digests are refreshed
   and remain pinned by digest.
 

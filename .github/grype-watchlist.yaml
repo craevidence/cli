@@ -18,14 +18,14 @@
 # build_info_audit):
 #   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
 #   scanner: Grype 0.116.1
-#   database: schema v6.1.9, built 2026-09-05T06:27:00Z
-#   image: built 2026-09-05 from the 4.4.0 release tree with bases
-#     dhi.io/python:3.14-dev@sha256:f1e8ebcc3ba8d0dc43885ed2852d9b80159044a8d2e3baf0b30c4c726de37c55
-#     and dhi.io/python:3.14@sha256:9062bae24604a79f5233ce8fa70095dbc3033ac073ef6db23ae1019668fc1fa1,
-#     with CRA Evidence Grype engine craevidence-v0.117.0-p6
-#   image ID: sha256:20790f08413ab256c5a98a4f586012ac60d27870359d95b0ed5a27d83b5e1d69
-#   unfiltered JSON sha256: 6fa1c8891c2859e92d3a76df7bcc0c6a94eabbd8aa6d7ac800d85d1c79d8e0df
-#   review date: 2026-09-05
+#   database: schema v6.1.10, built 2026-10-04T08:11:47Z
+#   image: built 2026-10-04 from the 4.8.0 release tree with bases
+#     dhi.io/python:3.14-dev@sha256:2862b68470650afe57e569b24695d6df9184105ee298fdf83ca7572ea076fe5e
+#     and dhi.io/python:3.14@sha256:1d19cb038f46dcc8cfe6fdff21fe70d32787e7cfea220cb131f340fa37cece08,
+#     with CRA Evidence Grype engine craevidence-v0.117.0-p14
+#   image ID: sha256:3cb89f597a62eab4e78d6bede80c7e1abd97803c0945d5488352c813b4360780
+#   unfiltered JSON sha256: a9cca2fd735dff620f1c40d3e8503fb5ebd79eb3ed15ed361ac890b2c87a7c3c
+#   review date: 2026-10-04
 # Review at every release.
 
 watchlist:
@@ -33,77 +33,93 @@ watchlist:
     # Debian Trixie packages from the hardened runtime base. fix_state is the
     # per-advisory state reported by the scan above: "wont-fix" is an explicit
     # distribution decision, "not-fixed" means no fix is available yet.
-    - package: libc6 2.41-12+deb13u3+dhi2
-      also: [libc6-dev 2.41-12+deb13u3+dhi2, libc-dev-bin 2.41-12+deb13u3+dhi2]
+    - package: libc6 2.41-12+deb13u4+dhi1
+      also: [libc6-dev 2.41-12+deb13u4+dhi1]
       advisories:
-        - { id: CVE-2026-5450, severity: Critical, fix_state: wont-fix }
         - { id: CVE-2026-5435, severity: High, fix_state: wont-fix }
-        - { id: CVE-2026-5928, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-19499, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-6238, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-6791, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-8674, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-18374, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-19542, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-77117, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-80489, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-86805, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-89092, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-6368, severity: Low, fix_state: wont-fix }
-        - { id: CVE-2026-19542, severity: Unknown, fix_state: wont-fix }
-        - { id: CVE-2026-19499, severity: Unknown, fix_state: wont-fix }
-        - { id: CVE-2026-77117, severity: Unknown, fix_state: wont-fix }
-        - { id: CVE-2026-80489, severity: Unknown, fix_state: wont-fix }
+        - { id: CVE-2026-95818, severity: Low, fix_state: wont-fix }
+        - { id: CVE-2026-97399, severity: Low, fix_state: wont-fix }
         - { id: CVE-2010-4756, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2018-20796, severity: Negligible, fix_state: not-fixed }
+        - { id: CVE-2019-9192, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010022, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010023, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010024, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010025, severity: Negligible, fix_state: not-fixed }
-        - { id: CVE-2019-9192, severity: Negligible, fix_state: not-fixed }
-      note: "glibc issues Debian marks wont-fix or leaves unfixed; the higher-severity items concern scanf width handling, deprecated DNS printing functions, and special encodings that no known code path in this image exercises."
-    - package: libexpat1 2.8.3-1~deb13u1+dhi2
-      also: [libexpat1-dev 2.8.3-1~deb13u1+dhi2]
+      note: "glibc issues Debian marks wont-fix or leaves unfixed. The High items concern the deprecated DNS record printing functions (ns_printrr, ns_printrrf, fp_nquery) and strfmon right-justified width padding. The Medium items concern further checks in those printing functions, tilde expansion, long resolver search lists, the fopen ccs= mode extension, tdelete, JISX0213 conversions, $ORIGIN expansion for setuid programs and the nscd service. The image contains no setuid or setgid files and no nscd binary (checked 2026-10-04)."
+    - package: libexpat1 2.8.3-1~deb13u1+dhi4
       advisories:
         - { id: CVE-2026-66046, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-76956, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-76957, severity: High, fix_state: wont-fix }
         - { id: CVE-2025-66382, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-76956, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-76957, severity: Medium, fix_state: wont-fix }
-      note: "The refreshed base ships expat 2.8.3. Debian marks these findings wont-fix, and no known CLI code path parses untrusted XML with expat."
-    - package: libsqlite3-0 3.46.1-7+deb13u1+dhi2
+        - { id: CVE-2026-102633, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-93990, severity: High, fix_state: not-fixed }
+      note: "The refreshed base ships expat 2.8.3. Debian marks most of these findings wont-fix; CVE-2026-93990 (UTF-16 surrogate validation, fixed upstream in 2.8.5) has no Debian fix yet. Python's XML parser in the image uses its bundled expat 2.8.5, the bundled engine is a static Go binary that reads Maven pom.xml files with Go's own XML decoder, and Opengrep links only libc, so none of them loads this package (checked 2026-10-04)."
+    - package: libsqlite3-0 3.46.1-7+deb13u2+dhi1
       advisories:
-        - { id: CVE-2026-11822, severity: High, fix_state: wont-fix }
-        - { id: CVE-2026-11824, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-50812, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-50813, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-39113, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2021-45346, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2025-70873, severity: Negligible, fix_state: not-fixed }
-      note: "The higher-severity items require opening a crafted SQLite database and executing FTS5 MATCH; no known code path in this image opens user-supplied SQLite databases."
+      note: "The remaining Medium items concern the SQLite Session Extension: a NULL pointer dereference on a malformed changeset and an information leak when merging changesets. The CLI's own Python code does not import sqlite3, and the bundled engine reads its vulnerability database with a pure-Go SQLite implementation in a static binary, so it does not load this library (checked 2026-10-04)."
     - package: libncursesw6 6.5+20250216-2+dhi4
       also: [libtinfo6 6.5+20250216-2+dhi4, ncurses-base 6.5+20250216-2+dhi4, ncurses-bin 6.5+20250216-2+dhi4]
       advisories:
         - { id: CVE-2025-69720, severity: High, fix_state: wont-fix }
         - { id: CVE-2025-6141, severity: Medium, fix_state: wont-fix }
       note: "Debian marks these ncurses infocmp issues no-dsa or minor; no known code path in this image processes untrusted infocmp input."
-    - package: libuuid1 2.41.5-0+deb13u1+dhi2
+    - package: libuuid1 2.41.5-0+deb13u1+dhi3
       advisories:
-        - { id: CVE-2026-3184, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-76642, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-78408, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-78409, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-78410, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-3184, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2022-0563, severity: Negligible, fix_state: not-fixed }
       note: "util-linux issues; the CLI runs as a non-root user and performs no privileged util-linux operations."
-    - package: zlib1g 1:1.3.dfsg+really1.3.1-1+dhi3
-      also: [zlib1g-dev 1:1.3.dfsg+really1.3.1-1+dhi3]
+    - package: zlib1g 1:1.3.dfsg+really1.3.1-1+dhi4
       advisories:
-        - { id: CVE-2026-85091, severity: High, fix_state: not-fixed }
         - { id: CVE-2026-27171, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-85091, severity: High, fix_state: not-fixed }
       note: "Runtime base package, no Debian fix available."
     - package: libbz2-1.0 1.0.8-6+dhi2
       advisories:
         - { id: CVE-2026-42250, severity: Medium, fix_state: wont-fix }
       note: "Runtime base package, no Debian fix available."
+    - package: libstdc++6 14.2.0-19+dhi5
+      also: [gcc-14-base 14.2.0-19+dhi5, libgcc-s1 14.2.0-19+dhi5, libstdc++-14-dev 14.2.0-19+dhi5]
+      advisories:
+        - { id: CVE-2026-95619, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-102010, severity: High, fix_state: not-fixed }
+      note: "GCC 14 runtime packages from the hardened runtime base (gcc-14-base, libgcc-s1, libstdc++6) plus the libstdc++ headers (libstdc++-14-dev) copied in from the build stage. The advisories concern libstdc++: an integer overflow in the aligned operator new that can lead to an undersized allocation, and a use-after-free in erase_if on a binary heap priority queue."
 
     - package: libxml2 2.12.7+dfsg+really2.9.14-2.1+deb13u3
       advisories:
         - { id: CVE-2026-6653, severity: Critical, fix_state: wont-fix }
+        - { id: CVE-2026-74860, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-86138, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-86139, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-86140, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-86142, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-86143, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-86144, severity: High, fix_state: not-fixed }
+        - { id: CVE-2026-76781, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-86137, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-86141, severity: Low, fix_state: not-fixed }
         - { id: CVE-2026-11979, severity: Negligible, fix_state: not-fixed }
-      note: "Debian marks the critical xmlSchemaValidate item wont-fix for trixie; no known code path in this image validates untrusted XML schemas, and the CLI parses no XML at runtime."
+      note: "Installed for the pinned libclang frontend. Debian marks the Critical xmlParseInternalSubset use-after-free (CVE-2026-6653) wont-fix for trixie, and the items fixed upstream in libxml2 2.15.4 have no Debian fix yet; they concern DTD and entity handling, dictionary and URI string sizing, XPointer and XInclude processing, output callbacks, regular expressions and catalogs. The bundled engine parses XML with Go's own decoder in a static binary and Opengrep links only libc, so neither loads this library (checked 2026-10-04)."
     - package: libclang1-18 1:18.1.8-18+b1
       also: [libclang-common-18-dev 1:18.1.8-18+b1, libllvm18 1:18.1.8-18+b1]
       advisories:
@@ -117,16 +133,20 @@ watchlist:
   # scanner currently filters out, so the dependency stays visible.
   build_info_audit:
     - package: golang.org/x/crypto v0.56.0
-      source: go build info of CRA Evidence Grype engine craevidence-v0.117.0-p6
+      source: go build info of CRA Evidence Grype engine craevidence-v0.117.0-p14
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
-      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-09-05)."
+      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-10-04)."
 
   resolved_since_last_review:
+    - ids: [CVE-2026-5450, CVE-2026-5928]
+      note: "Previously listed against libc6 2.41-12+deb13u3+dhi2. The refreshed 2.41-12+deb13u4+dhi1 package is still scanned, but the 2026-10-04 database used above no longer reports these advisories against it."
+    - ids: [CVE-2026-11822, CVE-2026-11824, CVE-2026-39113]
+      note: "Previously listed against libsqlite3-0 3.46.1-7+deb13u1+dhi2. The refreshed 3.46.1-7+deb13u2+dhi1 package is still scanned, but the 2026-10-04 database used above no longer reports these advisories against it."
     - id: CVE-2026-72522
-      note: "Previously listed against libexpat1 2.8.2-1~deb13u1+dhi0. The refreshed 2.8.3-1~deb13u1+dhi2 package is still scanned, but the database used above no longer reports this advisory against it."
+      note: "Previously listed against libexpat1 2.8.2-1~deb13u1+dhi0. At the 2026-08-29 review the refreshed 2.8.3-1~deb13u1+dhi2 package no longer had this advisory reported against it; the 2026-10-04 scan of 2.8.3-1~deb13u1+dhi4 does not report it either."
     - ids: [CVE-2026-27456, CVE-2026-13595, CVE-2026-53612, CVE-2026-53613, CVE-2026-53614, CVE-2026-53615, CVE-2025-14104]
-      note: "Previously listed against libuuid1 2.41.5-0+deb13u1. The refreshed 2.41.5-0+deb13u1+dhi2 package is still scanned, but the database used above no longer reports these advisories against it."
+      note: "Previously listed against libuuid1 2.41.5-0+deb13u1. At the 2026-08-29 review the refreshed 2.41.5-0+deb13u1+dhi2 package no longer had these advisories reported against it; the 2026-10-04 scan of 2.41.5-0+deb13u1+dhi3 does not report them either."
     - ids: [GO-2026-4970, CVE-2026-39822, GO-2026-5037, CVE-2026-27145, GO-2026-5038, CVE-2026-42504]
       note: "The p3 engine is built with Go 1.26.5; the 2026-08-09 scan no longer reports these Go 1.26.3 findings."
     - id: GHSA-hc8v-wwc9-vgxm
@@ -134,12 +154,12 @@ watchlist:
     - ids: [GHSA-x744-4wpc-v9h2, GHSA-pxq6-2prw-chj9, GHSA-vp62-88p7-qqf5]
       note: "The p3 engine removed the monolithic github.com/docker/docker module; the 2026-08-09 scan no longer reports these findings."
     - ids: [CVE-2025-59375, CVE-2026-25210, CVE-2026-41080, CVE-2026-45186]
-      note: "Previously listed against libexpat1 2.7.1-2+dhi5. The refreshed runtime base ships expat 2.8.2-1~deb13u1+dhi0 and the scan above no longer reports them."
+      note: "Previously listed against libexpat1 2.7.1-2+dhi5. At the 2026-07-31 review the refreshed runtime base shipped expat 2.8.2-1~deb13u1+dhi0 and that scan no longer reported them; the 2026-10-04 scan of 2.8.3-1~deb13u1+dhi4 does not report them either."
     - id: GO-2026-5970
-      note: "Previously reported against golang.org/x/text v0.38.0 in the bundled binaries. Syft 1.50.0 and Grype 0.116.1 embed v0.40.0."
+      note: "Previously reported against golang.org/x/text v0.38.0 in the bundled binaries. At that review the bundled Syft 1.50.0 and Grype 0.116.1 embedded v0.40.0; the p14 engine embeds v0.41.0."
     - id: GHSA-hrxh-6v49-42gf
-      note: "Previously reported against google.golang.org/grpc v1.80.0 in the bundled binaries. Syft 1.50.0 and Grype 0.116.1 embed v1.82.1."
+      note: "Previously reported against google.golang.org/grpc v1.80.0 in the bundled binaries. At that review the bundled Syft 1.50.0 and Grype 0.116.1 embedded v1.82.1; the p14 engine embeds v1.83.2."
     - ids: [GHSA-rg2x-37c3-w2rh, GHSA-x86f-5xw2-fm2r]
-      note: "Previously listed against github.com/docker/docker v28.5.2+incompatible. The package version is unchanged, but the vulnerability database used above no longer reports these advisories against it (checked 2026-07-31)."
+      note: "Previously listed against github.com/docker/docker v28.5.2+incompatible. At the 2026-07-31 check the version was unchanged but the database no longer reported these advisories against it; the p3 and later engines no longer embed that module."
     - id: CVE-2026-34743
-      note: "Previously waived against liblzma5. The package is still shipped (5.8.1-1+dhi1), but the vulnerability database used above no longer reports the advisory against this tuple (checked 2026-07-31)."
+      note: "Previously waived against liblzma5. The package is still shipped (5.8.1-1+dhi1); the database stopped reporting the advisory against this tuple by the 2026-07-31 check, and the 2026-10-04 scan does not report it either."
