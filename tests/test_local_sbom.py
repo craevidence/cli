@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from cra_evidence_cli.local.models import identifier_coverage
 from cra_evidence_cli.local.sbom import load_sbom
 
@@ -99,6 +101,32 @@ def test_cyclonedx_empty_string_cpe_does_not_crash_and_is_not_counted(tmp_path):
     assert coverage["components_with_identifier_field"] == 0
 
 
+@pytest.mark.parametrize(
+    "expression",
+    ["MIT OR Apache-2.0", "MIT AND BSD-3-Clause", "Apache-2.0 WITH LLVM-exception"],
+)
+def test_cyclonedx_license_expression_is_preserved_with_id_and_name(tmp_path, expression):
+    sbom = _write(
+        tmp_path / "sbom.json",
+        _cyclonedx(
+            [
+                {
+                    "name": "licensed-widget",
+                    "licenses": [
+                        {"license": {"id": "MIT"}},
+                        {"license": {"name": "Custom License"}},
+                        {"expression": expression},
+                    ],
+                }
+            ]
+        ),
+    )
+
+    components, _ = load_sbom(sbom)
+
+    assert components[0].licenses == ["MIT", "Custom License", expression]
+
+
 def test_cyclonedx_nested_components_are_parsed_and_counted(tmp_path):
     sbom = _write(
         tmp_path / "nested-sbom.json",
@@ -140,6 +168,112 @@ def test_cyclonedx_nested_components_are_parsed_and_counted(tmp_path):
 
 
 # SPDX
+
+
+def test_spdx_absent_conclusion_uses_declared_license(tmp_path):
+    sbom = _write(
+        tmp_path / "sbom.json",
+        _spdx([{"name": "declared-widget", "licenseDeclared": "Apache-2.0"}]),
+    )
+
+    components, _ = load_sbom(sbom)
+
+    assert components[0].licenses == ["Apache-2.0"]
+
+
+def test_spdx_noassertion_conclusion_uses_declared_license(tmp_path):
+    sbom = _write(
+        tmp_path / "sbom.json",
+        _spdx(
+            [
+                {
+                    "name": "declared-widget",
+                    "licenseConcluded": "NOASSERTION",
+                    "licenseDeclared": "Apache-2.0",
+                }
+            ]
+        ),
+    )
+
+    components, _ = load_sbom(sbom)
+
+    assert components[0].licenses == ["Apache-2.0"]
+
+
+def test_spdx_none_conclusion_keeps_precedence_over_declared_license(tmp_path):
+    sbom = _write(
+        tmp_path / "sbom.json",
+        _spdx(
+            [
+                {
+                    "name": "none-widget",
+                    "licenseConcluded": "NONE",
+                    "licenseDeclared": "Apache-2.0",
+                }
+            ]
+        ),
+    )
+
+    components, _ = load_sbom(sbom)
+
+    assert components[0].licenses == ["NONE"]
+
+
+def test_spdx_empty_conclusion_uses_declared_license(tmp_path):
+    sbom = _write(
+        tmp_path / "sbom.json",
+        _spdx(
+            [
+                {
+                    "name": "declared-widget",
+                    "licenseConcluded": "",
+                    "licenseDeclared": "Apache-2.0",
+                }
+            ]
+        ),
+    )
+
+    components, _ = load_sbom(sbom)
+
+    assert components[0].licenses == ["Apache-2.0"]
+
+
+def test_spdx_meaningful_conclusion_overrides_declared_license(tmp_path):
+    sbom = _write(
+        tmp_path / "sbom.json",
+        _spdx(
+            [
+                {
+                    "name": "concluded-widget",
+                    "licenseConcluded": "MIT",
+                    "licenseDeclared": "Apache-2.0",
+                }
+            ]
+        ),
+    )
+
+    components, _ = load_sbom(sbom)
+
+    assert components[0].licenses == ["MIT"]
+
+
+def test_spdx_noassertion_conclusion_and_declaration_produce_no_license(tmp_path):
+    sbom = _write(
+        tmp_path / "sbom.json",
+        _spdx(
+            [
+                {
+                    "name": "unknown-license-widget",
+                    "licenseConcluded": "NOASSERTION",
+                    "licenseDeclared": "NOASSERTION",
+                }
+            ]
+        ),
+    )
+
+    components, _ = load_sbom(sbom)
+
+    assert components[0].licenses == []
 
 
 def test_spdx_cpe23_type_is_parsed(tmp_path):

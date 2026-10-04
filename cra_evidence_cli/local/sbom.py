@@ -47,8 +47,11 @@ def _parse_cyclonedx(data: dict[str, Any]) -> list[Component]:
                 license_data = license_item.get("license") or {}
                 if isinstance(license_data, dict):
                     value = license_data.get("id") or license_data.get("name")
-                    if value:
-                        licenses.append(str(value))
+                else:
+                    value = None
+                value = value or license_item.get("expression")
+                if value:
+                    licenses.append(str(value))
         supplier = item.get("supplier")
         if isinstance(supplier, dict):
             supplier = supplier.get("name")
@@ -98,7 +101,9 @@ def _parse_spdx(data: dict[str, Any]) -> list[Component]:
             elif cpe22 is None and ref_type == "cpe22Type":
                 cpe22 = locator
         cpe = cpe23 or cpe22
-        license_value = item.get("licenseConcluded") or item.get("licenseDeclared")
+        license_value = item.get("licenseConcluded")
+        if not license_value or license_value == "NOASSERTION":
+            license_value = item.get("licenseDeclared")
         licenses = [str(license_value)] if license_value and license_value != "NOASSERTION" else []
         components.append(
             Component(

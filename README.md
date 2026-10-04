@@ -78,6 +78,9 @@ CISA KEV plus FIRST EPSS for enrichment. For a network-restricted run, provide
 an SBOM with `--sbom` and run where Grype has a local database; CISA KEV and
 FIRST EPSS enrichment are reported as unavailable if they cannot be reached.
 
+SBOM license expressions are preserved as written. `--deny-license` compares
+complete license strings without evaluating `AND`, `OR`, or `WITH` expressions.
+
 Verbose output includes a section named **What this local snapshot cannot tell
 you**. The JSON output keeps the same review context in machine-readable form.
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve CycloneDX license expressions and use the SPDX declared license when
+  the concluded license is absent or `NOASSERTION`. License gates still compare
+  complete strings; compound expressions are not evaluated as policy rules.
+
 ## [4.7.0] - 2026-09-29
 
 ### Removed
