@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The hardened Python 3.14 builder and runtime base-image digests are refreshed
+  and remain pinned by digest.
+
 ### Fixed
 
 - Preserve CycloneDX license expressions and use the SPDX declared license when
