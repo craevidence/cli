@@ -268,6 +268,39 @@ def test_stale_source_downgrades_vulnerability_dimension():
     assert any(item["result"].startswith("Unknown - stale") for item in dimensions)
 
 
+def test_grype_partial_source_marks_incomplete_dimension_not_stale():
+    dimensions = build_dimensions(
+        components=[],
+        findings=[],
+        coverage=[CoverageSource("grype-db", "partial")],
+    )
+
+    vulnerability = next(
+        item for item in dimensions if item["title"] == "Known vulnerability snapshot"
+    )
+    assert vulnerability["result"] == "Unknown - incomplete vulnerability assessment"
+
+
+def test_osv_partial_source_does_not_change_vulnerability_dimension():
+    dimensions = build_dimensions(
+        components=[],
+        findings=[],
+        coverage=[CoverageSource("osv.dev", "partial")],
+    )
+
+    vulnerability = next(
+        item for item in dimensions if item["title"] == "Known vulnerability snapshot"
+    )
+    assert vulnerability["result"] == "Needs Review"
+
+
+def test_strict_gate_does_not_fail_for_osv_partial_coverage_alone():
+    result = _result()
+    result.coverage = [CoverageSource("osv.dev", "partial")]
+
+    check_module._enforce_gate(result, None, True)
+
+
 def test_osv_batches_under_size_limit():
     client = OSVClient(max_batch_bytes=150)
     queries = [
@@ -692,6 +725,7 @@ def test_output_flag_on_check_subcommand(monkeypatch, tmp_path):
     res = runner.invoke(cli, ["check", "--sbom", str(sbom), "--output", "json"])
     assert res.exit_code == 0, res.output
     assert json.loads(res.stdout)["schema_version"] == "craevidence.local_check.v1"
+    assert "incomplete vulnerability assessment" not in res.stderr
     # Subcommand-level flag overrides the group-level flag.
     res = runner.invoke(cli, ["--output", "text", "check", "--sbom", str(sbom), "--output", "json"])
     assert res.exit_code == 0, res.output
@@ -704,6 +738,13 @@ def test_output_flag_on_check_subcommand(monkeypatch, tmp_path):
     res = runner.invoke(cli, ["--output", "json", "check", "--sbom", str(sbom), "--output", "text"])
     assert res.exit_code == 0, res.output
     assert "Local SBOM Check" in res.stdout
+
+
+def test_check_strict_help_mentions_incomplete_grype_assessments():
+    result = CliRunner().invoke(cli, ["check", "--help"])
+
+    assert result.exit_code == 0
+    assert "incomplete Grype assessment" in result.stdout
 
 
 def test_scan_env_respects_explicit_grype_db_auto_update(monkeypatch, tmp_path):
@@ -738,6 +779,307 @@ def test_scan_env_respects_explicit_grype_db_auto_update(monkeypatch, tmp_path):
     monkeypatch.delenv("GRYPE_DB_AUTO_UPDATE")
     scanner.scan_sbom(sbom)
     assert envs[0]["GRYPE_DB_AUTO_UPDATE"] == "true"
+
+
+def _install_process_scanner(monkeypatch, returncode, stdout, stderr=""):
+    from cra_evidence_cli.local import scanner as scanner_module
+
+    monkeypatch.setattr(
+        scanner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(
+            returncode=returncode,
+            stdout=stdout,
+            stderr=stderr,
+        ),
+    )
+    scanner = scanner_module.GrypeLocalScanner()
+    scanner._inspection = EngineInspection(
+        EngineIdentity(
+            path="/opt/bin/grype",
+            version="craevidence-v0.116.1-p3",
+            syft_version="1.50.0",
+        ),
+        "",
+    )
+    return scanner
+
+
+def _incomplete_grype_document():
+    return {
+        "matches": [
+            {
+                "vulnerability": {"id": "CVE-2025-9999", "severity": "Critical"},
+                "artifact": {
+                    "name": "acme",
+                    "version": "1.0.0",
+                    "purl": "pkg:pypi/acme@1.0.0",
+                },
+            }
+        ],
+        "assessment": {
+            "status": "incomplete",
+            "unassessablePackages": [
+                {
+                    "package": {
+                        "name": "broken-package",
+                        "version": "2.0",
+                        "purl": "pkg:pypi/broken-package@2.0",
+                    },
+                    "matcher": "python",
+                    "reasonCode": "version-comparison-error",
+                }
+            ],
+        },
+    }
+
+
+def test_exit_one_actionable_incomplete_grype_report_keeps_findings_and_reason_detail(
+    monkeypatch, tmp_path
+):
+    scanner = _install_process_scanner(monkeypatch, 1, json.dumps(_incomplete_grype_document()))
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    findings, coverage = scanner.scan_sbom(sbom)
+
+    assert findings[0].id == "CVE-2025-9999"
+    assert findings[0].package == "acme"
+    assert findings[0].purl == "pkg:pypi/acme@1.0.0"
+    assert coverage.source == "grype-db"
+    assert coverage.status == "partial"
+    assert "pkg:pypi/broken-package@2.0" in coverage.detail
+    assert "python" in coverage.detail
+    assert "version-comparison-error" in coverage.detail
+
+
+@pytest.mark.parametrize(
+    ("stdout", "expected_message"),
+    [
+        ("", "matcher failure"),
+        ("not-json", "scanner returned output that could not be parsed"),
+        (
+            json.dumps({"matches": []}),
+            "scanner did not return an actionable incomplete assessment",
+        ),
+        (
+            json.dumps({"matches": [], "assessment": {"status": "complete"}}),
+            "scanner did not return an actionable incomplete assessment",
+        ),
+        (
+            json.dumps({**_incomplete_grype_document(), "matches": {}}),
+            "scanner returned malformed match data",
+        ),
+        (
+            json.dumps({**_incomplete_grype_document(), "matches": [None]}),
+            "scanner returned malformed match data",
+        ),
+        (
+            json.dumps(
+                {"matches": [], "assessment": {"status": "incomplete", "unassessablePackages": []}}
+            ),
+            "scanner did not return an actionable incomplete assessment",
+        ),
+        (
+            json.dumps(
+                {
+                    "matches": [],
+                    "assessment": {
+                        "status": "incomplete",
+                        "unassessablePackages": [
+                            {"package": {}, "matcher": "python", "reasonCode": "matcher-panic"}
+                        ],
+                    },
+                }
+            ),
+            "scanner did not return an actionable incomplete assessment",
+        ),
+        (
+            json.dumps(
+                {
+                    "matches": [],
+                    "assessment": {
+                        "status": "incomplete",
+                        "unassessablePackages": [
+                            {"package": {"name": "broken"}, "reasonCode": "matcher-panic"}
+                        ],
+                    },
+                }
+            ),
+            "scanner did not return an actionable incomplete assessment",
+        ),
+        (
+            json.dumps(
+                {
+                    "matches": [],
+                    "assessment": {
+                        "status": "incomplete",
+                        "unassessablePackages": [
+                            {"package": {"name": "broken"}, "matcher": "python"}
+                        ],
+                    },
+                }
+            ),
+            "scanner did not return an actionable incomplete assessment",
+        ),
+    ],
+    ids=[
+        "empty-output",
+        "malformed-json",
+        "missing-assessment",
+        "complete-assessment",
+        "invalid-matches-shape",
+        "invalid-match-entry",
+        "empty-unassessable-list",
+        "missing-package-identity",
+        "missing-matcher",
+        "missing-reason-code",
+    ],
+)
+def test_exit_one_without_actionable_incomplete_assessment_is_rejected(
+    monkeypatch, tmp_path, stdout, expected_message
+):
+    scanner = _install_process_scanner(monkeypatch, 1, stdout, "matcher failure")
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    with pytest.raises(ScanEngineUnavailable, match=expected_message):
+        scanner.scan_sbom(sbom)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("identity", ""),
+        ("identity", " \t\n"),
+        ("matcher", ""),
+        ("matcher", " \t"),
+        ("reason", ""),
+        ("reason", "\n "),
+    ],
+)
+def test_exit_one_rejects_blank_or_whitespace_assessment_fields(
+    monkeypatch, tmp_path, field, value
+):
+    document = _incomplete_grype_document()
+    package = document["assessment"]["unassessablePackages"][0]
+    if field == "identity":
+        package["package"]["name"] = value
+        package["package"]["purl"] = value
+    elif field == "matcher":
+        package["matcher"] = value
+    else:
+        package["reasonCode"] = value
+    scanner = _install_process_scanner(monkeypatch, 1, json.dumps(document))
+
+    with pytest.raises(
+        ScanEngineUnavailable,
+        match="scanner did not return an actionable incomplete assessment",
+    ):
+        scanner.scan_sbom(tmp_path / "sbom.json")
+
+
+def test_exit_one_reports_each_unassessable_package(monkeypatch, tmp_path):
+    document = _incomplete_grype_document()
+    document["assessment"]["unassessablePackages"].append(
+        {
+            "package": {"name": "another-package", "version": "3.0"},
+            "matcher": "go-module-matcher",
+            "reasonCode": "version-comparison-error",
+        }
+    )
+    scanner = _install_process_scanner(monkeypatch, 1, json.dumps(document))
+
+    _, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert coverage.status == "partial"
+    assert "pkg:pypi/broken-package@2.0 (python: version-comparison-error)" in coverage.detail
+    assert "another-package@3.0 (go-module-matcher: version-comparison-error)" in coverage.detail
+
+
+def test_exit_one_uses_name_and_version_when_package_has_no_purl(monkeypatch, tmp_path):
+    document = _incomplete_grype_document()
+    del document["assessment"]["unassessablePackages"][0]["package"]["purl"]
+    scanner = _install_process_scanner(monkeypatch, 1, json.dumps(document))
+
+    _, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert coverage.status == "partial"
+    assert "broken-package@2.0 (python: version-comparison-error)" in coverage.detail
+
+
+@pytest.mark.parametrize(
+    ("stderr", "expected_message"),
+    [("database startup detail\n", "database startup detail"), (" \t\n", "Grype scan failed")],
+)
+def test_exit_one_whitespace_stdout_preserves_stderr_or_uses_generic_error(
+    monkeypatch, tmp_path, stderr, expected_message
+):
+    scanner = _install_process_scanner(monkeypatch, 1, " \t\n", stderr)
+
+    with pytest.raises(ScanEngineUnavailable, match=expected_message):
+        scanner.scan_sbom(tmp_path / "sbom.json")
+
+
+def test_exit_zero_grype_report_with_assessment_is_rejected(monkeypatch, tmp_path):
+    scanner = _install_process_scanner(monkeypatch, 0, json.dumps(_incomplete_grype_document()))
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    with pytest.raises(
+        ScanEngineUnavailable,
+        match="scanner returned an assessment with a successful exit",
+    ):
+        scanner.scan_sbom(sbom)
+
+
+def test_exit_zero_null_assessment_is_absent(monkeypatch, tmp_path):
+    scanner = _install_process_scanner(
+        monkeypatch, 0, json.dumps({"matches": [], "assessment": None})
+    )
+    findings, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert findings == []
+    assert coverage.status == "present"
+
+
+def test_exit_one_incomplete_with_no_findings_still_reports_partial(monkeypatch, tmp_path):
+    document = _incomplete_grype_document()
+    document["matches"] = []
+    scanner = _install_process_scanner(monkeypatch, 1, json.dumps(document))
+
+    findings, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert findings == []
+    assert coverage.status == "partial"
+    assert "broken-package" in coverage.detail
+
+
+def test_exit_101_grype_db_rejection_remains_a_failure(monkeypatch, tmp_path):
+    scanner = _install_process_scanner(monkeypatch, 101, "{}", "database rejected")
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    with pytest.raises(ScanEngineUnavailable, match="database rejected"):
+        scanner.scan_sbom(sbom)
+
+
+def test_exit_two_grype_failure_preserves_stderr(monkeypatch, tmp_path):
+    scanner = _install_process_scanner(monkeypatch, 2, "{}", "database rejected")
+
+    with pytest.raises(ScanEngineUnavailable, match="database rejected"):
+        scanner.scan_sbom(tmp_path / "sbom.json")
+
+
+def test_nested_malformed_grype_match_is_reported_without_traceback(monkeypatch, tmp_path):
+    scanner = _install_process_scanner(
+        monkeypatch,
+        0,
+        json.dumps({"matches": [{"vulnerability": ["invalid"], "artifact": {}}]}),
+    )
+
+    with pytest.raises(ScanEngineUnavailable, match="scanner returned malformed match data"):
+        scanner.scan_sbom(tmp_path / "sbom.json")
 
 
 def test_sbom_output_noop_when_sbom_supplied(monkeypatch, tmp_path):
@@ -801,6 +1143,88 @@ def test_grype_failure_falls_back_to_osv(monkeypatch, tmp_path):
     assert "Warning: local matcher failed (local database unavailable)" in res.stderr
     assert "attempting an OSV.dev fallback" in res.stderr
     assert "may use the network and results may differ" in res.stderr
+
+
+@pytest.mark.parametrize(
+    ("strict", "fail_on", "expected_exit_code"),
+    [(False, None, 0), (True, None, 15), (False, "critical", 10), (True, "critical", 15)],
+)
+def test_grype_partial_report_keeps_findings_without_osv_fallback(
+    monkeypatch, tmp_path, strict, fail_on, expected_exit_code
+):
+    from datetime import UTC, datetime
+
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    finding = _critical_finding("CVE-2025-9999")
+    osv_calls = []
+    today = datetime.now(UTC).date().isoformat()
+
+    class PartialScanner:
+        def is_available(self):
+            return True
+
+        def scan_sbom(self, sbom_path):
+            return [finding], _Cov(
+                "grype-db",
+                "partial",
+                detail=(
+                    "Incomplete vulnerability assessment: broken-package@2.0 "
+                    "(python: version-comparison-error)"
+                ),
+            )
+
+    class ShouldNotRunOSV:
+        def query_components(self, components):
+            osv_calls.append(components)
+            message = "valid incomplete Grype output must not use OSV fallback"
+            raise AssertionError(message)
+
+    monkeypatch.setattr(check_module, "GrypeLocalScanner", PartialScanner)
+    monkeypatch.setattr(check_module, "OSVClient", ShouldNotRunOSV)
+    monkeypatch.setattr(
+        check_module,
+        "fetch_kev_catalog",
+        lambda: (set(), _Cov("cisa-kev", "present", as_of=today)),
+    )
+    monkeypatch.setattr(
+        check_module,
+        "fetch_epss_scores",
+        lambda cves: ({}, _Cov("first-epss", "present", as_of=today)),
+    )
+
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+    args = ["--sbom", str(sbom)]
+    if fail_on:
+        args.extend(["--fail-on", fail_on])
+    if strict:
+        args.insert(0, "--strict")
+    result = _run_check(args)
+
+    assert result.exit_code == expected_exit_code, result.output
+    assert osv_calls == []
+    warning = (
+        "Warning: Grype returned an incomplete vulnerability assessment; "
+        "valid findings are retained."
+    )
+    assert result.stderr.count(warning) == 1
+    assert "broken-package" not in result.stderr
+    report = json.loads(result.stdout)
+    assert report["findings"][0]["id"] == "CVE-2025-9999"
+    assert report["coverage"][0]["source"] == "grype-db"
+    assert report["coverage"][0]["status"] == "partial"
+    assert all(source["status"] == "present" for source in report["coverage"][1:])
+    if strict:
+        assert report["provenance"]["strict_failure"] == "incomplete vulnerability assessment"
+    else:
+        assert "strict_failure" not in report["provenance"]
+    assert "version-comparison-error" in report["coverage"][0]["detail"]
+    dimension = next(
+        item
+        for item in report["cra_readiness_signal"]["dimensions"]
+        if item["title"] == "Known vulnerability snapshot"
+    )
+    assert dimension["result"] == "Unknown - incomplete vulnerability assessment"
 
 
 def test_absent_engine_is_announced_but_not_reported_as_a_failure(monkeypatch, tmp_path):

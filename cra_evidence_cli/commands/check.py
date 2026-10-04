@@ -90,7 +90,11 @@ def _split_csv(value: str | None) -> list[str]:
     type=click.IntRange(0, 100),
     help="Fail (exit 14) if the sbomqs quality score is below N. Implies --sbom-quality.",
 )
-@click.option("--strict", is_flag=True, help="Fail on stale or unavailable consulted sources.")
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Fail on stale or unavailable sources, or an incomplete Grype assessment.",
+)
 @click.option(
     "--vex",
     "vex_file",
@@ -478,6 +482,12 @@ def _run_local_check_on_sbom(
             coverage.append(source)
             sources_consulted.add("grype")
             engine = "grype-local"
+            if source.status == "partial":
+                click.echo(
+                    "Warning: Grype returned an incomplete vulnerability assessment; "
+                    "valid findings are retained.",
+                    err=True,
+                )
         except ScanEngineUnavailable as exc:
             reason = (str(exc).splitlines() or ["no detail"])[0][:200]
             click.echo(
@@ -582,6 +592,10 @@ def _run_local_check_on_sbom(
     )
     if strict and any(source.status in {"stale", "unavailable"} for source in coverage):
         result.provenance["strict_failure"] = "stale or unavailable source"
+    if strict and any(
+        source.source == "grype-db" and source.status == "partial" for source in coverage
+    ):
+        result.provenance["strict_failure"] = "incomplete vulnerability assessment"
     return result
 
 
@@ -596,6 +610,11 @@ def _enforce_gate(
     fail_on_new: str | None = None,
     fail_on_score: int | None = None,
 ) -> None:
+    if strict and any(
+        source.source == "grype-db" and source.status == "partial" for source in result.coverage
+    ):
+        msg = "Strict mode failed because the local vulnerability assessment is incomplete"
+        raise ScanEngineUnavailable(msg)
     if strict and any(source.status in {"stale", "unavailable"} for source in result.coverage):
         msg = "Strict mode failed because a consulted source is stale/unavailable"
         raise ScanEngineUnavailable(msg)

@@ -78,6 +78,12 @@ CISA KEV plus FIRST EPSS for enrichment. For a network-restricted run, provide
 an SBOM with `--sbom` and run where Grype has a local database; CISA KEV and
 FIRST EPSS enrichment are reported as unavailable if they cannot be reached.
 
+If Grype returns a valid incomplete assessment, `check` keeps its findings and
+reports partial coverage in the report and a notice on stderr instead of
+replacing them with OSV results. `--strict` rejects an incomplete Grype
+assessment. Without `--strict`, configured finding gates still apply, and exit
+0 does not mean every package was assessed.
+
 SBOM license expressions are preserved as written. `--deny-license` compares
 complete license strings without evaluating `AND`, `OR`, or `WITH` expressions.
 
@@ -297,7 +303,7 @@ private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.
 | 12 | Medium vulnerabilities found. |
 | 13 | Low vulnerabilities found. |
 | 14 | SBOM quality score below the configured threshold. |
-| 15 | Local scan engine unavailable. |
+| 15 | Strict local scan coverage is incomplete, or the local scan engine is unavailable. |
 | 16 | License policy threshold exceeded. |
 | 17 | Known-exploited vulnerabilities found. |
 | 18 | Candidate secrets found. |

@@ -127,15 +127,27 @@ class GrypeLocalScanner:
             timeout=self.timeout,
             env=env,
         )
-        if result.returncode != 0:
+        if result.returncode not in {0, 1}:
             raise ScanEngineUnavailable(result.stderr.strip() or "Grype scan failed")
-        findings = parse_grype_output(result.stdout)
+        if result.returncode == 1 and not result.stdout.strip():
+            raise ScanEngineUnavailable(result.stderr.strip() or "Grype scan failed")
+        try:
+            findings, document = _parse_grype_document(result.stdout)
+        except (TypeError, ValueError, AttributeError, KeyError, IndexError, RecursionError) as exc:
+            message = "scanner returned malformed match data"
+            raise ScanEngineUnavailable(message) from exc
+        partial_detail = None
+        if result.returncode == 1:
+            partial_detail = _incomplete_detail(document.get("assessment"))
+        elif document.get("assessment") is not None:
+            message = "scanner returned an assessment with a successful exit"
+            raise ScanEngineUnavailable(message)
         metadata = self.get_db_metadata() or {}
         return findings, CoverageSource(
             "grype-db",
-            "present",
+            "partial" if partial_detail is not None else "present",
             as_of=metadata.get("built"),
-            detail=f"schema={metadata.get('schema_version') or 'unknown'}",
+            detail=partial_detail or f"schema={metadata.get('schema_version') or 'unknown'}",
         )
 
     def _db_mtime_offline(self) -> str | None:
@@ -156,11 +168,57 @@ class GrypeLocalScanner:
 
 
 def parse_grype_output(raw: str) -> list[Finding]:
+    findings, _ = _parse_grype_document(raw)
+    return findings
+
+
+def _incomplete_detail(assessment: Any) -> str:
+    message = "scanner did not return an actionable incomplete assessment"
+    if not isinstance(assessment, dict) or assessment.get("status") != "incomplete":
+        raise ScanEngineUnavailable(message)
+    packages = assessment.get("unassessablePackages")
+    if not isinstance(packages, list) or not packages:
+        raise ScanEngineUnavailable(message)
+    details = []
+    for entry in packages:
+        if not isinstance(entry, dict):
+            raise ScanEngineUnavailable(message)
+        package = entry.get("package")
+        if not isinstance(package, dict):
+            raise ScanEngineUnavailable(message)
+        identities = [package.get("purl"), package.get("name")]
+        identity = next(
+            (value for value in identities if isinstance(value, str) and value.strip()), None
+        )
+        matcher = entry.get("matcher")
+        reason = entry.get("reasonCode")
+        if (
+            identity is None
+            or not isinstance(matcher, str)
+            or not matcher.strip()
+            or not isinstance(reason, str)
+            or not reason.strip()
+        ):
+            raise ScanEngineUnavailable(message)
+        version = package.get("version")
+        label = f"{identity}@{version}" if identity == package.get("name") and version else identity
+        details.append(f"{label} ({matcher}: {reason})")
+    return "Incomplete vulnerability assessment: " + "; ".join(details)
+
+
+def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
         message = "scanner returned output that could not be parsed"
         raise ScanEngineUnavailable(message) from exc
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("matches"), list)
+        or any(not isinstance(match, dict) for match in data["matches"])
+    ):
+        message = "scanner returned malformed match data"
+        raise ScanEngineUnavailable(message)
     findings: list[Finding] = []
     for match in data.get("matches", []):
         vulnerability = match.get("vulnerability") or {}
@@ -191,7 +249,7 @@ def parse_grype_output(raw: str) -> list[Finding]:
                 source="grype",
             )
         )
-    return findings
+    return findings, data
 
 
 def _first_epss(items: list[Any]) -> float | None:

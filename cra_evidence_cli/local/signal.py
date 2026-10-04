@@ -31,6 +31,8 @@ def build_dimensions(
         if source.source in {"grype-db", "cisa-kev"}
     ):
         vuln_status = RESULT_UNKNOWN
+    if any(source.source == "grype-db" and source.status == "partial" for source in coverage):
+        vuln_status = "Unknown - incomplete vulnerability assessment"
 
     dimensions: list[dict[str, Any]] = [
         {

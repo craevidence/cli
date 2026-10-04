@@ -97,12 +97,16 @@ Notes:
 - Gate exit codes: `--fail-on critical` exits 10; `--fail-on high` exits 11; `--fail-on medium`
   exits 12; `--fail-on known-exploited` exits 17. `--fail-on-score` exits 14 when the sbomqs
   score is below the threshold. `--strict` exits 15 when a required data source is stale or
-  unavailable. `--deny-license` exits 16 when a denied license is detected.
-- When the local vulnerability engine is unavailable or its scan fails, the command attempts an
-  OSV.dev fallback and names the reason on stderr. The warning says that the fallback may use the
-  network and that results may differ. OSV.dev receives only components with PURLs, while the
-  local engine has additional matching strategies. The OSV.dev path still reports severities,
-  CVE aliases, fixed versions, and supports the same `--fail-on` gate mechanics.
+  unavailable, or when Grype returns a valid incomplete vulnerability assessment. Without
+  `--strict`, a valid incomplete assessment keeps its findings and is reported as partial
+  coverage. `--deny-license` exits 16 when a denied license is detected.
+- When the local vulnerability engine is unavailable or rejected, or its scan fails, the command
+  attempts an OSV.dev fallback and names the reason on stderr. A valid incomplete Grype assessment
+  is accepted as partial coverage, keeps its valid findings, and prints a stderr notice without
+  triggering fallback. The fallback warning says that OSV.dev may use the network and results may
+  differ. OSV.dev receives only components with PURLs,
+  while the local engine has additional matching strategies. The OSV.dev path still reports
+  severities, CVE aliases, fixed versions, and supports the same `--fail-on` gate mechanics.
 - Pointing `check` at a directory that contains no recognised dependency manifests exits 1 with
   an explanatory message listing the manifest types it looks for (for example `requirements.txt`,
   `poetry.lock`, `package-lock.json`, `go.mod`, `pom.xml`, `Cargo.lock`, `Gemfile.lock`).
