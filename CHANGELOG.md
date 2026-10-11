@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Release packaging validation accepts the current promoted engine digest.
+  The workflow and Dockerfile digest agreement remains checked.
+
 ## [4.8.0] - 2026-10-04
 
 ### Changed
