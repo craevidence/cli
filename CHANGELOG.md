@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI reuses pip downloads in the Python test matrix and rule-pack job while
+  continuing to install dependencies and run every validation gate.
+
 ### Fixed
 
 - Release packaging validation accepts the current promoted engine digest.

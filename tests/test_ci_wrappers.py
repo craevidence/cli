@@ -219,6 +219,34 @@ def test_dockerfile_opengrep_pin_matches_committed_release_lock():
     assert 'assert libraries, f"no native dependencies found in {asset}"' in dockerfile_text
 
 
+def test_dependency_cache_keeps_installs_unconditional():
+    workflow = yaml.safe_load(
+        (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    )
+    for job_name, install_name in (
+        ("test", "Install dependencies"),
+        ("rulepack", "Install Python dependencies"),
+    ):
+        job = workflow["jobs"][job_name]
+        setups = [
+            step
+            for step in job["steps"]
+            if step.get("uses", "").startswith("actions/setup-python@")
+        ]
+        assert len(setups) == 1
+        setup = setups[0]
+        assert setup["with"]["cache"] == "pip"
+        assert setup["with"]["cache-dependency-path"] == "pyproject.toml"
+        install = next(step for step in job["steps"] if step.get("name") == install_name)
+        assert "if" not in job
+        assert "if" not in setup
+        assert "if" not in install
+        commands = ["python -m pip install --upgrade pip", 'pip install -e ".[dev]"']
+        if job_name == "rulepack":
+            commands.append("pip install build")
+        assert install["run"].splitlines() == commands
+
+
 def test_rulepack_workflow_verifies_the_committed_opengrep_lock():
     workflow_text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(
         encoding="utf-8"
