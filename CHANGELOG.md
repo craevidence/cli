@@ -9,6 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The bundled Grype engine moves from CRA Evidence v0.117.0-p14 to
+  v0.120.1-p2, which is based on upstream Grype 0.120.1 and Syft 1.54.1.
+- Generated SBOMs are more honest about what they cover. Inventory coverage is
+  stated as incomplete or unknown, never complete. If a lockfile or manifest has
+  an entry that cannot be read, the file is listed as unparsed and the packages
+  that were read are kept.
+- Licences: an unidentified licence now carries the licence text that was read,
+  so some SBOMs get larger. Composer and Maven licence alternatives are written
+  as OR choices. Reference names for unrecognized Composer, Maven and SPDX
+  licence names now include a digest of the name, so if you have rules that
+  match those names, update them.
+- Credentials and query-string tokens are removed from package download
+  locations and external references for JavaScript, Python, Cargo, Ruby, Dart,
+  Swift, Elixir and Composer packages. A git user name is kept.
+- Vulnerability matching is stricter in a few places. Installed npm and NuGet
+  versions are compared with SemVer and NuGet ordering. A version that cannot
+  be parsed is reported as not fully assessed instead of being compared
+  loosely. RPM caret snapshot versions sort between their base version and the
+  next release.
+- Fewer false matches: eighteen reviewed Haskell packages, such as sendfile,
+  gnuplot, pango and zlib, no longer get the CPE of an unrelated program or of
+  the native library they wrap, whose version is not the Haskell package
+  version. An SPDX package without a PURL keeps its ecosystem when this engine
+  generated the SBOM.
+- A package with no PURL, type or language is reported as not fully assessed
+  instead of being searched by name across every ecosystem. CPEs guessed from
+  its name are still searched and their matches kept, but they do not count as
+  a full assessment; a CPE given in the SBOM does, unless the SBOM records it
+  as generated.
+- The h2o Python package is also checked against advisories for the H2O-3
+  platform it ships, at the same version.
 - CI reuses pip downloads in the Python test matrix and rule-pack job while
   continuing to install dependencies and run every validation gate.
 - The hardened Python 3.14 builder and runtime base-image digests are refreshed

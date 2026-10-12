@@ -226,7 +226,7 @@ jobs:
       - name: Extract the promoted engine payload
         if: steps.ecr-login.outcome == 'success'
         env:
-          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:b7c16dbc0b244034a39309653ea2324e4cf25e50648027511beb2e67f63bc0a8
+          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
         run: |
           set -euo pipefail
           payload="${RUNNER_TEMP}/craevidence-promoted-engine"
@@ -304,7 +304,7 @@ jobs:
       - name: Build CLI Docker image
         if: steps.ecr-login.outcome == 'success'
         env:
-          ENGINE_ARG: --build-arg GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:b7c16dbc0b244034a39309653ea2324e4cf25e50648027511beb2e67f63bc0a8
+          ENGINE_ARG: --build-arg GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
         run: |
           if [ "${{ steps.dhi-login.outcome }}" = "success" ]; then
             docker build ${ENGINE_ARG} -t craevidence:${{ steps.version.outputs.version }} .
@@ -876,7 +876,7 @@ jobs:
       - name: Bind the release image engine to the release source
         if: steps.existing.outputs.digest == ''
         env:
-          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:b7c16dbc0b244034a39309653ea2324e4cf25e50648027511beb2e67f63bc0a8
+          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
         run: |
           set -euo pipefail
           expected=$(sed -n 's|^ARG GRYPE_ENGINE_IMAGE=.*@\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
@@ -904,7 +904,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:b7c16dbc0b244034a39309653ea2324e4cf25e50648027511beb2e67f63bc0a8
+            GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
           tags: |
             ghcr.io/${{ github.repository_owner }}/craevidence:${{ needs.validate-release.outputs.version }}
 
