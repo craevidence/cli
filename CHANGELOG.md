@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.9.0] - 2026-10-12
+
 ### Changed
 
 - The bundled Grype engine moves from CRA Evidence v0.117.0-p14 to
@@ -815,7 +817,8 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.8.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.9.0...HEAD
+[4.9.0]: https://github.com/craevidence/cli/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/craevidence/cli/compare/v4.7.0...v4.8.0
 [4.7.0]: https://github.com/craevidence/cli/compare/v4.6.0...v4.7.0
 [4.6.0]: https://github.com/craevidence/cli/compare/v4.5.0...v4.6.0
