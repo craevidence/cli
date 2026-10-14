@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requiring an exact PURL match when both reports provide one. Keep legacy ID-only rows
   on case-insensitive ID equality without alias inference and gate new package
   occurrences independently.
+- The hardened Python 3.14 builder and runtime base-image digests are refreshed
+  and remain pinned by digest.
 
 ### Fixed
 
