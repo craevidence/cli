@@ -2369,6 +2369,29 @@ class TestUploadSbomFailOnGate:
         assert result.exit_code == 0, result.output
         assert mock_run.call_count == 2
 
+    def test_incomplete_scan_exits_30_without_another_poll(self):
+        status_responses = [
+            {
+                "scan_state": "incomplete",
+                "vulnerability_summary": {
+                    "critical": 1,
+                    "high": 2,
+                    "medium": 3,
+                    "low": 0,
+                },
+            },
+        ]
+
+        result, mock_run = self._invoke(
+            self.UPLOAD_RESPONSE_PENDING_SCAN,
+            status_responses,
+            ["--scan", "--fail-on", "critical"],
+        )
+
+        assert result.exit_code == 30, result.output
+        assert "incomplete" in result.output.lower()
+        assert mock_run.call_count == 2
+
     def test_scan_timeout_exits_3_with_clear_message(self):
         status_responses = [
             {"scan_state": "pending", "vulnerability_summary": {}},

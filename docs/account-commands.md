@@ -278,7 +278,9 @@ craevidence upload-sbom
 error (exit 2). When both are set, the command waits for the asynchronous
 server-side scan to finish (polling every 5 seconds) before evaluating the gate.
 Use `--scan-timeout` to adjust the maximum wait (default 300 seconds, minimum 1).
-On timeout the command exits 3 with a message indicating the last scan state.
+An explicit incomplete assessment exits 30 immediately, even if its summary is
+missing or does not include the incomplete flag. On timeout the command exits 3
+with a message indicating the last scan state.
 
 Exit codes when `--fail-on` is set:
 
@@ -286,6 +288,7 @@ Exit codes when `--fail-on` is set:
 |------|---------|
 | 0 | No threshold exceeded |
 | 3 | Scan failed, scan disabled, or scan timed out |
+| 30 | Assessment incomplete or vulnerability applicability is unverified |
 | 10 | Critical vulnerabilities found |
 | 11 | High vulnerabilities found |
 | 12 | Medium vulnerabilities found |

@@ -348,6 +348,34 @@ class TestScanFailOnGate:
         assert result.exit_code == 3, result.output
         assert "scan failed" in result.output.lower()
 
+    @pytest.mark.parametrize("fail_on", ["critical", "high", "medium"])
+    @pytest.mark.parametrize(
+        "summary",
+        [
+            None,
+            {"scan_incomplete": False},
+            {"critical": 1, "high": 2, "medium": 3, "scan_incomplete": False},
+        ],
+    )
+    def test_gate_incomplete_exits_30_immediately_with_requested_threshold(
+        self, fail_on, summary
+    ):
+        responses = [
+            {"scan_id": "s1", "status": "pending", "vulnerabilities": None},
+            {"scan_state": "incomplete", "vulnerability_summary": summary},
+        ]
+
+        result, mock_run, mock_sleep = self._invoke(
+            responses, ["--fail-on", fail_on]
+        )
+
+        assert result.exit_code == 30, result.output
+        assert "assessment" in result.output.lower()
+        assert "incomplete" in result.output.lower()
+        assert f"'{fail_on}'" in result.output
+        assert mock_run.call_count == 2
+        mock_sleep.assert_not_called()
+
     def test_gate_immediate_failed_trigger_exits_3_without_polling(self):
         responses = [{"scan_id": None, "status": "failed", "vulnerabilities": None}]
 

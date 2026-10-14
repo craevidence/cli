@@ -159,6 +159,9 @@ def wait_for_scan_completion(
         scan_state = status_data.get("scan_state") or "none"
         if scan_state == "completed":
             return status_data.get("vulnerability_summary") or {}
+        if scan_state == "incomplete":
+            summary = status_data.get("vulnerability_summary") or {}
+            return {**summary, "scan_incomplete": True}
         if scan_state == "failed":
             msg = "Vulnerability scan failed; the --fail-on gate cannot be evaluated."
             raise APIError(message=msg)
