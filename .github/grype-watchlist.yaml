@@ -18,14 +18,14 @@
 # build_info_audit):
 #   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
 #   scanner: Grype 0.116.1
-#   database: schema v6.1.10, built 2026-10-12T06:45:22Z
-#   image: built 2026-10-12 from the 4.9.0 release tree with bases
-#     dhi.io/python:3.14-dev@sha256:df0b3685c0d843d3d978c74b50f5fb7b55640d1fe24e90cb9ab4c5212307616d
-#     and dhi.io/python:3.14@sha256:2af3a6573fdecaaeb5c5a8073ced2d511cafa38b4b1205ee8d4ab820b866bd20,
+#   database: schema v6.1.10, built 2026-10-16T06:29:51Z
+#   image: built 2026-10-16 from the 4.9.1 release tree with bases
+#     dhi.io/python:3.14-dev@sha256:5b7724d3ca177d536fe88db1de8c900f29671f2cca613358e618567acfe526b2
+#     and dhi.io/python:3.14@sha256:b2dee88be07689a608f86c392dd863f20399f8ffcbe99eff6bdb4f04485d9298,
 #     with CRA Evidence Grype engine craevidence-v0.120.1-p2
-#   image ID: sha256:5746c447b5fb7e3f6dd6cc4c0e25d06254f8857af5760004346c272ed30771bd
-#   unfiltered JSON sha256: cecdd77eee202053be433c3dd3050224f2e7d2952da080a15743d96bd9c8abac
-#   review date: 2026-10-12
+#   image ID: sha256:bc49f170eaacea1c26bffbb796f175f6a757cecb10551cb2ce3af0e1c13d9fd5
+#   unfiltered JSON sha256: 3ac18b6978c4f94d0f3e298d8f90134709752601acc8a2f1782ed2a663079ea3
+#   review date: 2026-10-16
 # Review at every release.
 
 watchlist:
@@ -137,7 +137,7 @@ watchlist:
       source: go build info of CRA Evidence Grype engine craevidence-v0.120.1-p2
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
-      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-10-12)."
+      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-10-16)."
 
   resolved_since_last_review:
     - ids: [CVE-2026-5450, CVE-2026-5928]

@@ -13,11 +13,11 @@
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
 # Derived from an unfiltered Grype 0.116.1 scan, most recently re-run
-# 2026-10-12 against DB schema v6.1.10 built 2026-10-12T06:45:22Z, on
-# local image sha256:5746c447b5fb7e3f6dd6cc4c0e25d06254f8857af5760004346c272ed30771bd
-# built from the 4.9.0 release tree with bases
-# dhi.io/python:3.14-dev@sha256:df0b3685c0d843d3d978c74b50f5fb7b55640d1fe24e90cb9ab4c5212307616d
-# and dhi.io/python:3.14@sha256:2af3a6573fdecaaeb5c5a8073ced2d511cafa38b4b1205ee8d4ab820b866bd20,
+# 2026-10-16 against DB schema v6.1.10 built 2026-10-16T06:29:51Z, on
+# local image sha256:bc49f170eaacea1c26bffbb796f175f6a757cecb10551cb2ce3af0e1c13d9fd5
+# built from the 4.9.1 release tree with bases
+# dhi.io/python:3.14-dev@sha256:5b7724d3ca177d536fe88db1de8c900f29671f2cca613358e618567acfe526b2
+# and dhi.io/python:3.14@sha256:b2dee88be07689a608f86c392dd863f20399f8ffcbe99eff6bdb4f04485d9298,
 # with CRA Evidence Grype engine craevidence-v0.120.1-p2. The exact gate
 # reported no fixed finding at any severity, so no waiver is needed. The
 # comparison scan with Grype 0.111.0 reports no fixed finding either.
