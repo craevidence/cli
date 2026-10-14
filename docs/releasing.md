@@ -33,6 +33,7 @@ One commit contains everything the release needs:
      --version X.Y.Z \
      --release-src . \
      --engine-dir /path/to/promoted-engine-payload \
+     --opengrep-dir /path/to/verified-opengrep-payload \
      --out-dir dist
    sha256sum dist/*
    ```
@@ -57,7 +58,10 @@ bash scripts/check-dhi-base.sh --strict
 docker build -t craevidence:release-check .
 bash scripts/check-image-gate.sh craevidence:release-check
 ./.venv/bin/python scripts/check_dist.py
-./.venv/bin/python scripts/check_dist.py --dist-dir dist --engine-dir /path/to/promoted-engine-payload
+./.venv/bin/python scripts/check_dist.py \
+  --dist-dir dist \
+  --engine-dir /path/to/promoted-engine-payload \
+  --opengrep-dir /path/to/verified-opengrep-payload
 ```
 
 ## Tag and publish
