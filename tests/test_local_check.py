@@ -3,6 +3,7 @@ import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -413,21 +414,148 @@ def test_license_deny_gate_exits_16():
     check_module._enforce_gate(ok, None, False, deny_license=["agpl-3.0-only"])
 
 
-def test_fail_on_new_gates_only_new_findings():
+def test_fail_on_new_gates_only_new_findings(tmp_path):
     finding = Finding(id="CVE-2025-0001", package="p", version="1", severity="high")
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps({"findings": []}))
     new = _result(
         findings=[finding],
-        baseline={"new_vulnerabilities": ["CVE-2025-0001"], "removed_vulnerabilities": []},
+        baseline=check_module._baseline_delta(path, [finding]),
     )
     with pytest.raises(VulnerabilityThresholdExceeded) as exc:
         check_module._enforce_gate(new, None, False, fail_on_new="any")
     assert exc.value.exit_code == 12
     # Same finding present in the baseline is not "new" -> no failure.
+    path.write_text(json.dumps({"findings": [{"id": finding.id}]}))
     unchanged = _result(
         findings=[finding],
-        baseline={"new_vulnerabilities": [], "removed_vulnerabilities": []},
+        baseline=check_module._baseline_delta(path, [finding]),
     )
     check_module._enforce_gate(unchanged, None, False, fail_on_new="any")
+
+
+def test_baseline_alias_swap_preserves_same_package_occurrence(tmp_path):
+    """Changing an advisory's primary ID must not create a new occurrence."""
+    path = tmp_path / "baseline.json"
+    path.write_text(
+        json.dumps(
+            {
+                "findings": [
+                    {"id": "GHSA-old", "aliases": ["CVE-2025-0001"], "package": "p", "version": "1"}
+                ]
+            }
+        )
+    )
+    finding = Finding(id="CVE-2025-0001", package="p", version="1", severity="high")
+    delta = check_module._baseline_delta(path, [finding])
+    assert delta == {
+        "new_vulnerabilities": [],
+        "removed_vulnerabilities": [],
+        "new_occurrences": [],
+    }
+    check_module._enforce_gate(
+        _result(findings=[finding], baseline=delta), None, False, fail_on_new="any"
+    )
+
+
+@pytest.mark.parametrize(
+    ("package", "version", "purl"),
+    [("other", "1", None), ("p", "2", None), ("p", "1", "pkg:npm/p@1")],
+)
+def test_baseline_alias_does_not_collapse_different_installation(tmp_path, package, version, purl):
+    """A shared advisory must not hide a new affected package, version or PURL."""
+    path = tmp_path / "baseline.json"
+    path.write_text(
+        json.dumps(
+            {
+                "findings": [
+                    {
+                        "id": "GHSA-old",
+                        "aliases": ["CVE-2025-0001"],
+                        "package": "p",
+                        "version": "1",
+                        "purl": "pkg:pypi/p@1",
+                    }
+                ]
+            }
+        )
+    )
+    finding = Finding(id="CVE-2025-0001", package=package, version=version, purl=purl)
+    delta = check_module._baseline_delta(path, [finding])
+    assert delta["new_vulnerabilities"] == [finding.id]
+    assert delta["removed_vulnerabilities"] == ["GHSA-old"]
+    assert delta["new_occurrences"] == [
+        {"id": finding.id, "package": package, "version": version, "purl": purl}
+    ]
+
+
+@pytest.mark.parametrize("purl", ["", " \t"], ids=["empty", "whitespace"])
+def test_baseline_rejects_blank_supplied_purl(tmp_path, purl):
+    path = tmp_path / "baseline.json"
+    path.write_text(
+        json.dumps(
+            {"findings": [{"id": "CVE-2025-0001", "package": "p", "version": "1", "purl": purl}]}
+        )
+    )
+
+    with pytest.raises(click.ClickException, match="invalid package identity"):
+        check_module._baseline_delta(path, [Finding(id="CVE-2025-0001", package="p", version="1")])
+
+
+def test_baseline_legacy_rows_match_ids_case_insensitively_without_alias(tmp_path):
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps({"findings": [{"id": "GHSA-old"}]}))
+    old = Finding(id="GHSA-old", package="p", version="1")
+    case_variant = Finding(id="ghsa-OLD", package="p", version="1")
+    alias_only = Finding(id="CVE-2025-0001", aliases={"GHSA-old"}, package="p", version="1")
+    assert check_module._baseline_delta(path, [old])["new_vulnerabilities"] == []
+    assert check_module._baseline_delta(path, [case_variant])["new_vulnerabilities"] == []
+    assert check_module._baseline_delta(path, [alias_only])["new_vulnerabilities"] == [
+        alias_only.id
+    ]
+
+
+def test_fail_on_new_counts_only_new_package_for_duplicate_advisory(tmp_path):
+    """An old high-severity occurrence must not borrow another package's newness."""
+    path = tmp_path / "baseline.json"
+    path.write_text(
+        json.dumps({"findings": [{"id": "CVE-2025-0001", "package": "old", "version": "1"}]})
+    )
+    old = Finding(id="CVE-2025-0001", package="old", version="1", severity="high")
+    new = Finding(id="CVE-2025-0001", package="new", version="1", severity="low")
+    result = _result(findings=[old, new], baseline=check_module._baseline_delta(path, [old, new]))
+    check_module._enforce_gate(result, None, False, fail_on_new="high")
+    with pytest.raises(VulnerabilityThresholdExceeded) as exc:
+        check_module._enforce_gate(result, None, False, fail_on_new="any")
+    assert exc.value.count == 1
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "{",
+        "[]",
+        "{}",
+        '{"findings":null}',
+        '{"findings":[null]}',
+        '{"findings":[{"id":""}]}',
+        '{"findings":[{"id":1}]}',
+        '{"findings":[{"id":"x","aliases":"CVE-x"}]}',
+        '{"findings":[{"id":"x","package":"p"}]}',
+    ],
+)
+def test_invalid_baseline_is_a_controlled_error(tmp_path, payload):
+    path = tmp_path / "baseline.json"
+    path.write_text(payload)
+    with pytest.raises(click.ClickException, match="[Bb]aseline"):
+        check_module._baseline_delta(path, [])
+
+
+def test_explicit_empty_baseline_is_distinct_from_missing_findings(tmp_path):
+    path = tmp_path / "baseline.json"
+    path.write_text('{"findings":[]}')
+    finding = Finding(id="CVE-2025-0001", package="p", version="1")
+    assert check_module._baseline_delta(path, [finding])["new_vulnerabilities"] == [finding.id]
 
 
 def test_fail_on_score_only_gates_when_sbomqs_ran():

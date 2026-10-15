@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Forward the configured organization selector during GitHub workload identity exchange.
+- Match baseline findings by shared case-insensitive ID/alias and exact package/version,
+  requiring an exact PURL match when both reports provide one. Keep legacy ID-only rows
+  on case-insensitive ID equality without alias inference and gate new package
+  occurrences independently.
 
 ### Fixed
 

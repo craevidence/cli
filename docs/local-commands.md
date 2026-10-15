@@ -49,6 +49,10 @@ Notes:
 - `--fail-on-new` is the brownfield ratchet: it fails only on vulnerabilities introduced
   since `--baseline` (a previous `--output json` report), so a backlog of known issues does
   not block every build.
+- Baseline identity uses a shared case-insensitive vulnerability ID or alias and the exact
+  package/version. When both reports provide a PURL, it must also match exactly. Legacy
+  id-only rows match by case-insensitive ID only; they do not gain alias matching. The gate compares
+  new package occurrences so a known ID on one package does not hide a new occurrence on another.
 - `--deny-license` reads the per-component licenses already parsed from the SBOM, e.g.
   `--deny-license AGPL-3.0-only,GPL-3.0-only`.
 - `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`.

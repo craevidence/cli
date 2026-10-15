@@ -726,8 +726,10 @@ def _enforce_gate(
 
     # "No new findings" ratchet (exit 10/11/12) - only the vulns introduced since the baseline.
     if fail_on_new and result.baseline:
-        new_ids = set(result.baseline.get("new_vulnerabilities") or [])
-        new_findings = [finding for finding in gated_findings if finding.id in new_ids]
+        occurrences = result.baseline["new_occurrences"]
+        new_findings = [
+            finding for finding in gated_findings if _baseline_occurrence(finding) in occurrences
+        ]
         level = fail_on_new.lower()
         if level == "any":
             if new_findings:
@@ -755,13 +757,80 @@ def _format_syft_version(version: str | None) -> str:
 def _baseline_delta(path: Path | None, findings: list[Any]) -> dict[str, Any] | None:
     if not path:
         return None
-    data = json.loads(path.read_text())
-    previous_ids = {item["id"] for item in data.get("findings", []) if item.get("id")}
-    current_ids = {item.id for item in findings}
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        msg = f"Cannot read baseline report: {exc}"
+        raise click.ClickException(msg) from exc
+    if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
+        msg = "Baseline report must contain a findings array."
+        raise click.ClickException(msg)
+    previous = data["findings"]
+    for item in previous:
+        if (
+            not isinstance(item, dict)
+            or not isinstance(item.get("id"), str)
+            or not item["id"].strip()
+        ):
+            msg = "Each baseline finding must have a nonempty string id."
+            raise click.ClickException(msg)
+        for field in ("aliases", "cve_aliases"):
+            values = item.get(field, [])
+            if not isinstance(values, list) or any(
+                not isinstance(value, str) or not value.strip() for value in values
+            ):
+                msg = f"Baseline {field} must be an array of nonempty strings."
+                raise click.ClickException(msg)
+        if any(field in item for field in ("package", "version", "purl")):
+            if (
+                not isinstance(item.get("package"), str)
+                or not item["package"].strip()
+                or "version" not in item
+                or (item["version"] is not None and not isinstance(item["version"], str))
+                or (item.get("purl") is not None and not isinstance(item["purl"], str))
+                or (item.get("purl") is not None and not item["purl"].strip())
+            ):
+                msg = "Baseline finding has an invalid package identity."
+                raise click.ClickException(msg)
+    new_findings = [
+        finding
+        for finding in findings
+        if not any(_baseline_matches(finding, item) for item in previous)
+    ]
+    removed = [
+        item
+        for item in previous
+        if not any(_baseline_matches(finding, item) for finding in findings)
+    ]
     return {
-        "new_vulnerabilities": sorted(current_ids - previous_ids),
-        "removed_vulnerabilities": sorted(previous_ids - current_ids),
+        "new_vulnerabilities": sorted({finding.id for finding in new_findings}),
+        "removed_vulnerabilities": sorted({item["id"] for item in removed}),
+        "new_occurrences": [_baseline_occurrence(finding) for finding in new_findings],
     }
+
+
+def _baseline_occurrence(finding: Any) -> dict[str, Any]:
+    return {
+        "id": finding.id,
+        "package": finding.package,
+        "version": finding.version,
+        "purl": finding.purl,
+    }
+
+
+def _baseline_matches(finding: Any, item: dict[str, Any]) -> bool:
+    if "package" not in item:
+        return finding.id.upper() == item["id"].upper()
+    if finding.package != item["package"] or finding.version != item["version"]:
+        return False
+    if finding.purl and item.get("purl") and finding.purl != item["purl"]:
+        return False
+    current_ids = {value.upper() for value in (finding.id, *finding.aliases, *finding.cve_aliases)}
+    previous_ids = {
+        value.upper()
+        for value in (item["id"], *item.get("aliases", []), *item.get("cve_aliases", []))
+    }
+    return bool(current_ids & previous_ids)
 
 
 def _attributions(sources: set[str]) -> list[str]:
