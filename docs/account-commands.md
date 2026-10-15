@@ -289,6 +289,10 @@ craevidence upload-sbom
 error (exit 2). When both are set, the command waits for the asynchronous
 server-side scan to finish (polling every 5 seconds) before evaluating the gate.
 Use `--scan-timeout` to adjust the maximum wait (default 300 seconds, minimum 1).
+
+With global `--output json`, the upload result is written to stdout as JSON.
+Verbose output, firmware extraction notices, SBOM quality summaries, and signing
+notices go to stderr.
 An explicit incomplete assessment exits 30 immediately, even if its summary is
 missing or does not include the incomplete flag. On timeout the command exits 3
 with a message indicating the last scan state.
@@ -667,6 +671,8 @@ structured evidence. The upload still completes, then the CLI exits with code
 21 unless structured evidence fields were accepted and mapped. Leave this
 flag off for manual PDFs, upload-only evidence, and compliance YAML files that
 are meant to be stored as document evidence only.
+With global `--output json`, the upload result remains JSON on stdout and the
+mapping diagnostic goes to stderr, including when the command exits 21.
 
 Supported `--type` values:
 
@@ -703,6 +709,8 @@ Upload a Mermaid architecture diagram as `architecture_diagram` technical
 documentation. When `mmdc` (mermaid-cli) is on PATH the
 `.mmd` is rendered to PNG before upload; otherwise the raw source is
 uploaded with a warning.
+With global `--output json`, the upload response is written to stdout as JSON;
+the warning about uploading raw source is written to stderr.
 
 ```
 craevidence upload-diagram

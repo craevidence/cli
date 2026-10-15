@@ -4,6 +4,7 @@ Tests for `craevidence upload-diagram`.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -103,6 +104,40 @@ class TestUploadDiagram:
         kwargs = mock_client.upload_document.call_args.kwargs
         assert kwargs["document_type"] == "architecture_diagram"
         # File path should be the raw .mmd, not a rendered PNG.
+        assert kwargs["file_path"].name == "architecture.mmd"
+
+    def test_json_fallback_keeps_stdout_parseable(self, runner, base_env):
+        with patch("cra_evidence_cli.commands.diagram.shutil.which") as which, \
+             patch("cra_evidence_cli.commands.diagram.CRAEvidenceClient") as client_cls, \
+             patch("cra_evidence_cli.commands.diagram.asyncio.run") as run:
+            which.return_value = None
+            mock_client = MagicMock()
+            client_cls.return_value = mock_client
+            run.return_value = _mock_response()
+
+            with runner.isolated_filesystem():
+                src = Path("architecture.mmd")
+                src.write_text("graph TD; A-->B")
+                result = runner.invoke(
+                    cli,
+                    [
+                        "--output", "json",
+                        "upload-diagram",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "architecture.mmd",
+                        "--no-ci-detect",
+                    ],
+                    env=base_env,
+                )
+
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)["artifact_id"] == "doc-abc"
+        assert "mmdc not found" not in result.stdout
+        assert "mmdc not found" in result.stderr
+        mock_client.upload_document.assert_called_once()
+        kwargs = mock_client.upload_document.call_args.kwargs
+        assert kwargs["document_type"] == "architecture_diagram"
         assert kwargs["file_path"].name == "architecture.mmd"
 
     def test_no_render_uploads_raw_even_when_mmdc_present(

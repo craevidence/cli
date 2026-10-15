@@ -3,6 +3,7 @@
     "and structured evidence guardrails."
 )
 
+import json
 from io import StringIO
 from pathlib import Path
 
@@ -613,7 +614,12 @@ class TestUploadDocumentStructuredMappingFlag:
         "CRA_EVIDENCE_URL": "http://localhost:8000",
     }
 
-    def _invoke(self, parser_outcome: str, extra_args: list[str] | None = None):
+    def _invoke(
+        self,
+        parser_outcome: str,
+        extra_args: list[str] | None = None,
+        cli_prefix: list[str] | None = None,
+    ):
         from unittest.mock import MagicMock, patch
 
         from cra_evidence_cli.cli import cli
@@ -650,6 +656,7 @@ class TestUploadDocumentStructuredMappingFlag:
                 result = runner.invoke(
                     cli,
                     [
+                        *(cli_prefix or []),
                         "upload-document",
                         "--product", "test",
                         "--version", "1.0",
@@ -680,6 +687,19 @@ class TestUploadDocumentStructuredMappingFlag:
         assert "mapped fields were not" in result.output
         assert "confirmed" in result.output
         assert "Structured evidence mapping was required" in result.output
+        mock_client.upload_document.assert_called_once()
+
+    def test_json_mapping_gate_keeps_response_on_stdout_after_upload(self):
+        result, mock_client = self._invoke(
+            "accepted_document_only",
+            ["--require-structured-mapping"],
+            cli_prefix=["--output", "json"],
+        )
+
+        assert result.exit_code == 21, result.output
+        assert json.loads(result.stdout)["artifact_id"] == "doc-123"
+        assert "Structured evidence mapping was required" not in result.stdout
+        assert "Structured evidence mapping was required" in result.stderr
         mock_client.upload_document.assert_called_once()
 
     def test_require_structured_mapping_passes_when_fields_are_mapped(self):
@@ -2272,6 +2292,88 @@ class TestSbomqsCheck:
 
         # human summary must still be visible - on stderr
         assert "sbomqs bsi-v2.0: 85.0/100" in result.stderr
+
+    def test_global_verbose_json_keeps_stdout_parseable(self):
+        result, _mock_client, _mock_run_sbomqs = self._invoke(
+            [], cli_prefix=["--verbose", "--output", "json"]
+        )
+
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)["artifact_id"] == "abc"
+        assert "Uploading SBOM from" not in result.stdout
+        assert "Uploading SBOM from" in result.stderr
+
+
+class TestUploadSbomFirmwareJsonOutput:
+    """Firmware extraction diagnostics stay off the JSON response stream."""
+
+    BASE_ENV = {
+        "CRA_EVIDENCE_API_KEY": "test_key_123",
+        "CRA_EVIDENCE_URL": "http://localhost:8000",
+    }
+
+    @pytest.mark.parametrize(
+        ("extracted_config", "diagnostic"),
+        [
+            (None, "No embedded .config found"),
+            (b"CONFIG_IKCONFIG=y\n", "Extracted kernel .config"),
+        ],
+        ids=["firmware-without-config", "firmware-with-config"],
+    )
+    def test_firmware_json_keeps_stdout_parseable(
+        self, extracted_config, diagnostic
+    ):
+        from unittest.mock import MagicMock, patch
+
+        from cra_evidence_cli.cli import cli
+
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.upload.CRAEvidenceClient"
+        ) as mock_client_cls, patch(
+            "cra_evidence_cli.commands.upload.asyncio.run"
+        ) as mock_run, patch(
+            "cra_evidence_cli.ikconfig.extract_ikconfig",
+            return_value=extracted_config,
+        ):
+            mock_client = MagicMock()
+            mock_client_cls.return_value = mock_client
+            mock_run.return_value = {
+                "artifact_id": "firmware-sbom",
+                "artifact_type": "sbom",
+                "product": {"name": "test", "created": False},
+                "version": {"number": "1.0", "created": False},
+            }
+
+            with runner.isolated_filesystem():
+                Path("sbom.json").write_text('{"components": []}')
+                Path("firmware.bin").write_bytes(b"firmware bytes")
+                result = runner.invoke(
+                    cli,
+                    [
+                        "--output", "json",
+                        "upload-sbom",
+                        "--product", "test",
+                        "--version", "1.0",
+                        "--file", "sbom.json",
+                        "--firmware", "firmware.bin",
+                        "--no-ci-detect",
+                    ],
+                    env=self.BASE_ENV,
+                )
+
+        assert result.exit_code == 0, result.output
+        assert json.loads(result.stdout)["artifact_id"] == "firmware-sbom"
+        assert diagnostic not in result.stdout
+        assert diagnostic in result.stderr
+        mock_client.upload_sbom.assert_called_once()
+        kernel_config_path = mock_client.upload_sbom.call_args.kwargs[
+            "kernel_config_path"
+        ]
+        if extracted_config is None:
+            assert kernel_config_path is None
+        else:
+            assert kernel_config_path is not None
 
 
 class TestUploadSbomFailOnGate:

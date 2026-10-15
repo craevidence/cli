@@ -38,6 +38,7 @@ from cra_evidence_cli.exceptions import CRAEvidenceError
 from cra_evidence_cli.repo_config import resolve_identity
 
 console = Console()
+err_console = Console(stderr=True)
 
 
 def _render_mermaid_to_png(source: Path) -> Path:
@@ -146,16 +147,17 @@ def upload_diagram(
     """
     config = ctx.obj["config"]
     output_format = config.output_format
+    diagnostic_console = err_console if output_format == "json" else console
     verbose = ctx.obj.get("verbose", False)
 
     try:
         product, version_number, _ = resolve_identity(product, version_number, None)
     except CRAEvidenceError as exc:
-        console.print(f"[red]Error:[/red] {exc}")
+        diagnostic_console.print(f"[red]Error:[/red] {exc}")
         sys.exit(exc.exit_code)
 
     if file_path.suffix.lower() not in {".mmd", ".mermaid"}:
-        console.print(
+        diagnostic_console.print(
             f"[yellow]Warning:[/yellow] expected a .mmd file; got "
             f"'{file_path.suffix}'. Proceeding anyway."
         )
@@ -163,14 +165,14 @@ def upload_diagram(
     try:
         validate_config(config)
     except CRAEvidenceError as exc:
-        console.print(f"[red]Configuration error:[/red] {exc}")
+        diagnostic_console.print(f"[red]Configuration error:[/red] {exc}")
         sys.exit(exc.exit_code)
 
     upload_path = file_path
     cleanup_path: Path | None = None
     if render:
         if shutil.which("mmdc") is None:
-            console.print(
+            diagnostic_console.print(
                 "[yellow]Warning:[/yellow] mmdc not found on PATH, uploading "
                 "raw .mmd source. Install mermaid-cli "
                 "(`npm install -g @mermaid-js/mermaid-cli`) to upload a "
@@ -181,9 +183,9 @@ def upload_diagram(
                 upload_path = _render_mermaid_to_png(file_path)
                 cleanup_path = upload_path
                 if verbose:
-                    console.print(f"[dim]Rendered PNG: {upload_path}[/dim]")
+                    diagnostic_console.print(f"[dim]Rendered PNG: {upload_path}[/dim]")
             except CRAEvidenceError as exc:
-                console.print(
+                diagnostic_console.print(
                     f"[yellow]Warning:[/yellow] {exc}. Falling back to raw "
                     ".mmd upload."
                 )
@@ -222,9 +224,9 @@ def upload_diagram(
         )
         format_output(data, output_format, verbose)
     except CRAEvidenceError as exc:
-        console.print(f"[red]Error:[/red] {clarify_upload_error(str(exc))}")
+        diagnostic_console.print(f"[red]Error:[/red] {clarify_upload_error(str(exc))}")
         if hasattr(exc, "request_id") and exc.request_id:
-            console.print(f"[dim]Request ID: {exc.request_id}[/dim]")
+            diagnostic_console.print(f"[dim]Request ID: {exc.request_id}[/dim]")
         sys.exit(exc.exit_code)
     finally:
         if cleanup_path and cleanup_path.exists():

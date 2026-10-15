@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `--fail-on` gate now exits 30 immediately when the server reports an
   incomplete assessment, even when the vulnerability summary is missing or
   omits its incomplete flag.
+- Keep firmware, diagram, and structured-evidence diagnostics off JSON stdout.
 - Keep finding names within their GitHub summary table cells and show Action
   upload results only for upload commands.
 - Preserve compliance template and source-download destinations unless --force

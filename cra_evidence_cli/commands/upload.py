@@ -1217,6 +1217,7 @@ def upload_sbom(
     """
     config = ctx.obj["config"]
     output_format = config.output_format
+    diagnostic_console = err_console if output_format == "json" else console
     verbose = ctx.obj.get("verbose", False)
 
     try:
@@ -1224,7 +1225,7 @@ def upload_sbom(
             product, version_number, component_slug, component_version
         )
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        diagnostic_console.print(f"[red]Error:[/red] {e}")
         sys.exit(e.exit_code)
 
     generated_sbom_path: Path | None = None
@@ -1363,7 +1364,7 @@ def upload_sbom(
                         "good coverage."
                     )
             except SBOMGenerationError as e:
-                console.print(f"[red]SBOM generation failed:[/red] {e}")
+                diagnostic_console.print(f"[red]SBOM generation failed:[/red] {e}")
                 sys.exit(e.exit_code)
 
         # If --source is provided, generate SBOM from directory
@@ -1396,7 +1397,7 @@ def upload_sbom(
                         "good coverage."
                     )
             except SBOMGenerationError as e:
-                console.print(f"[red]SBOM generation failed:[/red] {e}")
+                diagnostic_console.print(f"[red]SBOM generation failed:[/red] {e}")
                 sys.exit(e.exit_code)
 
         # Extract .config from firmware binary if --firmware provided and --kernel-config not given
@@ -1408,7 +1409,7 @@ def upload_sbom(
             data = firmware_path.read_bytes()
             config_bytes = extract_ikconfig(data)
             if config_bytes is None:
-                console.print(
+                diagnostic_console.print(
                     "[yellow]Warning:[/yellow] No embedded .config found in firmware binary "
                     "(kernel may not have been compiled with CONFIG_IKCONFIG=y). "
                     "Use --kernel-config to provide your .config manually."
@@ -1419,17 +1420,17 @@ def upload_sbom(
                 _tmp.close()
                 _tmp_kernel_config = Path(_tmp.name)
                 kernel_config_path = _tmp_kernel_config
-                console.print(
+                diagnostic_console.print(
                     f"[green]Extracted kernel .config:[/green] {len(config_bytes):,} bytes"
                 )
 
         if verbose:
-            console.print(f"[dim]Uploading SBOM from {file_path}[/dim]")
-            console.print(f"[dim]Product: {product}, Version: {version_number}[/dim]")
+            diagnostic_console.print(f"[dim]Uploading SBOM from {file_path}[/dim]")
+            diagnostic_console.print(f"[dim]Product: {product}, Version: {version_number}[/dim]")
             if ci_metadata.get("commit_sha"):
-                console.print(f"[dim]Commit: {ci_metadata['commit_sha']}[/dim]")
+                diagnostic_console.print(f"[dim]Commit: {ci_metadata['commit_sha']}[/dim]")
             if ci_metadata.get("branch"):
-                console.print(f"[dim]Branch: {ci_metadata['branch']}[/dim]")
+                diagnostic_console.print(f"[dim]Branch: {ci_metadata['branch']}[/dim]")
 
         # Opt-in BSI TR-03183-2 v2 pre-upload check. Must run BEFORE the
         # network call so a failing score short-circuits without producing
@@ -1457,7 +1458,7 @@ def upload_sbom(
                 f"{file_path}.sigstore.json"
             )
             if verbose:
-                console.print(f"[dim]Signing SBOM with Sigstore: {file_path}[/dim]")
+                diagnostic_console.print(f"[dim]Signing SBOM with Sigstore: {file_path}[/dim]")
             signing_result = sign_sbom_with_sigstore(
                 sbom_path=file_path,
                 bundle_path=signature_bundle_path,
@@ -1543,7 +1544,9 @@ def upload_sbom(
                 )
 
             if verbose:
-                console.print(f"[dim]Verifying SBOM signature bundle {signature_bundle_path}[/dim]")
+                diagnostic_console.print(
+                    f"[dim]Verifying SBOM signature bundle {signature_bundle_path}[/dim]"
+                )
 
             signature_result = asyncio.run(
                 client.verify_sbom_signature(
@@ -1588,9 +1591,9 @@ def upload_sbom(
                 check_vulnerability_threshold(vuln_summary, fail_on)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
+        diagnostic_console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
-            console.print(f"[dim]Request ID: {e.request_id}[/dim]")
+            diagnostic_console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
     finally:
         # Generated SBOMs live in a private temp directory (one per run);
@@ -2420,12 +2423,13 @@ def upload_document(
     """
     config = ctx.obj["config"]
     output_format = config.output_format
+    diagnostic_console = err_console if output_format == "json" else console
     verbose = ctx.obj.get("verbose", False)
 
     try:
         product, version_number, _ = resolve_identity(product, version_number, None)
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        diagnostic_console.print(f"[red]Error:[/red] {e}")
         sys.exit(e.exit_code)
 
     # Validate CRA classification consistency
@@ -2446,11 +2450,13 @@ def upload_document(
         )
 
         if verbose:
-            console.print(f"[dim]Uploading document from {file_path}[/dim]")
-            console.print(f"[dim]Product: {product}, Version: {version_number}[/dim]")
-            console.print(f"[dim]Document type: {humanize_identifier(document_type)}[/dim]")
+            diagnostic_console.print(f"[dim]Uploading document from {file_path}[/dim]")
+            diagnostic_console.print(f"[dim]Product: {product}, Version: {version_number}[/dim]")
+            diagnostic_console.print(
+                f"[dim]Document type: {humanize_identifier(document_type)}[/dim]"
+            )
             if ci_metadata.get("commit_sha"):
-                console.print(f"[dim]Commit: {ci_metadata['commit_sha']}[/dim]")
+                diagnostic_console.print(f"[dim]Commit: {ci_metadata['commit_sha']}[/dim]")
 
         client = CRAEvidenceClient(config)
 
@@ -2488,7 +2494,7 @@ def upload_document(
         enforce_structured_mapping(data, require_structured_mapping)
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
+        diagnostic_console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")
         if hasattr(e, "request_id") and e.request_id:
-            console.print(f"[dim]Request ID: {e.request_id}[/dim]")
+            diagnostic_console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)
