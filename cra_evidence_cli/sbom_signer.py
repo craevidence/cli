@@ -96,7 +96,20 @@ def sign_sbom_with_sigstore(
         msg = f"Sigstore signing failed: {exc}"
         raise SBOMSigningError(msg) from exc
 
-    bundle_path.write_text(bundle.to_json(), encoding="utf-8")
+    serialized_bundle = bundle.to_json()
+    mode = "w" if overwrite else "x"
+    try:
+        with bundle_path.open(mode, encoding="utf-8") as handle:
+            handle.write(serialized_bundle)
+    except FileExistsError:
+        msg = (
+            f"Signature bundle already exists: {bundle_path}. "
+            "Remove it or pass a different --signature-bundle path."
+        )
+        raise SBOMSigningError(msg) from None
+    except OSError:
+        msg = "Could not write signature bundle."
+        raise SBOMSigningError(msg) from None
 
     signer_identity = _extract_signer_identity(bundle)
     signer_issuer = _extract_signer_issuer(bundle)
