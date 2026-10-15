@@ -103,7 +103,8 @@ craevidence check . --sbom-output sbom.cdx.json
 ```
 
 `--sbom-output` keeps the generated file as a CI artifact. It is ignored when
-the SBOM was supplied with `--sbom`.
+the SBOM was supplied with `--sbom`. SARIF reports use the retained copy's path.
+Paths starting with `/tmp` or `/var/tmp` are represented as `sbom.json`.
 
 `upload-sbom` generates the same way from `--image` or `--source`:
 

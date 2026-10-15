@@ -12,14 +12,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `--fail-on` gate now exits 30 immediately when the server reports an
   incomplete assessment, even when the vulnerability summary is missing or
   omits its incomplete flag.
+- Keep finding names within their GitHub summary table cells and show Action
+  upload results only for upload commands.
 - Preserve compliance template and source-download destinations unless --force
   was supplied, including files created while input was being retrieved.
+- Reject incomplete or invalidly encoded OSV responses and retain the existing fallback when
+  the local scanning process cannot start or times out.
+- Link SARIF findings to a retained generated SBOM when requested. GitLab locations use that retained
+  copy too, rather than a deleted generation path.
+- Reject conflicting local-check report destinations before scanning.
 - Return an error for failed or disabled scan requests, including without a
   severity gate, and reject malformed scan responses.
 - Send verification requests once; keep retries for retrieval requests.
 - Verify explicit attestation IDs through their detail endpoint and bind them to the selected version.
 - Resolve product slugs before the product-list limit and reject malformed
   product lists and details during compliance template generation.
+- Reject malformed evidence lists, local SBOM entries and enrichment data.
 - Bound GitHub identity-token requests, refuse redirects and unsafe request
   URLs, and omit credential values from configuration errors.
 - Allow engine-free commands to start without the Unix database-lock module.

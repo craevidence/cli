@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from cra_evidence_cli.local.models import identifier_coverage
-from cra_evidence_cli.local.sbom import load_sbom
+from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
 
 # Fixtures / helpers
 
@@ -40,6 +40,47 @@ def _spdx(packages: list[dict[str, Any]]) -> dict[str, Any]:
 CPE_ONLY = "cpe:2.3:a:vendor:cpe-only-widget:1.0:*:*:*:*:*:*:*"
 CPE_BOTH = "cpe:2.3:a:vendor:both-widget:2.0:*:*:*:*:*:*:*"
 CPE_22 = "cpe:/a:vendor:legacy-widget:1.0"
+
+
+@pytest.mark.parametrize("root", [None, [], "not-an-object", 7])
+def test_non_object_json_root_is_a_controlled_sbom_parse_error(tmp_path, root):
+    path = tmp_path / "invalid-root.json"
+    path.write_text(json.dumps(root), encoding="utf-8")
+
+    with pytest.raises(SBOMParseError, match="JSON object at the root"):
+        load_sbom(path)
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        (_cyclonedx([None]), "each component must be a JSON object"),
+        (_cyclonedx([{"name": "valid"}, "invalid"]), "each component must be a JSON object"),
+        (
+            _cyclonedx([{"name": "parent", "components": [None]}]),
+            "each component must be a JSON object",
+        ),
+        (_spdx([None]), "each package must be a JSON object"),
+        (_spdx([{"name": "valid"}, "invalid"]), "each package must be a JSON object"),
+    ],
+)
+def test_non_object_inventory_members_are_not_silently_dropped(tmp_path, payload, message):
+    """Catches partial or zero inventories from silently skipped typed entries."""
+    path = tmp_path / "invalid-member.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(SBOMParseError, match=message):
+        load_sbom(path)
+
+
+@pytest.mark.parametrize("payload", [_cyclonedx([]), _spdx([])])
+def test_explicit_empty_inventory_arrays_remain_valid(tmp_path, payload):
+    path = tmp_path / "empty-inventory.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    components, _ = load_sbom(path)
+
+    assert components == []
 
 
 # CycloneDX

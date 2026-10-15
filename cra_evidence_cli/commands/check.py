@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -59,6 +60,39 @@ console = Console()
 
 def _split_csv(value: str | None) -> list[str]:
     return [item.strip() for item in (value or "").split(",") if item.strip()]
+
+
+def _validate_output_destinations(destinations: list[tuple[str, Path]]) -> None:
+    resolved_paths: dict[Path, str] = {}
+    file_ids: dict[tuple[int, int], str] = {}
+    for name, path in destinations:
+        try:
+            resolved = path.resolve(strict=False)
+        except (OSError, RuntimeError):
+            msg = f"Could not resolve the {name} output path."
+            raise click.UsageError(msg) from None
+
+        previous = resolved_paths.get(resolved)
+        if previous is not None:
+            msg = f"The {previous} and {name} outputs must use different paths."
+            raise click.UsageError(msg)
+
+        try:
+            stat_result = path.stat()
+        except FileNotFoundError:
+            stat_result = None
+        except OSError:
+            msg = f"Could not inspect the {name} output path."
+            raise click.UsageError(msg) from None
+
+        if stat_result is not None:
+            identity = (stat_result.st_dev, stat_result.st_ino)
+            previous = file_ids.get(identity)
+            if previous is not None:
+                msg = f"The {previous} and {name} outputs must use different files."
+                raise click.UsageError(msg)
+            file_ids[identity] = name
+        resolved_paths[resolved] = name
 
 
 @click.command("check")
@@ -231,6 +265,30 @@ def check(
     verbose = verbose_opt or bool(ctx.obj.get("verbose"))
     # The subcommand-level --output wins over the group-level one.
     output_format = output_opt or ctx.obj["config"].output_format
+
+    destinations = [
+        (name, value)
+        for name, value in (
+            ("report", output_file),
+            ("JSON report", json_output),
+            ("SARIF report", sarif_output),
+            ("Markdown report", markdown_output),
+        )
+        if value is not None
+    ]
+    if sbom_output is not None and sbom_file is None:
+        destinations.append(("generated SBOM", sbom_output))
+    annotation_mode = resolve_mode(annotations) if annotations else "none"
+    if annotation_mode == "gitlab":
+        destinations.append(
+            ("GitLab annotation report", annotations_file or Path("gl-code-quality-report.json"))
+        )
+    elif annotation_mode == "github":
+        step_summary = os.getenv("GITHUB_STEP_SUMMARY")
+        if step_summary:
+            destinations.append(("GitHub step summary", Path(step_summary)))
+    _validate_output_destinations(destinations)
+
     try:
         result = run_local_check(
             target_path=path,
@@ -571,6 +629,8 @@ def _run_local_check_on_sbom(
         "syft_version": _format_syft_version(get_embedded_syft_version()),
         "sbom_path": str(sbom_path),
     }
+    if generated_sbom is not None and sbom_output is not None:
+        provenance["sbom_output"] = str(sbom_output)
     if quality is not None:
         provenance["sbom_quality"] = quality
     for source in coverage:

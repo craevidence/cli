@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from urllib.parse import quote
 
 from rich.console import Console
 from rich.text import Text
@@ -25,22 +26,29 @@ def _is_temp_path(path_str: str) -> bool:
     return path_str.startswith("/tmp") or path_str.startswith("/var/tmp")  # noqa: S108
 
 
+def sarif_path_uri(path: str) -> str:
+    """Encode a filesystem path as a relative or absolute SARIF URI."""
+    return quote(path, safe="/")
+
+
 def _resolve_sarif_sbom_uri(result: LocalCheckResult) -> str:
     """Resolve the SBOM URI for SARIF physicalLocation entries.
 
-    Returns the user-supplied SBOM path when the run scored an existing SBOM,
-    the --sbom-output path when recorded in provenance, or 'sbom.json' as a
-    safe fallback. Never returns an absolute temp-directory path.
+    Prefer a retained copy over the consumed source. Paths starting with
+    /tmp or /var/tmp use 'sbom.json' instead.
     """
-    if result.sbom_path is not None:
-        path_str = str(result.sbom_path)
-        if not _is_temp_path(path_str):
-            return path_str
     sbom_output = result.provenance.get("sbom_output")
     if sbom_output:
         s = str(sbom_output)
         if not _is_temp_path(s):
-            return s
+            return sarif_path_uri(s)
+        return "sbom.json"
+    if result.target_type in ("directory", "image"):
+        return "sbom.json"
+    if result.sbom_path is not None:
+        path_str = str(result.sbom_path)
+        if not _is_temp_path(path_str):
+            return sarif_path_uri(path_str)
     return "sbom.json"
 
 

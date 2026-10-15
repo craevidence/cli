@@ -90,8 +90,9 @@ Notes:
 - `--json-output`, `--sarif-output`, and `--markdown-output` each write that format to a path
   regardless of `--output`, so a single scan can produce several files in one pass (for example
   SARIF for code scanning plus JSON for archival) instead of re-running the check per format.
-  They are written before any gate runs, so a failing gate still leaves the artifacts on disk,
-  and missing parent directories are created.
+  They are written before the command exits, so a failing gate still leaves the artifacts on disk,
+  and missing parent directories are created. Every requested output must use a distinct path;
+  aliases to the same file are rejected before the check starts.
 - `--output` accepts `text`, `json`, `sarif`, or `markdown`. It may be given at the group level
   (`craevidence --output json check ...`) or after the subcommand (`craevidence check --output
   json ...`); the subcommand-level value takes precedence when both are given.

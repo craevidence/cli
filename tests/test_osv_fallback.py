@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import httpx
+import pytest
 from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
@@ -15,6 +16,7 @@ from cra_evidence_cli.local.models import Component, CoverageSource, Finding, Lo
 from cra_evidence_cli.local.osv import (
     OSV_QUERYBATCH_URL,
     OSVClient,
+    OSVClientError,
     _severity_from_osv,
 )
 
@@ -71,6 +73,116 @@ def test_query_batch_skips_a_single_bad_purl(monkeypatch) -> None:
     assert not any("bad" in fid for fid in found)
     assert coverage.status == "partial"
     assert "1 component" in (coverage.detail or "")
+
+
+def _run_osv_with_mock_transport(
+    monkeypatch,
+    *,
+    query_payload=None,
+    query_content: bytes | None = None,
+    detail_payload=None,
+):
+    client_type = httpx.Client
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/querybatch":
+            if query_content is not None:
+                return httpx.Response(200, content=query_content, request=request)
+            return httpx.Response(200, json=query_payload, request=request)
+        if request.url.path.startswith("/v1/vulns/"):
+            if detail_payload is not None:
+                return httpx.Response(200, json=detail_payload, request=request)
+            return httpx.Response(404, request=request)
+        return httpx.Response(404, request=request)
+
+    monkeypatch.setattr(
+        httpx,
+        "Client",
+        lambda *args, **kwargs: client_type(
+            *args, transport=httpx.MockTransport(handler), **kwargs
+        ),
+    )
+    return OSVClient().query_components(
+        [Component(name="acme", version="1.0", purl="pkg:pypi/acme@1.0")]
+    )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {},
+        {"results": None},
+        {"results": {}},
+        {"results": []},
+        {"results": [{}, {}]},
+        {"results": [None]},
+        {"results": [{"vulns": None}]},
+        {"results": [{"vulns": "invalid"}]},
+        {"results": [{"vulns": [None]}]},
+        {"results": [{"vulns": [{}]}]},
+        {"results": [{"vulns": [{"id": "  "}]}]},
+        {"results": [{"vulns": [{"id": 12}]}]},
+        {"results": [{"next_page_token": "page-2"}]},
+        {"results": [{"next_page_token": ""}]},
+        {"results": [{"truncated": True}]},
+    ],
+    ids=[
+        "missing-results-is-not-empty-success",
+        "null-results-is-not-empty-success",
+        "non-list-results",
+        "short-result-list-does-not-disappear-through-zip",
+        "extra-result-is-not-ignored-through-zip",
+        "non-object-result",
+        "null-vulns-is-not-empty-success",
+        "non-list-vulns",
+        "non-object-vulnerability",
+        "missing-vulnerability-id",
+        "blank-vulnerability-id",
+        "non-string-vulnerability-id",
+        "per-result-pagination-token-is-incomplete",
+        "present-empty-pagination-token-is-not-assumed-complete",
+        "per-result-truncated-is-incomplete",
+    ],
+)
+def test_querybatch_rejects_incomplete_or_malformed_results(monkeypatch, payload) -> None:
+    # Catch short zip acceptance, malformed consumed fields, and treating an
+    # unconsumed continuation page as a complete local assessment.
+    with pytest.raises(OSVClientError):
+        _run_osv_with_mock_transport(monkeypatch, query_payload=payload)
+
+
+def test_querybatch_empty_object_is_a_valid_empty_result(monkeypatch) -> None:
+    findings, coverage = _run_osv_with_mock_transport(monkeypatch, query_payload={"results": [{}]})
+
+    assert findings == []
+    assert coverage.status == "present"
+
+
+def test_parse_results_accepts_empty_list_only_for_zero_queries() -> None:
+    client = OSVClient()
+
+    assert client._parse_results([], []) == []
+    with pytest.raises(OSVClientError):
+        client._parse_results([{"_component_name": "acme"}], [])
+
+
+@pytest.mark.parametrize(
+    "query_content",
+    [b"{", b"\xff"],
+    ids=["invalid-json", "invalid-utf8"],
+)
+def test_querybatch_invalid_json_is_an_osv_client_error(monkeypatch, query_content) -> None:
+    with pytest.raises(OSVClientError, match="valid JSON"):
+        _run_osv_with_mock_transport(monkeypatch, query_content=query_content)
+
+
+def test_detail_response_must_be_a_json_object(monkeypatch) -> None:
+    with pytest.raises(OSVClientError, match="JSON object"):
+        _run_osv_with_mock_transport(
+            monkeypatch,
+            query_payload={"results": [{"vulns": [{"id": "GHSA-example"}]}]},
+            detail_payload=[],
+        )
 
 
 _DETAILS = {
@@ -201,6 +313,7 @@ def test_fail_on_high_gate_trips_via_osv_path(monkeypatch, tmp_path) -> None:
     # With Grype absent, the OSV path must yield real severities so that
     # --fail-on high exits 11 instead of silently passing on "unknown".
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
 
     class NoGrype:
         def __init__(self, *args, **kwargs):

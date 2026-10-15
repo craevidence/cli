@@ -120,13 +120,20 @@ class GrypeLocalScanner:
         # example "false" on an air-gapped runner) must stay in force, so the
         # auto-update default is only applied when the variable is absent.
         env.setdefault("GRYPE_DB_AUTO_UPDATE", "true")
-        result = subprocess.run(  # noqa: S603
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=self.timeout,
-            env=env,
-        )
+        try:
+            result = subprocess.run(  # noqa: S603
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                env=env,
+            )
+        except subprocess.TimeoutExpired as exc:
+            message = "Grype scan timed out"
+            raise ScanEngineUnavailable(message) from exc
+        except OSError as exc:
+            message = "Grype scan could not be started"
+            raise ScanEngineUnavailable(message) from exc
         if result.returncode not in {0, 1}:
             raise ScanEngineUnavailable(result.stderr.strip() or "Grype scan failed")
         if result.returncode == 1 and not result.stdout.strip():

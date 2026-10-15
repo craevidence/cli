@@ -8,8 +8,10 @@ files are written even when a gate fails so CI can still upload them.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
@@ -45,10 +47,22 @@ def _result(findings: list[Finding] | None = None) -> LocalCheckResult:
     )
 
 
-def _invoke(monkeypatch, tmp_path, extra_args, *, result=None, output="text"):
+def _invoke(
+    monkeypatch,
+    tmp_path,
+    extra_args,
+    *,
+    result=None,
+    output="text",
+    run_check=None,
+):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
     fixed = result if result is not None else _result()
-    monkeypatch.setattr(check_module, "run_local_check", lambda **kwargs: fixed)
+    monkeypatch.setattr(
+        check_module,
+        "run_local_check",
+        run_check or (lambda **kwargs: fixed),
+    )
     sbom = tmp_path / "sbom.json"
     _write_sbom(sbom)
     return CliRunner().invoke(
@@ -141,6 +155,213 @@ def test_wrote_note_emitted_to_stderr(monkeypatch, tmp_path):
     res = _invoke(monkeypatch, tmp_path, ["--json-output", str(out)])
     assert res.exit_code == 0, res.output
     assert f"Wrote json report to {out}" in res.stderr
+
+
+def test_relative_report_alias_is_refused_before_check(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    report = tmp_path / "report.json"
+    report.write_text("keep existing bytes")
+    reached_check = False
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    res = _invoke(
+        monkeypatch,
+        tmp_path,
+        ["--json-output", "report.json", "--sarif-output", "./report.json"],
+        run_check=unexpected_check,
+    )
+
+    assert res.exit_code == 2, res.output
+    assert "different paths" in res.output
+    assert not reached_check
+    assert report.read_text() == "keep existing bytes"
+
+
+def test_symlink_loop_output_path_is_a_usage_error_before_check(monkeypatch, tmp_path):
+    output = tmp_path / "loop.json"
+    reached_check = False
+    original_resolve = Path.resolve
+
+    def resolve_with_loop(path, *args, **kwargs):
+        if path == output:
+            message = "Symlink loop"
+            raise RuntimeError(message)
+        return original_resolve(path, *args, **kwargs)
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    monkeypatch.setattr(Path, "resolve", resolve_with_loop)
+    result = _invoke(
+        monkeypatch,
+        tmp_path,
+        ["--json-output", str(output)],
+        run_check=unexpected_check,
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "Could not resolve the JSON report output path." in result.output
+    assert not reached_check
+
+
+def test_real_symlink_loop_output_path_is_a_usage_error_before_check(monkeypatch, tmp_path):
+    first = tmp_path / "loop-a.json"
+    second = tmp_path / "loop-b.json"
+    first.symlink_to(second.name)
+    second.symlink_to(first.name)
+    reached_check = False
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    result = _invoke(
+        monkeypatch,
+        tmp_path,
+        ["--json-output", str(first)],
+        run_check=unexpected_check,
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "Could not" in result.output
+    assert not reached_check
+
+
+@pytest.mark.parametrize("alias_kind", ["symlink", "hardlink"])
+def test_existing_file_alias_is_refused_before_check(monkeypatch, tmp_path, alias_kind):
+    original = tmp_path / "original.json"
+    alias = tmp_path / "alias.json"
+    original.write_text("keep existing bytes")
+    if alias_kind == "symlink":
+        alias.symlink_to(original)
+    else:
+        os.link(original, alias)
+    reached_check = False
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    res = _invoke(
+        monkeypatch,
+        tmp_path,
+        ["--json-output", str(original), "--markdown-output", str(alias)],
+        run_check=unexpected_check,
+    )
+
+    assert res.exit_code == 2, res.output
+    assert "different" in res.output
+    assert not reached_check
+    assert original.read_text() == "keep existing bytes"
+
+
+def test_primary_and_extra_report_alias_is_refused_before_check(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    reached_check = False
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    res = _invoke(
+        monkeypatch,
+        tmp_path,
+        ["--output-file", "report.json", "--json-output", "./report.json"],
+        run_check=unexpected_check,
+    )
+
+    assert res.exit_code == 2, res.output
+    assert not reached_check
+    assert not (tmp_path / "report.json").exists()
+
+
+def test_generated_sbom_and_report_alias_is_refused_before_check(monkeypatch, tmp_path):
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    reached_check = False
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    monkeypatch.setattr(check_module, "run_local_check", unexpected_check)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "check",
+            "--json-output",
+            "same.json",
+            "--sbom-output",
+            "./same.json",
+        ],
+    )
+
+    assert result.exit_code == 2, result.output
+    assert "different paths" in result.output
+    assert not reached_check
+    assert not (tmp_path / "same.json").exists()
+
+
+def test_gitlab_annotation_and_report_alias_is_refused_before_check(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    reached_check = False
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    res = _invoke(
+        monkeypatch,
+        tmp_path,
+        [
+            "--json-output",
+            "same.json",
+            "--annotations",
+            "gitlab",
+            "--annotations-file",
+            "./same.json",
+        ],
+        run_check=unexpected_check,
+    )
+
+    assert res.exit_code == 2, res.output
+    assert "different paths" in res.output
+    assert not reached_check
+    assert not (tmp_path / "same.json").exists()
+
+
+def test_github_summary_and_report_alias_is_refused_before_check(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", "./same.json")
+    reached_check = False
+
+    def unexpected_check(**_kwargs):
+        nonlocal reached_check
+        reached_check = True
+        return _result()
+
+    res = _invoke(
+        monkeypatch,
+        tmp_path,
+        ["--json-output", "same.json", "--annotations", "github"],
+        run_check=unexpected_check,
+    )
+
+    assert res.exit_code == 2, res.output
+    assert "different paths" in res.output
+    assert not reached_check
+    assert not (tmp_path / "same.json").exists()
 
 
 def test_api_key_never_leaks_into_any_output(monkeypatch, tmp_path):

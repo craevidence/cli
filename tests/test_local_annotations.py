@@ -115,6 +115,20 @@ def test_github_step_summary_empty():
     assert "CRA compliant" not in summary
 
 
+def test_github_step_summary_keeps_delimiters_inside_one_table_row():
+    finding = Finding(
+        id="CVE-2026-0003",
+        package="pkg\\|name\nsecond",
+        version="1.0|release\r\nnext",
+        severity="high",
+    )
+
+    summary = annotations.github_step_summary(_result(findings=[finding]))
+    rows = [line for line in summary.splitlines() if line.startswith("| pkg")]
+
+    assert rows == ["| pkg\\\\\\|name second | 1.0\\|release next | CVE-2026-0003 | high |  |"]
+
+
 # gitlab_codequality
 
 
@@ -175,6 +189,32 @@ def test_gitlab_codequality_avoids_tmp_path():
     assert path == "sbom.json"
 
 
+def test_gitlab_codequality_prefers_retained_sbom_over_custom_temp_path():
+    from pathlib import Path
+
+    result = _result(
+        findings=[_critical_kev()],
+        provenance={"sbom_output": "artifacts/generated/sbom.json"},
+    )
+    result.sbom_path = Path("/var/folders/runner/T/tmp/source.json")  # noqa: S108
+
+    entries = annotations.gitlab_codequality(result)
+
+    assert entries[0]["location"]["path"] == "artifacts/generated/sbom.json"
+
+
+def test_gitlab_codequality_generated_directory_uses_sbom_filename():
+    result = _result(
+        findings=[_critical_kev()],
+        provenance={"sbom_path": "/var/folders/runner/T/tmp/generated.json"},  # noqa: S108
+    )
+    result.target_type = "directory"
+
+    entries = annotations.gitlab_codequality(result)
+
+    assert entries[0]["location"]["path"] == "sbom.json"
+
+
 def test_gitlab_codequality_uses_sbom_path_attribute_over_provenance():
     """sbom_path attribute (user-supplied) takes priority over provenance sbom_path."""
     from pathlib import Path
@@ -210,10 +250,12 @@ def test_resolve_mode_passthrough():
 def test_resolve_mode_auto_detects_provider():
     def detect():
         return CIMetadata(ci_provider="gitlab")
+
     assert annotations.resolve_mode("auto", detect=detect) == "gitlab"
 
 
 def test_resolve_mode_auto_no_provider():
     def detect():
         return CIMetadata(ci_provider=None)
+
     assert annotations.resolve_mode("auto", detect=detect) == "none"

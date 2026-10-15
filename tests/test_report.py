@@ -6,6 +6,7 @@ import json
 from io import StringIO
 from pathlib import Path
 
+import pytest
 from rich.console import Console
 
 from cra_evidence_cli.local.models import Component, Finding, LocalCheckResult, identifier_coverage
@@ -154,6 +155,21 @@ def test_sarif_location_uses_sbom_path_not_tmp() -> None:
     assert not uri.startswith("/tmp")  # noqa: S108
 
 
+def test_sarif_location_encodes_filesystem_path_characters() -> None:
+    result = _result()
+    result.sbom_path = Path("build/package #50%.json")
+    result.findings = [
+        Finding(id="CVE-2026-0003", package="pkg", version="1.0.0", severity="medium")
+    ]
+
+    doc = json.loads(render(result, "sarif"))
+    uri = doc["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+
+    assert uri == "build/package%20%2350%25.json"
+
+
 def test_sarif_location_falls_back_when_sbom_path_is_tmp() -> None:
     """When sbom_path is a /tmp absolute path, the URI falls back to 'sbom.json'."""
     result = _result()
@@ -167,10 +183,19 @@ def test_sarif_location_falls_back_when_sbom_path_is_tmp() -> None:
     assert not uri.startswith("/tmp")  # noqa: S108
 
 
-def test_sarif_location_uses_sbom_output_from_provenance() -> None:
-    """When sbom_path is absent but provenance has sbom_output, use that."""
+@pytest.mark.parametrize(
+    "source_path",
+    [
+        None,
+        Path("/tmp/build/sbom.json"),  # noqa: S108
+        Path("/work/cache/sbom.json"),
+    ],
+)
+def test_sarif_location_uses_sbom_output_from_provenance(source_path) -> None:
+    """A retained copy wins even when the consumed temporary path looks permanent."""
     result = _result()
-    result.sbom_path = None
+    result.target_type = "directory"
+    result.sbom_path = source_path
     result.provenance = {"engine": "grype-local", "sbom_output": "out/generated.json"}
     result.findings = [Finding(id="CVE-2026-0004", package="pkg", version="1.0.0", severity="low")]
     doc = json.loads(render(result, "sarif"))
@@ -178,6 +203,37 @@ def test_sarif_location_uses_sbom_output_from_provenance() -> None:
         "uri"
     ]
     assert uri == "out/generated.json"
+
+
+@pytest.mark.parametrize("target_type", ["directory", "image"])
+def test_sarif_does_not_link_a_deleted_generated_source_outside_os_tmp(target_type) -> None:
+    """Catches publishing a deleted source path when a custom temp directory is used."""
+    result = _result()
+    result.target_type = target_type
+    result.sbom_path = Path("/work/private-build-cache/generated.json")
+    result.findings = [Finding(id="CVE-2026-0005", package="pkg", version="1.0.0", severity="low")]
+    document = json.loads(render(result, "sarif"))
+    uri = document["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+    assert uri == "sbom.json"
+
+
+@pytest.mark.parametrize(
+    "output_path", ["/tmp/retained.json", "/var/tmp/retained.json"]  # noqa: S108
+)
+def test_sarif_tmp_copy_does_not_expose_the_deleted_consumed_source(output_path) -> None:
+    """Catches falling back to a deleted source when the retained copy is hidden."""
+    result = _result()
+    result.target_type = "image"
+    result.sbom_path = Path("/work/private-build-cache/generated.json")
+    result.provenance["sbom_output"] = output_path
+    result.findings = [Finding(id="CVE-2026-0006", package="pkg", version="1.0.0", severity="low")]
+    document = json.loads(render(result, "sarif"))
+    uri = document["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+    assert uri == "sbom.json"
 
 
 # Fix 2: top-actions ranking

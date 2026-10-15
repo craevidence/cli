@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -46,11 +47,12 @@ def _write_sbom(path: Path) -> None:
     )
 
 
-def test_check_without_api_key_tolerates_malformed_config(monkeypatch, tmp_path):
+@pytest.mark.parametrize("config_contents", [":\n", "date: 2024-02-30\n"])
+def test_check_without_api_key_tolerates_malformed_config(monkeypatch, tmp_path, config_contents):
     home = tmp_path / "home"
     config_dir = home / ".cra-evidence"
     config_dir.mkdir(parents=True)
-    (config_dir / "config.yaml").write_text(":\n")
+    (config_dir / "config.yaml").write_text(config_contents)
     sbom_path = tmp_path / "sbom.json"
     _write_sbom(sbom_path)
 
@@ -479,6 +481,7 @@ def _cov_recent():
 def _install_fake_scanner(monkeypatch, findings):
     _FakeScanner.findings = findings
     monkeypatch.setattr(check_module, "GrypeLocalScanner", _FakeScanner)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
     # Keep KEV/EPSS enrichment from touching the network during integration tests.
     monkeypatch.setattr(
         check_module,
@@ -652,7 +655,7 @@ def test_explicit_flag_overrides_policy(monkeypatch, tmp_path):
 
 def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
-    _install_fake_scanner(monkeypatch, [])
+    _install_fake_scanner(monkeypatch, [_critical_finding()])
     # Fake engine generation creates a real SBOM file in its own directory,
     # mirroring the private temp dir the real generator creates.
     gen_dir = tmp_path / "sbom_gen"
@@ -668,12 +671,47 @@ def test_sbom_output_copies_generated_sbom(monkeypatch, tmp_path):
     )
     src = tmp_path / "src"
     src.mkdir()
-    out_sbom = tmp_path / "artifact_sbom.json"
-    res = _run_check([str(src), "--sbom-output", str(out_sbom)])
+    monkeypatch.chdir(tmp_path)
+    out_sbom = Path("artifact_sbom.json")
+    sarif_path = tmp_path / "report.sarif"
+    res = _run_check([str(src), "--sbom-output", str(out_sbom), "--sarif-output", str(sarif_path)])
     assert res.exit_code == 0, res.output
     assert out_sbom.exists()
     assert json.loads(out_sbom.read_text())["bomFormat"] == "CycloneDX"
+    sarif = json.loads(sarif_path.read_text())
+    uri = sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"][
+        "uri"
+    ]
+    assert uri == str(out_sbom)
     # The generated SBOM's temp directory is removed after a successful run.
+    assert not gen_dir.exists()
+
+
+def test_sarif_uses_safe_sbom_uri_when_generated_sbom_is_not_copied(monkeypatch, tmp_path):
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    _install_fake_scanner(monkeypatch, [_critical_finding()])
+    gen_dir = tmp_path / "sbom_gen"
+    gen_dir.mkdir()
+    generated = gen_dir / "sbom.json"
+    _write_sbom(generated)
+    from cra_evidence_cli.sbom_generator import SBOMGenerationResult
+
+    monkeypatch.setattr(
+        check_module,
+        "generate_sbom_from_directory",
+        lambda *a, **k: SBOMGenerationResult(generated, 1, "cyclonedx", "craevidence-grype"),
+    )
+    src = tmp_path / "src"
+    src.mkdir()
+    sarif_path = tmp_path / "report.sarif"
+    res = _run_check([str(src), "--sarif-output", str(sarif_path)])
+
+    assert res.exit_code == 0, res.output
+    sarif = json.loads(sarif_path.read_text())
+    uri = sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"][
+        "uri"
+    ]
+    assert uri == "sbom.json"
     assert not gen_dir.exists()
 
 
@@ -803,6 +841,104 @@ def _install_process_scanner(monkeypatch, returncode, stdout, stderr=""):
         "",
     )
     return scanner
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "expected_error", "safe_reason", "private_detail"),
+    [
+        (
+            "missing",
+            FileNotFoundError,
+            "Grype scan could not be started",
+            "/runner/private/grype",
+        ),
+        (
+            "permission",
+            PermissionError,
+            "Grype scan could not be started",
+            "/runner/private/grype",
+        ),
+        (
+            "timeout",
+            subprocess.TimeoutExpired,
+            "Grype scan timed out",
+            "/opt/bin/grype",
+        ),
+    ],
+    ids=["missing-executable", "permission-denied", "process-timeout"],
+)
+def test_scan_process_failures_fall_back_with_unavailable_coverage(
+    monkeypatch, tmp_path, failure_kind, expected_error, safe_reason, private_detail
+):
+    from cra_evidence_cli.local import scanner as scanner_module
+
+    identity = EngineIdentity(
+        path="/opt/bin/grype",
+        version="craevidence-v0.116.1-p3",
+        syft_version="1.50.0",
+    )
+
+    def fail_run(*args, **kwargs):
+        if failure_kind == "missing":
+            raise FileNotFoundError(2, "No such file or directory", private_detail)
+        if failure_kind == "permission":
+            raise PermissionError(13, "Permission denied", private_detail)
+        raise subprocess.TimeoutExpired(["/opt/bin/grype", "sbom"], timeout=300)
+
+    monkeypatch.setattr(scanner_module.subprocess, "run", fail_run)
+    monkeypatch.setattr(
+        scanner_module,
+        "inspect_engine",
+        lambda path=None: EngineInspection(identity, ""),
+    )
+    scanner = scanner_module.GrypeLocalScanner()
+    scanner._inspection = EngineInspection(identity, "")
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    with pytest.raises(ScanEngineUnavailable) as exc_info:
+        scanner.scan_sbom(sbom)
+    assert isinstance(exc_info.value.__cause__, expected_error)
+    assert str(exc_info.value) == safe_reason
+
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+
+    class FakeOSVClient:
+        def query_components(self, components):
+            return [
+                Finding(
+                    id="OSV-2026-1",
+                    package="acme",
+                    version="1.0.0",
+                    severity="medium",
+                    purl="pkg:pypi/acme@1.0.0",
+                )
+            ], _Cov("osv.dev", "present")
+
+    monkeypatch.setattr(check_module, "OSVClient", FakeOSVClient)
+    monkeypatch.setattr(
+        check_module,
+        "fetch_kev_catalog",
+        lambda: (set(), _Cov("cisa-kev", "present", as_of="2026-06-10")),
+    )
+    monkeypatch.setattr(
+        check_module,
+        "fetch_epss_scores",
+        lambda cves: ({}, _Cov("first-epss", "present", as_of="2026-06-10")),
+    )
+
+    result = _run_check(["--sbom", str(sbom)])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["provenance"]["engine"] == "osv-online"
+    assert payload["provenance"]["grype-db"]["status"] == "unavailable"
+    assert payload["provenance"]["osv.dev"]["status"] == "present"
+    assert payload["findings"][0]["id"] == "OSV-2026-1"
+    assert f"Warning: local matcher failed ({safe_reason})" in result.stderr
+    assert "attempting an OSV.dev fallback" in result.stderr
+    assert "may use the network and results may differ" in result.stderr
+    assert private_detail not in result.stderr
 
 
 def _incomplete_grype_document():
@@ -1096,6 +1232,7 @@ def test_sbom_output_noop_when_sbom_supplied(monkeypatch, tmp_path):
 
 def test_grype_failure_falls_back_to_osv(monkeypatch, tmp_path):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
 
     class FailingScanner:
         def is_available(self):
@@ -1155,6 +1292,7 @@ def test_grype_partial_report_keeps_findings_without_osv_fallback(
     from datetime import UTC, datetime
 
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
     finding = _critical_finding("CVE-2025-9999")
     osv_calls = []
     today = datetime.now(UTC).date().isoformat()
@@ -1229,6 +1367,7 @@ def test_grype_partial_report_keeps_findings_without_osv_fallback(
 
 def test_absent_engine_is_announced_but_not_reported_as_a_failure(monkeypatch, tmp_path):
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
 
     class NoGrype:
         def is_available(self):

@@ -20,6 +20,10 @@ def load_sbom(path: Path) -> tuple[list[Component], dict[str, Any]]:
         msg = f"Failed to parse SBOM {path}: {exc}"
         raise SBOMParseError(msg) from exc
 
+    if not isinstance(data, dict):
+        msg = "Invalid SBOM format: expected a JSON object at the root"
+        raise SBOMParseError(msg)
+
     if isinstance(data.get("components"), list):
         return _parse_cyclonedx(data), data
     if isinstance(data.get("packages"), list):
@@ -36,7 +40,8 @@ def _parse_cyclonedx(data: dict[str, Any]) -> list[Component]:
             return
         for item in items:
             if not isinstance(item, dict):
-                continue
+                msg = "Invalid CycloneDX SBOM: each component must be a JSON object"
+                raise SBOMParseError(msg)
             parse(item)
             visit(item.get("components"))
 
@@ -74,7 +79,8 @@ def _parse_spdx(data: dict[str, Any]) -> list[Component]:
     components: list[Component] = []
     for item in data.get("packages", []):
         if not isinstance(item, dict):
-            continue
+            msg = "Invalid SPDX SBOM: each package must be a JSON object"
+            raise SBOMParseError(msg)
         purl = None
         # SPDX 2.2 and 2.3 spell the CPE referenceCategory differently
         # (PACKAGE-MANAGER vs PACKAGE_MANAGER etc.), so - like the purl

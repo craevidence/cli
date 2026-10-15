@@ -79,7 +79,7 @@ class OSVClient:
                 findings.extend(sub_findings)
                 skipped += sub_skipped
             return findings, skipped
-        return self._parse_results(queries, data.get("results") or []), 0
+        return self._parse_results(queries, data.get("results")), 0
 
     def _query_for(self, component: Component) -> dict[str, Any]:
         return {
@@ -159,7 +159,15 @@ class OSVClient:
                 if len(response.content) > MAX_HTTP1_RESPONSE_BYTES:
                     msg = "OSV response exceeded 32 MiB cap; local scan is incomplete"
                     raise OSVClientError(msg)
-                return response.json()
+                try:
+                    data = response.json()
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    msg = "OSV response was not valid JSON; local scan is incomplete"
+                    raise OSVClientError(msg) from exc
+                if not isinstance(data, dict):
+                    msg = "OSV response was not a JSON object; local scan is incomplete"
+                    raise OSVClientError(msg)
+                return data
             retry_after = response.headers.get("Retry-After")
             # Jitter for retry backoff; not security-sensitive.
             jitter = random.random() / 10  # noqa: S311
@@ -171,14 +179,40 @@ class OSVClient:
     def _parse_results(
         self,
         queries: list[dict[str, Any]],
-        results: list[dict[str, Any]],
+        results: Any,
     ) -> list[Finding]:
+        if not isinstance(results, list):
+            msg = "OSV querybatch response did not contain a results list"
+            raise OSVClientError(msg)
+        if len(results) != len(queries):
+            msg = "OSV querybatch returned an unexpected number of results"
+            raise OSVClientError(msg)
+
+        for result in results:
+            if not isinstance(result, dict):
+                msg = "OSV querybatch result was not a JSON object"
+                raise OSVClientError(msg)
+            if "next_page_token" in result or result.get("truncated"):
+                msg = "OSV response was paginated/truncated; local scan is incomplete"
+                raise OSVClientError(msg)
+            if "vulns" in result and not isinstance(result["vulns"], list):
+                msg = "OSV querybatch result did not contain a vulnerabilities list"
+                raise OSVClientError(msg)
+            for vuln in result.get("vulns", []):
+                if not isinstance(vuln, dict):
+                    msg = "OSV querybatch vulnerability was not a JSON object"
+                    raise OSVClientError(msg)
+                vuln_id = vuln.get("id")
+                if not isinstance(vuln_id, str) or not vuln_id.strip():
+                    msg = "OSV querybatch vulnerability did not contain a valid id"
+                    raise OSVClientError(msg)
+
         findings: list[Finding] = []
-        for query, result in zip(queries, results, strict=False):
+        for query, result in zip(queries, results, strict=True):
             package = str(query.get("_component_name") or "unknown")
             purl = query.get("_component_purl")
-            for vuln in result.get("vulns") or []:
-                vuln_id = str(vuln.get("id") or "UNKNOWN")
+            for vuln in result.get("vulns", []):
+                vuln_id = vuln["id"]
                 aliases = {str(item) for item in vuln.get("aliases") or [] if item}
                 aliases.discard(vuln_id)
                 findings.append(

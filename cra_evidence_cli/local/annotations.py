@@ -48,15 +48,18 @@ def _resolve_sbom_uri(result: LocalCheckResult) -> str:
     Returns a repository-relative path when available. Never returns an
     absolute temp-directory path; falls back to the literal 'sbom.json'.
     """
-    if result.sbom_path is not None:
-        path_str = str(result.sbom_path)
-        if not _is_temp_path(path_str):
-            return path_str
     sbom_output = result.provenance.get("sbom_output")
     if sbom_output:
         s = str(sbom_output)
         if not _is_temp_path(s):
             return s
+        return "sbom.json"
+    if result.target_type in ("directory", "image"):
+        return "sbom.json"
+    if result.sbom_path is not None:
+        path_str = str(result.sbom_path)
+        if not _is_temp_path(path_str):
+            return path_str
     prov_path = result.provenance.get("sbom_path")
     if prov_path:
         s = str(prov_path)
@@ -125,10 +128,7 @@ def github_step_summary(result: LocalCheckResult) -> str:
     """Render a GitHub-flavored markdown table of findings, or a no-findings notice."""
     findings = _findings(result)
     if not findings:
-        return (
-            "### Local SBOM Check\n\n"
-            "No blocking findings were found in this local snapshot."
-        )
+        return "### Local SBOM Check\n\nNo blocking findings were found in this local snapshot."
 
     lines = [
         f"### Local SBOM Check - {len(findings)} findings",
@@ -136,11 +136,22 @@ def github_step_summary(result: LocalCheckResult) -> str:
         "| Package | Version | ID | Severity | KEV |",
         "| --- | --- | --- | --- | --- |",
     ]
+
+    def markdown_cell(value: object) -> str:
+        return (
+            str(value)
+            .replace("\\", "\\\\")
+            .replace("|", "\\|")
+            .replace("\r\n", " ")
+            .replace("\r", " ")
+            .replace("\n", " ")
+        )
+
     for finding in findings:
-        package = "" if finding.get("package") is None else str(finding.get("package"))
-        version = "" if finding.get("version") is None else str(finding.get("version"))
-        fid = "" if finding.get("id") is None else str(finding.get("id"))
-        severity = str(finding.get("severity", "unknown")).lower()
+        package = markdown_cell("" if finding.get("package") is None else finding.get("package"))
+        version = markdown_cell("" if finding.get("version") is None else finding.get("version"))
+        fid = markdown_cell("" if finding.get("id") is None else finding.get("id"))
+        severity = markdown_cell(finding.get("severity", "unknown")).lower()
         kev = "yes" if finding.get("known_exploited") is True else ""
         lines.append(f"| {package} | {version} | {fid} | {severity} | {kev} |")
     return "\n".join(lines)

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime
 
 import httpx
@@ -39,11 +40,21 @@ def fetch_kev_catalog(timeout: float = 20.0) -> tuple[set[str], CoverageSource]:
         response = client.get(CISA_KEV_URL)
         response.raise_for_status()
         data = response.json()
-    cves = {
-        str(item.get("cveID")).upper()
-        for item in data.get("vulnerabilities", [])
-        if item.get("cveID")
-    }
+    if not isinstance(data, dict):
+        msg = "CISA KEV response must be an object"
+        raise ValueError(msg)
+    vulnerabilities = data.get("vulnerabilities")
+    if not isinstance(vulnerabilities, list):
+        msg = "CISA KEV response must contain a vulnerabilities list"
+        raise ValueError(msg)
+
+    cves: set[str] = set()
+    for item in vulnerabilities:
+        cve_id = item.get("cveID") if isinstance(item, dict) else None
+        if not isinstance(cve_id, str) or not cve_id.strip():
+            msg = "CISA KEV vulnerability must contain a CVE ID"
+            raise ValueError(msg)
+        cves.add(cve_id.strip().upper())
     as_of = data.get("dateReleased") or data.get("catalogVersion") or _today()
     return cves, CoverageSource("cisa-kev", "present", as_of=str(as_of))
 
@@ -59,12 +70,30 @@ def fetch_epss_scores(
             response = client.get(FIRST_EPSS_URL, params={"cve": ",".join(batch)})
             response.raise_for_status()
             data = response.json()
-            for item in data.get("data", []):
-                cve = str(item.get("cve", "")).upper()
+            if not isinstance(data, dict):
+                msg = "FIRST EPSS response must be an object"
+                raise ValueError(msg)
+            rows = data.get("data")
+            if not isinstance(rows, list):
+                msg = "FIRST EPSS response must contain a data list"
+                raise ValueError(msg)
+            for item in rows:
+                cve = item.get("cve") if isinstance(item, dict) else None
+                if not isinstance(cve, str) or not cve.strip():
+                    msg = "FIRST EPSS row must contain a CVE ID"
+                    raise ValueError(msg)
                 try:
-                    scores[cve] = float(item["epss"])
-                except (KeyError, TypeError, ValueError):
-                    continue
+                    raw_score = item["epss"]
+                    if isinstance(raw_score, bool):
+                        raise TypeError
+                    score = float(raw_score)
+                except (KeyError, OverflowError, TypeError, ValueError) as exc:
+                    msg = "FIRST EPSS row must contain a numeric score"
+                    raise ValueError(msg) from exc
+                if not math.isfinite(score) or not 0.0 <= score <= 1.0:
+                    msg = "FIRST EPSS score must be finite and within [0, 1]"
+                    raise ValueError(msg)
+                scores[cve.strip().upper()] = score
     return scores, CoverageSource("first-epss", "present", as_of=_today())
 
 
