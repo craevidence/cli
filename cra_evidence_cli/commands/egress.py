@@ -16,12 +16,14 @@ import sys
 from pathlib import Path
 
 import click
+from click.core import ParameterSource
 
 from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.local.disclaimer import (
     advisory_block,
 )
 from cra_evidence_cli.local.egress import EgressReport, evaluate
+from cra_evidence_cli.local.report import sarif_path_uri
 from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
 
 _CRA_MAPPING = "External interface and data-flow review"
@@ -136,7 +138,7 @@ def _render_sarif(report: EgressReport) -> str:
                 "locations": [
                     {
                         "physicalLocation": {
-                            "artifactLocation": {"uri": ep.file},
+                            "artifactLocation": {"uri": sarif_path_uri(ep.file)},
                             "region": {"startLine": ep.line},
                         }
                     }
@@ -218,8 +220,8 @@ def egress_check(
         except SBOMParseError as exc:
             msg = str(exc)
             raise click.ClickException(msg) from exc
-        # Source tree not provided; layer-3 scan is skipped.
-        source_root = None
+        if ctx.get_parameter_source("path") != ParameterSource.DEFAULT and path.is_dir():
+            source_root = path
 
     elif path.is_file():
         try:

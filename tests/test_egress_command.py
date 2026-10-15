@@ -112,6 +112,52 @@ def test_egress_check_text_source_not_scanned_when_sbom_flag(tmp_path: Path):
     assert "Source not scanned" in result.output
 
 
+def test_egress_check_sbom_and_explicit_directory_scan_both_inputs(tmp_path: Path):
+    sbom_path = tmp_path / "sbom.json"
+    _write_sbom(sbom_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "client.py").write_text(
+        'BASE = "https://api.metrics-sink.net/events"\n', encoding="utf-8"
+    )
+
+    result = CliRunner().invoke(
+        egress_check,
+        [str(project), "--sbom", str(sbom_path)],
+        obj=_make_obj("json"),
+    )
+
+    assert result.exit_code == 0, result.output
+    report = json.loads(result.output)["report"]
+    assert report["source_scanned"] is True
+    assert "api.metrics-sink.net" in {item["host"] for item in report["endpoints"]}
+    assert {item["name"] for item in report["sdks"]} >= {"sentry-sdk", "boto3"}
+
+
+def test_egress_sarif_encodes_source_path_and_scans_with_supplied_sbom(tmp_path: Path):
+    sbom_path = tmp_path / "sbom.json"
+    _write_sbom(sbom_path)
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "client #50%.py").write_text(
+        'BASE = "https://api.metrics-sink.net/events"\n', encoding="utf-8"
+    )
+
+    result = CliRunner().invoke(
+        egress_check,
+        [str(project), "--sbom", str(sbom_path)],
+        obj=_make_obj("sarif"),
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    endpoint = next(
+        item for item in data["runs"][0]["results"] if item["ruleId"] == "EGRESS-ENDPOINT"
+    )
+    uri = endpoint["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+    assert uri == "client%20%2350%25.py"
+
+
 # JSON output
 
 

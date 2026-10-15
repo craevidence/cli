@@ -337,6 +337,8 @@ craevidence [--output text|json|sarif] egress-check [PATH]
 - Layer 3 runs only when you pass a project **directory**: it walks source files
   for external URLs (loopback, `.local`, and documentation hosts are excluded)
   and lists them as **candidates to review** (this layer can be noisy).
+  An explicit directory can be combined with `--sbom`; omitting the directory
+  when `--sbom` is supplied leaves source scanning off.
 - Use the results to review external interfaces and data flows. This tool cannot
   evidence encryption, data minimisation, personal-data processing, or lawful
   processing.
