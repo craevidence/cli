@@ -325,6 +325,20 @@ async def test_client_verifies_latest_attestation_by_product_and_version(
 
     monkeypatch.setattr(client, "_request_with_retry", fake_request)
 
+    def verify_request(request):
+        assert request.method == "POST"
+        assert str(request.url) == (
+            "https://api.test.craevidence.com/api/v1/attestations/latest-attestation/verify"
+        )
+        assert request.content == b"{}"
+        return responses.pop(0)
+
+    monkeypatch.setattr(
+        client,
+        "_http_client",
+        lambda: httpx.AsyncClient(transport=httpx.MockTransport(verify_request)),
+    )
+
     result = await client.verify_attestation(
         product="my-product",
         version="1.0.0",
@@ -344,12 +358,8 @@ async def test_client_verifies_latest_attestation_by_product_and_version(
             "https://api.test.craevidence.com/api/v1/attestations/version/version-123",
             {},
         ),
-        (
-            "POST",
-            "https://api.test.craevidence.com/api/v1/attestations/latest-attestation/verify",
-            {"json": {}},
-        ),
     ]
+    assert responses == []
 
 
 def test_json_mode_errors_go_to_stderr_not_stdout(tmp_path, monkeypatch):

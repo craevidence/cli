@@ -154,6 +154,10 @@ craevidence upload-sbom \
 
 ## `create-version`
 
+For manufacturer products, prepare the version in the web app first. Creating
+those versions requires a signed-in person; API keys and OIDC cannot create
+them. `--reuse-existing` can return an existing version without changing it.
+
 Create a draft version under an existing product without uploading new
 evidence:
 
@@ -187,8 +191,8 @@ the `draft` release state.
 
 Use `--inherit-from <version>` to carry over additional eligible compliance
 artifacts from an earlier version. Without the flag, there is no
-version-to-version carry-over; product-level documents and templates are still
-linked automatically.
+version-to-version carry-over; CRA Evidence may link reusable product-level
+documents and templates automatically.
 
 Use `--reuse-existing` when a repeatable CI preparation step should return an
 existing matching version instead of failing. Reuse does not update the
@@ -574,6 +578,9 @@ craevidence verify-attestation \
 `verify-attestation` exits `0` only when the resulting status is `valid`. It
 exits `22` for `pending`, `untrusted`, `invalid`, `expired`, or `error`, so CI
 does not treat stored but unverified provenance as trusted.
+Without `--attestation`, it verifies the latest attestation listed for the
+selected product version. If you pass `--attestation <id>`, its detail must
+identify the selected version; an ID from another version is rejected.
 
 The accepted key type is ECDSA P-256, which is the key type created by
 `cosign generate-key-pair`. Uploads whose bundle key hint matches this active
@@ -1203,6 +1210,9 @@ craevidence compliance-as-code download-source \
   --document-id <document-id> \
   --output evidence/source.yaml
 ```
+
+An existing output file is preserved by default and causes the command to
+fail. Pass `--force` to replace it.
 
 This is read-only provenance access. It does not reprocess the YAML, update CRA
 readiness, or infer compliance.

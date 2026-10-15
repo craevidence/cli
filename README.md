@@ -191,10 +191,14 @@ craevidence status --product my-product --version 1.0.0
 `upload-sbom` takes an SBOM you already have with `--file`, or generates one
 from `--image` or `--source`. See [Generating an SBOM](#generating-an-sbom).
 
+For manufacturer products, create the version in the web app first. Version
+creation for those products requires a signed-in person; API keys and OIDC
+cannot create them. Existing versions can still be used by the CLI.
+
 `create-version` creates a draft under an existing product without uploading
-new evidence. CRA Evidence automatically links reusable product-level
-documents and templates to the version. This is useful when source-code
-findings need a version before an SBOM is available:
+new evidence. CRA Evidence may link reusable product-level documents and
+templates to the version. This helps when source-code findings need a version
+before an SBOM is available:
 
 ```bash
 craevidence create-version --product my-product --version 1.0.0

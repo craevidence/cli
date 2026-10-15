@@ -588,7 +588,7 @@ runs:
         echo "Upload complete"
 
     - name: Display results
-      if: ${{ inputs.command != 'check' }}
+      if: ${{ inputs.command == 'upload' }}
       shell: bash
       env:
         OUT_ARTIFACT_ID: ${{ steps.upload.outputs.artifact_id }}

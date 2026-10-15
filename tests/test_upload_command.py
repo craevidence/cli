@@ -1118,6 +1118,7 @@ class TestGemaraDownloadSourceCommand:
         assert mock_client.download_gemara_source.call_args.kwargs == {
             "document_id": "doc-123",
             "output_path": Path("source.yaml"),
+            "overwrite": False,
         }
 
     def test_download_source_refuses_overwrite_without_force(self):
@@ -1181,6 +1182,35 @@ class TestGemaraDownloadSourceCommand:
 
         assert result.exit_code == 0, result.output
         mock_client.download_gemara_source.assert_called_once()
+        assert mock_client.download_gemara_source.call_args.kwargs["overwrite"] is True
+
+    def test_download_source_reports_destination_created_after_preflight(self):
+        from unittest.mock import patch
+
+        from cra_evidence_cli.cli import cli
+
+        runner = CliRunner()
+        with patch(
+            "cra_evidence_cli.commands.gemara.CRAEvidenceClient"
+        ), patch(
+            "cra_evidence_cli.commands.gemara.asyncio.run",
+            side_effect=FileExistsError,
+        ):
+            with runner.isolated_filesystem():
+                result = runner.invoke(
+                    cli,
+                    [
+                        "compliance-as-code",
+                        "download-source",
+                        "--document-id", "doc-123",
+                        "--output", "source.yaml",
+                    ],
+                    env=self.BASE_ENV,
+                )
+
+        assert result.exit_code != 0
+        assert "already exists" in result.output
+        assert "Traceback" not in result.output
 
     def test_download_source_surfaces_api_error(self):
         from unittest.mock import MagicMock, patch

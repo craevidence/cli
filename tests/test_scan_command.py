@@ -1,9 +1,11 @@
 """Tests for scan command: threshold logic, exit codes, and output formatting."""
 
+import json
+
 import pytest
 
 from cra_evidence_cli.commands.scan import check_vulnerability_threshold, format_scan_output
-from cra_evidence_cli.exceptions import VulnerabilityThresholdExceeded
+from cra_evidence_cli.exceptions import APIError, VulnerabilityThresholdExceeded
 
 
 @pytest.fixture
@@ -230,6 +232,83 @@ class TestTriggerScanComponentForwarding:
         assert "component" not in captured["data"]
 
 
+def _client_with_scan_response(monkeypatch, response):
+    from cra_evidence_cli.client import CRAEvidenceClient
+    from cra_evidence_cli.config import CRAEvidenceConfig
+
+    class _AsyncClient:
+        def __init__(self, *_, **__):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_):
+            return None
+
+        async def post(self, *_, **__):
+            return response
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", _AsyncClient)
+    return CRAEvidenceClient(CRAEvidenceConfig(api_key="cra_test", url="http://localhost"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        [],
+        None,
+        "invalid object",
+        7,
+        {},
+        {"scan_id": "scan-123"},
+        {"status": None},
+        {"status": ""},
+        {"status": "  "},
+    ],
+    ids=[
+        "list",
+        "null",
+        "string",
+        "number",
+        "empty-object",
+        "missing-status",
+        "null-status",
+        "empty-status",
+        "blank-status",
+    ],
+)
+async def test_trigger_scan_rejects_invalid_success_body(monkeypatch, body):
+    from httpx import Response
+
+    client = _client_with_scan_response(monkeypatch, Response(200, json=body))
+
+    with pytest.raises(APIError, match="Invalid scan response"):
+        await client.trigger_scan(product="p", version="1.0")
+
+
+@pytest.mark.asyncio
+async def test_trigger_scan_rejects_invalid_json_success_body(monkeypatch):
+    from httpx import Response
+
+    client = _client_with_scan_response(monkeypatch, Response(200, content=b"{"))
+
+    with pytest.raises(APIError, match="Invalid scan response"):
+        await client.trigger_scan(product="p", version="1.0")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["pending", "completed"])
+async def test_trigger_scan_accepts_pending_and_completed_objects(monkeypatch, status):
+    from httpx import Response
+
+    body = {"scan_id": "scan-123", "status": status}
+    client = _client_with_scan_response(monkeypatch, Response(200, json=body))
+
+    assert await client.trigger_scan(product="p", version="1.0") == body
+
+
 class TestScanFailOnGate:
     """scan --fail-on waits for the asynchronous scan, then gates on the
     completed counts from the status endpoint."""
@@ -250,7 +329,7 @@ class TestScanFailOnGate:
             "total": total,
         }
 
-    def _invoke(self, responses, args, monotonic_values=None):
+    def _invoke(self, responses, args, monotonic_values=None, output_format=None):
         from itertools import count
         from unittest.mock import MagicMock, patch
 
@@ -271,11 +350,10 @@ class TestScanFailOnGate:
             side_effect=monotonic_values or count(0.0, 1.0),
         ):
             mock_client_cls.return_value = MagicMock()
-            result = runner.invoke(
-                cli,
-                ["scan", "--product", "p", "--version", "1.0", *args],
-                env=self.BASE_ENV,
-            )
+            command_args = ["scan", "--product", "p", "--version", "1.0", *args]
+            if output_format is not None:
+                command_args = ["--output", output_format, *command_args]
+            result = runner.invoke(cli, command_args, env=self.BASE_ENV)
         return result, mock_run, mock_sleep
 
     @pytest.mark.parametrize(
@@ -376,12 +454,18 @@ class TestScanFailOnGate:
         assert mock_run.call_count == 2
         mock_sleep.assert_not_called()
 
-    def test_gate_immediate_failed_trigger_exits_3_without_polling(self):
-        responses = [{"scan_id": None, "status": "failed", "vulnerabilities": None}]
+    @pytest.mark.parametrize("status", ["failed", "disabled"])
+    @pytest.mark.parametrize("args", [[], ["--fail-on", "high"]], ids=["no-gate", "with-gate"])
+    def test_failed_or_disabled_trigger_exits_3_without_polling(self, status, args):
+        responses = [{"scan_id": None, "status": status, "vulnerabilities": None}]
 
-        result, mock_run, _ = self._invoke(responses, ["--fail-on", "high"])
+        result, mock_run, _ = self._invoke(
+            responses, args, output_format="json"
+        )
 
         assert result.exit_code == 3, result.output
+        assert json.loads(result.stdout)["status"] == status
+        assert "Error:" in result.stderr
         assert mock_run.call_count == 1
 
     def test_no_fail_on_does_not_poll(self):

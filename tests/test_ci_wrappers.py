@@ -28,6 +28,11 @@ def test_github_action_uses_cli_signing_path():
     assert "response" in action["outputs"]
     assert "code-check" in action["inputs"]["command"]["description"]
 
+    display_step = next(
+        step for step in action["runs"]["steps"] if step.get("name") == "Display results"
+    )
+    assert display_step["if"] == "${{ inputs.command == 'upload' }}"
+
     assert "craevidence --output json" in action_text
     assert "ARGS=(code-check" in action_text
     assert "ARGS+=(--include-experimental)" in action_text

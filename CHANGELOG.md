@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `--fail-on` gate now exits 30 immediately when the server reports an
   incomplete assessment, even when the vulnerability summary is missing or
   omits its incomplete flag.
+- Preserve compliance template and source-download destinations unless --force
+  was supplied, including files created while input was being retrieved.
+- Return an error for failed or disabled scan requests, including without a
+  severity gate, and reject malformed scan responses.
+- Send verification requests once; keep retries for retrieval requests.
+- Verify explicit attestation IDs through their detail endpoint and bind them to the selected version.
+- Resolve product slugs before the product-list limit and reject malformed
+  product lists and details during compliance template generation.
 - Bound GitHub identity-token requests, refuse redirects and unsafe request
   URLs, and omit credential values from configuration errors.
 - Allow engine-free commands to start without the Unix database-lock module.

@@ -247,7 +247,8 @@ def scan(
     try:
         product, version_number, component = resolve_identity(product, version_number, component)
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        error_console = err_console if output_format == "json" else console
+        error_console.print(f"[red]Error:[/red] {e}")
         sys.exit(e.exit_code)
 
     try:
@@ -270,26 +271,30 @@ def scan(
 
         format_scan_output(data, output_format)
 
-        # Vulnerability gate: wait for the asynchronous scan to finish,
-        # then check the counts against the threshold.
-        if fail_on:
-            status = data.get("status")
-            if status in ("failed", "disabled"):
+        status = data.get("status")
+        if status in ("failed", "disabled"):
+            if fail_on:
                 msg = (
                     f"Vulnerability scan {status}; the --fail-on gate "
                     "cannot be evaluated."
                 )
-                raise APIError(message=msg)
             else:
-                vuln_summary = wait_for_scan_completion(
-                    client, product, version_number, scan_timeout
-                )
-                check_vulnerability_threshold(
-                    {"vulnerabilities": vuln_summary}, fail_on
-                )
+                msg = f"Vulnerability scan {status}."
+            raise APIError(message=msg)
+
+        # Vulnerability gate: wait for the asynchronous scan to finish,
+        # then check the counts against the threshold.
+        if fail_on:
+            vuln_summary = wait_for_scan_completion(
+                client, product, version_number, scan_timeout
+            )
+            check_vulnerability_threshold(
+                {"vulnerabilities": vuln_summary}, fail_on
+            )
 
     except CRAEvidenceError as e:
-        console.print(f"[red]Error:[/red] {e}")
+        error_console = err_console if output_format == "json" else console
+        error_console.print(f"[red]Error:[/red] {e}")
         if hasattr(e, "request_id") and e.request_id:
-            console.print(f"[dim]Request ID: {e.request_id}[/dim]")
+            error_console.print(f"[dim]Request ID: {e.request_id}[/dim]")
         sys.exit(e.exit_code)

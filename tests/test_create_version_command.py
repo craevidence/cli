@@ -682,7 +682,9 @@ async def test_product_slug_resolves_before_the_create(monkeypatch) -> None:
 
     await client.create_product_version(product="security-camera", version="2.4.0")
 
-    client._request_with_retry.assert_awaited_once_with("GET", PRODUCTS_URL)
+    client._request_with_retry.assert_awaited_once_with(
+        "GET", PRODUCTS_URL, params={"slug": "security-camera"}
+    )
     assert recorder.posts[0]["url"] == VERSIONS_URL
     assert recorder.posts[0]["json"] == {"version_number": "2.4.0"}
 

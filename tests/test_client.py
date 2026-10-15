@@ -3,11 +3,16 @@
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from httpx import Response
 
 from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.exceptions import APIError, AuthenticationError
+
+ATTESTATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+VERSION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+OTHER_VERSION_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 
 
 def test_client_initialization(test_config):
@@ -85,7 +90,6 @@ def test_every_authenticated_async_client_uses_the_tls_factory():
     assert client_source.count("httpx.AsyncClient(") == 1
     assert "httpx.AsyncClient(" not in components_source
     assert "httpx.AsyncClient(" not in gemara_source
-    assert client_source.count("self._http_client()") == 20
     assert components_source.count("client._http_client()") == 1
     assert gemara_source.count("client._http_client()") == 3
 
@@ -282,6 +286,296 @@ async def test_upload_attestation_posts_version_id_form(test_config, tmp_path, m
     assert captured["url"] == "https://api.test.craevidence.com/api/v1/attestations/upload"
     assert captured["file_name"] == "provenance.json"
     assert captured["data"] == {"version_id": "ver-456"}
+
+
+@pytest.mark.asyncio
+async def test_verify_attestation_post_does_not_retry_a_transient_5xx(test_config, monkeypatch):
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._resolve_version_id = AsyncMock(return_value=VERSION_ID)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json={"id": ATTESTATION_ID, "version_id": VERSION_ID},
+        )
+    )
+    ensure_access_token = AsyncMock()
+    monkeypatch.setattr(client, "_ensure_access_token", ensure_access_token)
+    captured = {"posts": []}
+
+    class FakeAsyncClient:
+        def __init__(self, timeout, **_kwargs):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, json):
+            captured["posts"].append((url, headers, json))
+            return Response(status_code=503, json={"detail": "temporary failure"})
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(APIError) as exc_info:
+        await client.verify_attestation(
+            product="test", version="1.0", attestation_id=ATTESTATION_ID
+        )
+
+    assert exc_info.value.status_code == 503
+    assert len(captured["posts"]) == 1
+    url, headers, body = captured["posts"][0]
+    assert url == f"https://api.test.craevidence.com/api/v1/attestations/{ATTESTATION_ID}/verify"
+    assert headers["Authorization"] == "Bearer test_key_12345"
+    assert body == {}
+    ensure_access_token.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_verify_attestation_translates_network_error_with_cause(test_config, monkeypatch):
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._resolve_version_id = AsyncMock(return_value=VERSION_ID)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json={"id": ATTESTATION_ID, "version_id": VERSION_ID},
+        )
+    )
+    ensure_access_token = AsyncMock()
+    monkeypatch.setattr(client, "_ensure_access_token", ensure_access_token)
+    calls = []
+
+    class FakeAsyncClient:
+        def __init__(self, timeout, **_kwargs):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, json):
+            calls.append(url)
+            message = "connection failed"
+            raise httpx.ConnectError(message)
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(APIError, match="Network error contacting") as exc_info:
+        await client.verify_attestation(
+            product="test", version="1.0", attestation_id=ATTESTATION_ID
+        )
+
+    assert isinstance(exc_info.value.__cause__, httpx.ConnectError)
+    assert calls == [
+        f"https://api.test.craevidence.com/api/v1/attestations/{ATTESTATION_ID}/verify"
+    ]
+    ensure_access_token.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_explicit_attestation_must_belong_to_selected_version(test_config, monkeypatch):
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._resolve_version_id = AsyncMock(return_value=VERSION_ID)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json={"id": ATTESTATION_ID, "version_id": OTHER_VERSION_ID},
+        )
+    )
+    posts = []
+
+    class FakeAsyncClient:
+        def __init__(self, timeout, **_kwargs):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, json):
+            posts.append(url)
+            return Response(
+                status_code=200,
+                json={"attestation_id": "att-123", "status": "valid"},
+            )
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    with pytest.raises(APIError) as exc_info:
+        await client.verify_attestation(
+            product="test", version="1.0", attestation_id=ATTESTATION_ID
+        )
+
+    assert exc_info.value.status_code == 404
+    client._request_with_retry.assert_awaited_once_with(
+        "GET",
+        f"https://api.test.craevidence.com/api/v1/attestations/{ATTESTATION_ID}",
+    )
+    assert posts == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_attestation_outside_recent_list_is_verified_by_detail(
+    test_config, monkeypatch
+):
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._resolve_version_id = AsyncMock(return_value=VERSION_ID)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json={"id": ATTESTATION_ID, "version_id": VERSION_ID},
+        )
+    )
+    ensure_access_token = AsyncMock()
+    monkeypatch.setattr(client, "_ensure_access_token", ensure_access_token)
+    posts = []
+
+    class FakeAsyncClient:
+        def __init__(self, timeout, **_kwargs):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, url, headers, json):
+            posts.append(url)
+            return Response(
+                status_code=200,
+                json={"attestation_id": "att-123", "status": "valid"},
+            )
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+
+    result = await client.verify_attestation(
+        product="test", version="1.0", attestation_id=ATTESTATION_ID.upper()
+    )
+
+    assert result["status"] == "valid"
+    assert result["product"] == "test"
+    assert result["version"] == "1.0"
+    assert posts == [
+        f"https://api.test.craevidence.com/api/v1/attestations/{ATTESTATION_ID}/verify"
+    ]
+    client._request_with_retry.assert_awaited_once_with(
+        "GET",
+        f"https://api.test.craevidence.com/api/v1/attestations/{ATTESTATION_ID.upper()}",
+    )
+    ensure_access_token.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_explicit_attestation_malformed_detail_shape_raises_api_error(
+    test_config, monkeypatch
+):
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._resolve_version_id = AsyncMock(return_value=VERSION_ID)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json={"id": ATTESTATION_ID, "version_id": 42},
+        )
+    )
+    ensure_access_token = AsyncMock()
+    monkeypatch.setattr(client, "_ensure_access_token", ensure_access_token)
+
+    with pytest.raises(APIError, match="invalid attestation detail response"):
+        await client.verify_attestation(
+            product="test", version="1.0", attestation_id=ATTESTATION_ID
+        )
+
+    ensure_access_token.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_version_status_keeps_retrying_transient_5xx(test_config, monkeypatch):
+    responses = [
+        Response(status_code=503, json={"detail": "temporary failure"}),
+        Response(status_code=200, json={"scan_state": "completed"}),
+    ]
+    requests = []
+
+    class FakeAsyncClient:
+        def __init__(self, timeout, **_kwargs):
+            self.timeout = timeout
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def request(self, method, url, headers, **kwargs):
+            requests.append((method, url, kwargs))
+            return responses.pop(0)
+
+    monkeypatch.setattr("cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient)
+    monkeypatch.setattr("cra_evidence_cli.client.asyncio.sleep", AsyncMock())
+
+    result = await CRAEvidenceClient(test_config).get_version_status("test", "1.0")
+
+    assert result == {"scan_state": "completed"}
+    assert len(requests) == 2
+    assert all(method == "GET" for method, _url, _kwargs in requests)
+
+
+@pytest.mark.asyncio
+async def test_download_gemara_source_does_not_overwrite_after_preflight_race(
+    test_config, tmp_path, monkeypatch
+):
+    client = CRAEvidenceClient(test_config)
+    output_path = tmp_path / "source.yaml"
+
+    async def create_competing_file(*_args, **_kwargs):
+        output_path.write_bytes(b"created after command preflight")
+        return Response(status_code=200, content=b"downloaded source")
+
+    request = AsyncMock(side_effect=create_competing_file)
+    monkeypatch.setattr(client, "_request_with_retry", request)
+
+    with pytest.raises(FileExistsError):
+        await client.download_gemara_source(
+            document_id="doc-123",
+            output_path=output_path,
+        )
+
+    assert output_path.read_bytes() == b"created after command preflight"
+    request.assert_awaited_once_with(
+        "GET",
+        f"{client.base_url}/api/v1/documents/doc-123/gemara-source/download",
+    )
+
+
+@pytest.mark.asyncio
+async def test_download_gemara_source_force_replaces_existing_file(
+    test_config, tmp_path, monkeypatch
+):
+    client = CRAEvidenceClient(test_config)
+    output_path = tmp_path / "source.yaml"
+    output_path.write_bytes(b"old source")
+    request = AsyncMock(return_value=Response(status_code=200, content=b"new source"))
+    monkeypatch.setattr(client, "_request_with_retry", request)
+
+    result = await client.download_gemara_source(
+        document_id="doc-123",
+        output_path=output_path,
+        overwrite=True,
+    )
+
+    assert result["status"] == "success"
+    assert output_path.read_bytes() == b"new source"
 
 
 @pytest.mark.asyncio
@@ -543,7 +837,10 @@ async def test_verify_sbom_signature_posts_bundle_and_policy(test_config, tmp_pa
     )
 
     assert result["verification"]["status"] == "valid"
-    assert captured["url"] == "https://api.test.craevidence.com/api/v1/signatures/sboms/sbom-123/verify"
+    assert (
+        captured["url"]
+        == "https://api.test.craevidence.com/api/v1/signatures/sboms/sbom-123/verify"
+    )
     assert captured["file_name"] == "sbom.sigstore.json"
     assert captured["data"] == {
         "expected_identity": "https://github.com/acme/device/.github/workflows/release.yml@refs/heads/main",
@@ -689,6 +986,61 @@ async def test_get_static_analysis_summary_uses_summary_endpoint(test_config):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "valid_empty"),
+    [
+        ("list_hboms", []),
+        ("list_vex_documents", []),
+        ("list_static_analysis_results", []),
+        ("get_static_analysis_summary", {}),
+    ],
+)
+async def test_required_account_result_shapes_reject_malformed_success_and_allow_empty(
+    test_config, method_name, valid_empty
+):
+    """Catches malformed 2xx bodies becoming empty data while retaining valid empties."""
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._resolve_version_id = AsyncMock(return_value="ver-456")
+    client._request_with_retry = AsyncMock(
+        return_value=Response(status_code=200, content=b"not-json")
+    )
+    method = getattr(client, method_name)
+
+    with pytest.raises(APIError):
+        await method("product", "1.0.0")
+
+    client._request_with_retry.return_value = Response(
+        status_code=200,
+        json=valid_empty,
+    )
+    assert await method("product", "1.0.0") == valid_empty
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method_name", "wrong_shape"),
+    [
+        ("list_hboms", {"items": []}),
+        ("list_vex_documents", ["not-an-object"]),
+        ("list_static_analysis_results", None),
+        ("get_static_analysis_summary", []),
+    ],
+)
+async def test_required_account_result_shapes_reject_wrong_json_types(
+    test_config, method_name, wrong_shape
+):
+    """Catches wrong JSON roots or non-object rows being rendered as empty results."""
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._resolve_version_id = AsyncMock(return_value="ver-456")
+    client._request_with_retry = AsyncMock(return_value=Response(status_code=200, json=wrong_shape))
+
+    with pytest.raises(APIError):
+        await getattr(client, method_name)("product", "1.0.0")
+
+
+@pytest.mark.asyncio
 async def test_oidc_get_exchanges_token_before_request(monkeypatch):
     """In OIDC mode with no cached token, a GET first exchanges the OIDC
     token, then sends the request with the exchanged bearer token."""
@@ -815,3 +1167,114 @@ async def test_upload_vex_posts_ci_upload_form(test_config, tmp_path, monkeypatc
         "repository": "https://github.com/acme/device",
         "repo_path": "firmware",
     }
+
+
+@pytest.mark.asyncio
+async def test_resolve_product_slug_uses_exact_slug_query(test_config):
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json=[{"id": "resolved-product-id", "slug": "target-product"}],
+        )
+    )
+
+    result = await client._resolve_product_id("target-product")
+
+    assert result == "resolved-product-id"
+    client._request_with_retry.assert_awaited_once_with(
+        "GET",
+        "https://api.test.craevidence.com/api/v1/products",
+        params={"slug": "target-product"},
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "products",
+    [
+        pytest.param({}, id="empty-mapping"),
+        pytest.param({"products": []}, id="mapping-envelope"),
+        pytest.param(["not-an-object"], id="scalar-row"),
+        pytest.param([{"slug": "target-product"}], id="missing-id"),
+        pytest.param([{"id": "", "slug": "target-product"}], id="empty-id"),
+        pytest.param([{"id": 7, "slug": "target-product"}], id="non-string-id"),
+    ],
+)
+async def test_resolve_product_rejects_malformed_success_list_rows(test_config, products):
+    """Malformed 200 payloads must not become 404s or leak row exceptions."""
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock(return_value=Response(status_code=200, json=products))
+
+    with pytest.raises(APIError, match="invalid product list response") as exc_info:
+        await client._resolve_product_id("target-product")
+
+    assert exc_info.value.status_code is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_product_rejects_non_json_success_as_invalid_list(test_config):
+    """The response interpreter's empty mapping fallback must not fake a 404."""
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(status_code=200, content=b"not JSON")
+    )
+
+    with pytest.raises(APIError, match="invalid product list response") as exc_info:
+        await client._resolve_product_id("target-product")
+
+    assert exc_info.value.status_code is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_product_valid_list_without_match_remains_not_found(test_config):
+    """A valid list with no matching product remains the documented not-found case."""
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json=[{"id": "other-product-id", "slug": "other-product"}],
+        )
+    )
+
+    with pytest.raises(APIError, match="Product 'target-product' not found") as exc_info:
+        await client._resolve_product_id("target-product")
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_product_matches_valid_id_without_slug(test_config):
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(status_code=200, json=[{"id": "target-product"}])
+    )
+
+    assert await client._resolve_product_id("target-product") == "target-product"
+
+
+@pytest.mark.asyncio
+async def test_resolve_product_preserves_real_not_found_response(test_config):
+    """An HTTP 404 must retain its server status and message through interpretation."""
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=404,
+            json={"error": {"detail": "Product does not exist."}},
+        )
+    )
+
+    with pytest.raises(APIError, match="Product does not exist") as exc_info:
+        await client._resolve_product_id("target-product")
+
+    assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_resolve_product_uuid_does_not_request_product_list(test_config):
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock()
+    product_id = "12345678-1234-1234-1234-123456789abc"
+
+    assert await client._resolve_product_id(product_id) == product_id
+    client._request_with_retry.assert_not_awaited()

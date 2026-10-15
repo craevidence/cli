@@ -6,6 +6,7 @@ import asyncio
 import re
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import httpx
 
@@ -96,7 +97,7 @@ class CRAEvidenceClient:
                     headers={
                         "User-Agent": f"craevidence-cli/{__version__}",
                         "X-CLI-Version": __version__,
-                    }
+                    },
                 )
             except httpx.RequestError as exc:
                 raise APIError(
@@ -420,6 +421,7 @@ class CRAEvidenceClient:
             )
         if release_date:
             import datetime
+
             try:
                 datetime.date.fromisoformat(release_date)
             except ValueError:
@@ -596,6 +598,7 @@ class CRAEvidenceClient:
             )
         if release_date:
             import datetime
+
             try:
                 datetime.date.fromisoformat(release_date)
             except ValueError:
@@ -999,9 +1002,7 @@ class CRAEvidenceClient:
             ) from exc
 
         if _PRIVATE_KEY_PEM_RE.search(public_key_pem):
-            message = (
-                "Refusing to send a private key. Pass cosign.pub, not cosign.key."
-            )
+            message = "Refusing to send a private key. Pass cosign.pub, not cosign.key."
             raise ValidationError(message)
 
         await self._ensure_access_token()
@@ -1037,14 +1038,20 @@ class CRAEvidenceClient:
             product,
         )
 
-        selected_id = attestation_id
-        if selected_id is None:
+        if attestation_id is None:
             list_response = await self._request_with_retry(
                 "GET",
                 f"{self.base_url}/api/v1/attestations/version/{version_id}",
             )
             attestations = self._handle_response(list_response)
-            if not isinstance(attestations, list) or not attestations:
+            if not isinstance(attestations, list) or any(
+                not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]
+                for item in attestations
+            ):
+                raise APIError(
+                    message="API returned an invalid attestation list for the selected version."
+                )
+            if not attestations:
                 raise APIError(
                     message=(
                         f"No Build Provenance attestation found for product "
@@ -1053,12 +1060,50 @@ class CRAEvidenceClient:
                     status_code=404,
                 )
             selected_id = str(attestations[0]["id"])
+        else:
+            detail_response = await self._request_with_retry(
+                "GET",
+                f"{self.base_url}/api/v1/attestations/{attestation_id}",
+            )
+            detail = self._handle_response(detail_response)
+            if (
+                not isinstance(detail, dict)
+                or not isinstance(detail.get("id"), str)
+                or not isinstance(detail.get("version_id"), str)
+            ):
+                raise APIError(message="API returned an invalid attestation detail response.")
+            try:
+                requested_attestation_id = UUID(attestation_id)
+                returned_attestation_id = UUID(detail["id"])
+                requested_version_id = UUID(version_id)
+                attestation_version_id = UUID(detail["version_id"])
+            except (TypeError, ValueError):
+                raise APIError(
+                    message="API returned an invalid attestation detail response."
+                ) from None
+            if returned_attestation_id != requested_attestation_id:
+                raise APIError(message="API returned an invalid attestation detail response.")
+            selected_id = str(requested_attestation_id)
+            if attestation_version_id != requested_version_id:
+                raise APIError(
+                    message=(
+                        f"Attestation '{attestation_id}' was not found for product "
+                        f"'{product}' version '{version}'."
+                    ),
+                    status_code=404,
+                )
 
-        verify_response = await self._request_with_retry(
-            "POST",
-            f"{self.base_url}/api/v1/attestations/{selected_id}/verify",
-            json={},
-        )
+        endpoint = f"{self.base_url}/api/v1/attestations/{selected_id}/verify"
+        await self._ensure_access_token()
+        async with self._http_client() as client:
+            try:
+                verify_response = await client.post(
+                    endpoint,
+                    headers=self._get_headers(),
+                    json={},
+                )
+            except httpx.RequestError as exc:
+                raise APIError(message=f"Network error contacting {endpoint}: {exc}") from exc
         result = self._handle_response(verify_response)
         if isinstance(result, dict):
             result.setdefault("product", product)
@@ -1189,6 +1234,7 @@ class CRAEvidenceClient:
             )
         if release_date:
             import datetime
+
             try:
                 datetime.date.fromisoformat(release_date)
             except ValueError:
@@ -1770,7 +1816,15 @@ class CRAEvidenceClient:
                     message=f"Network error contacting {self.base_url}/api/v1/ci/scan: {exc}",
                 ) from exc
 
-            return self._handle_response(response)
+            data = self._handle_response(response)
+            if not isinstance(data, dict):
+                message = "Invalid scan response: expected a JSON object with status."
+                raise APIError(message)
+            status = data.get("status")
+            if not isinstance(status, str) or not status.strip():
+                message = "Invalid scan response: expected a nonempty string status."
+                raise APIError(message)
+            return data
 
     async def download_export(
         self,
@@ -1816,6 +1870,7 @@ class CRAEvidenceClient:
         self,
         document_id: str,
         output_path: Path,
+        overwrite: bool = False,
     ) -> dict[str, Any]:
         """
         Download retained original Gemara YAML for a rendered document.
@@ -1835,7 +1890,8 @@ class CRAEvidenceClient:
         if response.status_code >= 400:
             return self._handle_response(response)
 
-        with open(output_path, "wb") as f:
+        mode = "wb" if overwrite else "xb"
+        with open(output_path, mode) as f:
             f.write(response.content)
 
         return {
@@ -1887,7 +1943,10 @@ class CRAEvidenceClient:
             f"{self.base_url}/api/v1/products/{product_id}/versions/{version_id}/hboms",
         )
         result = self._handle_response(response)
-        return result if isinstance(result, list) else []
+        if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
+            msg = "API returned an invalid HBOM list response."
+            raise APIError(msg)
+        return result
 
     async def list_vex_documents(self, product: str, version: str) -> list[dict[str, Any]]:
         """
@@ -1902,7 +1961,10 @@ class CRAEvidenceClient:
             f"{self.base_url}/api/v1/products/{product_id}/versions/{version_id}/vex",
         )
         result = self._handle_response(response)
-        return result if isinstance(result, list) else []
+        if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
+            msg = "API returned an invalid VEX document list response."
+            raise APIError(msg)
+        return result
 
     async def get_product_maturity(self, product: str) -> dict[str, Any]:
         """Get advisory CRA secure-development maturity for a product."""
@@ -1960,7 +2022,10 @@ class CRAEvidenceClient:
             params=params,
         )
         result = self._handle_response(response)
-        return result if isinstance(result, list) else []
+        if not isinstance(result, list) or any(not isinstance(item, dict) for item in result):
+            msg = "API returned an invalid static-analysis list response."
+            raise APIError(msg)
+        return result
 
     async def get_static_analysis_summary(self, product: str, version: str) -> dict[str, Any]:
         """
@@ -1974,8 +2039,16 @@ class CRAEvidenceClient:
             "GET",
             f"{self.base_url}/api/v1/versions/{version_id}/static-analysis/summary",
         )
-        result = self._handle_response(response)
-        return result if isinstance(result, dict) else {}
+        self._handle_response(response)
+        try:
+            result = response.json()
+        except ValueError as exc:
+            msg = "API returned invalid JSON for the static-analysis summary."
+            raise APIError(msg) from exc
+        if not isinstance(result, dict):
+            msg = "API returned an invalid static-analysis summary response."
+            raise APIError(msg)
+        return result
 
     # CRA Profile (Product-level compliance defaults)
 
@@ -2003,13 +2076,20 @@ class CRAEvidenceClient:
         response = await self._request_with_retry(
             "GET",
             f"{self.base_url}/api/v1/products",
+            params={"slug": product},
         )
         products = self._handle_response(response)
 
-        if isinstance(products, list):
-            for p in products:
-                if p.get("slug") == product or p.get("id") == product:
-                    return str(p["id"])
+        if not isinstance(products, list) or any(
+            not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]
+            for item in products
+        ):
+            msg = "API returned an invalid product list response."
+            raise APIError(message=msg)
+
+        for item in products:
+            if item.get("slug") == product or item["id"] == product:
+                return item["id"]
 
         raise APIError(
             message=f"Product '{product}' not found.",

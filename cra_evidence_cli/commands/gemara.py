@@ -444,18 +444,21 @@ TEMPLATE_BUILDERS = {
 
 
 async def _fetch_product(client: CRAEvidenceClient, product_identifier: str) -> dict:
-    """Look up the full product dict (by slug or UUID) via the products list."""
+    """Look up a product by slug or UUID and return its full detail."""
+    product_id = await client._resolve_product_id(product_identifier)
     async with client._http_client() as http:
         response = await http.get(
-            f"{client.base_url}/api/v1/products",
+            f"{client.base_url}/api/v1/products/{product_id}",
             headers=client._get_headers(),
         )
-    products = client._handle_response(response)
-    if isinstance(products, list):
-        for p in products:
-            if p.get("slug") == product_identifier or p.get("id") == product_identifier:
-                return p
-    raise APIError(message=f"Product '{product_identifier}' not found.", status_code=404)
+    product = client._handle_response(response)
+    if (
+        isinstance(product, dict)
+        and isinstance(product.get("id"), str)
+        and product["id"] == product_id
+    ):
+        return product
+    raise APIError(message="API returned an invalid product response.")
 
 
 async def _fetch_latest_components(client: CRAEvidenceClient, product_id: str) -> list[dict]:
@@ -497,11 +500,16 @@ async def _fetch_latest_components(client: CRAEvidenceClient, product_id: str) -
         return []
 
 
-def _write_gemara_template(output_path: Path, doc: dict) -> None:
+def _write_gemara_template(output_path: Path, doc: dict, *, force: bool = False) -> None:
     """Write a generated compliance YAML document and print the next-step hint."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True)
+    mode = "w" if force else "x"
+    try:
+        with open(output_path, mode, encoding="utf-8") as f:
+            yaml.safe_dump(doc, f, sort_keys=False, allow_unicode=True)
+    except FileExistsError:
+        msg = f"Output file {output_path} already exists. Use --force to overwrite."
+        raise click.UsageError(msg) from None
     console.print(f"{style_result('Wrote', status_style('complete'))} {output_path}")
     err_console.print(
         f"[dim]Next: edit the file, then run[/dim] "
@@ -605,7 +613,7 @@ def template(
         )
         doc = TEMPLATE_BUILDERS[gemara_type](product_obj, org_name_opt or "", components)
         doc = _apply_starter(doc)
-        _write_gemara_template(output_path, doc)
+        _write_gemara_template(output_path, doc, force=force)
         console.print(
             "[dim]Generated offline with a placeholder product identity. "
             "Edit the name, slug and org before use. Install cue to validate locally.[/dim]"
@@ -632,7 +640,7 @@ def template(
 
         doc = asyncio.run(_run())
         doc = _apply_starter(doc)
-        _write_gemara_template(output_path, doc)
+        _write_gemara_template(output_path, doc, force=force)
 
     except httpx.HTTPError as e:
         msg = f"Could not reach the CRA Evidence API: {e}"
@@ -959,6 +967,7 @@ def download_source(
             client.download_gemara_source(
                 document_id=document_id,
                 output_path=output_path,
+                overwrite=force,
             )
         )
 
@@ -974,6 +983,9 @@ def download_source(
                 "and does not update readiness state."
             )
 
+    except FileExistsError:
+        msg = f"Output file {output_path} already exists. Use --force to overwrite."
+        raise click.ClickException(msg) from None
     except httpx.HTTPError as e:
         msg = f"Could not reach the CRA Evidence API: {e}"
         console.print(f"[red]Error:[/red] {msg}")
