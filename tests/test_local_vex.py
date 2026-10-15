@@ -32,6 +32,35 @@ def _openvex(statements: list[dict]) -> dict:
     }
 
 
+def _chronology_document(statements: list[dict], **metadata) -> dict:
+    return {
+        "@context": "https://openvex.dev/ns/v0.2.0",
+        "@id": "https://example.com/vex/chronology",
+        **metadata,
+        "statements": statements,
+    }
+
+
+def _chronology_statement(status: str, timestamp: str | None = None) -> dict:
+    statement = {
+        "vulnerability": {"name": "CVE-2024-0001"},
+        "products": ["pkg:deb/debian/openssl@3.0.0-1"],
+        "status": status,
+    }
+    if status == "not_affected":
+        statement["justification"] = "component_not_present"
+    if timestamp is not None:
+        statement["timestamp"] = timestamp
+    return statement
+
+
+def _apply_payload(tmp_path, payload: dict, finding: Finding | None = None):
+    doc = load_vex(_write(tmp_path, payload))
+    finding = finding or _finding()
+    kept, suppressions = apply_vex([finding], doc)
+    return finding, kept, suppressions
+
+
 def _finding(
     vid: str = "CVE-2024-0001",
     package: str = "openssl",
@@ -253,6 +282,203 @@ def test_no_product_scope_suppresses_by_id_alone(tmp_path):
 
     assert kept == []
     assert suppressions[0].product == "*"
+
+
+@pytest.mark.parametrize(
+    ("latest_status", "statement_order"),
+    [
+        ("affected", ["fixed", "affected"]),
+        ("affected", ["affected", "fixed"]),
+        ("fixed", ["affected", "fixed"]),
+        ("fixed", ["fixed", "affected"]),
+    ],
+)
+def test_openvex_latest_opposing_status_wins_independent_of_order(
+    tmp_path, latest_status, statement_order
+):
+    older = "2026-10-14T12:00:00Z"
+    newer = "2026-10-15T12:00:00Z"
+    timestamps = {"fixed": older, "affected": newer}
+    if latest_status == "fixed":
+        timestamps = {"affected": older, "fixed": newer}
+    payload = _chronology_document(
+        [_chronology_statement(status, timestamps[status]) for status in statement_order],
+        author="publisher@example.com",
+    )
+
+    finding, kept, suppressions = _apply_payload(tmp_path, payload)
+
+    if latest_status == "fixed":
+        assert kept == []
+        assert len(suppressions) == 1
+        assert suppressions[0].status == "fixed"
+        assert finding.vex_conflict is None
+    else:
+        assert kept == [finding]
+        assert suppressions == []
+        assert finding.vex_conflict is None
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_newer_investigation_prevents_older_suppression(tmp_path, reverse):
+    statements = [
+        _chronology_statement("fixed", "2026-10-14T12:00:00Z"),
+        _chronology_statement("under_investigation", "2026-10-15T12:00:00Z"),
+    ]
+    if reverse:
+        statements.reverse()
+    finding, kept, suppressions = _apply_payload(
+        tmp_path, _chronology_document(statements, author="publisher@example.com")
+    )
+    assert kept == [finding]
+    assert suppressions == []
+    assert finding.vex_conflict is None
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_no_rationale_not_affected_does_not_veto_fixed(tmp_path, reverse):
+    fixed = _chronology_statement("fixed")
+    not_affected = _chronology_statement("not_affected")
+    del not_affected["justification"]
+    statements = [fixed, not_affected]
+    if reverse:
+        statements.reverse()
+
+    finding, kept, suppressions = _apply_payload(tmp_path, _chronology_document(statements))
+
+    assert kept == []
+    assert len(suppressions) == 1
+    assert suppressions[0].status == "fixed"
+    assert finding.vex_conflict is None
+
+
+@pytest.mark.parametrize(
+    ("metadata", "statement_timestamps", "reason"),
+    [
+        ({"author": "publisher"}, ["2026-10-15T12:00:00Z", "2026-10-15T12:00:00Z"], "tied"),
+        (
+            {"author": "publisher"},
+            ["2026-10-14T12:00:00Z", "not-a-time"],
+            "unknown effective timestamp",
+        ),
+        (
+            {"author": "publisher"},
+            ["2026-10-14T12:00:00Z", None],
+            "unknown effective timestamp",
+        ),
+        ({"author": " "}, ["2026-10-14T12:00:00Z", "2026-10-15T12:00:00Z"], "author"),
+        ({}, ["2026-10-14T12:00:00Z", "2026-10-15T12:00:00Z"], "author"),
+    ],
+    ids=["tie", "malformed-time", "absent-time", "blank-author", "missing-author"],
+)
+def test_unverifiable_openvex_opposition_retains_with_explanation(
+    tmp_path, metadata, statement_timestamps, reason
+):
+    payload = _chronology_document(
+        [
+            _chronology_statement("fixed", statement_timestamps[0]),
+            _chronology_statement("affected", statement_timestamps[1]),
+        ],
+        **metadata,
+    )
+
+    finding, kept, suppressions = _apply_payload(tmp_path, payload)
+
+    assert kept == [finding]
+    assert suppressions == []
+    assert reason in finding.vex_conflict
+
+
+def test_openvex_statement_timestamp_overrides_document_and_ignores_last_updated(tmp_path):
+    payload = _chronology_document(
+        [
+            _chronology_statement("fixed"),
+            _chronology_statement("affected", "2026-10-15T12:00:00Z"),
+        ],
+        author="publisher",
+        timestamp="2026-10-14T12:00:00Z",
+        last_updated="2026-10-16T12:00:00Z",
+    )
+
+    finding, kept, suppressions = _apply_payload(tmp_path, payload)
+
+    assert kept == [finding]
+    assert suppressions == []
+    assert finding.vex_conflict is None
+
+
+def test_opposing_openvex_statements_without_shared_exact_product_retain_finding(tmp_path):
+    fixed = _chronology_statement("fixed", "2026-10-14T12:00:00Z")
+    affected = _chronology_statement("affected", "2026-10-15T12:00:00Z")
+    fixed["products"] = ["pkg:deb/debian/openssl"]
+    payload = _chronology_document([fixed, affected], author="publisher")
+
+    finding, kept, suppressions = _apply_payload(tmp_path, payload)
+
+    assert kept == [finding]
+    assert suppressions == []
+    assert "exact matching product" in finding.vex_conflict
+
+
+def test_productless_opposition_cannot_resolve_scoped_suppression(tmp_path):
+    fixed = _chronology_statement("fixed", "2026-10-14T12:00:00Z")
+    affected = _chronology_statement("affected", "2026-10-15T12:00:00Z")
+    del affected["products"]
+    payload = _chronology_document([fixed, affected], author="publisher")
+
+    finding, kept, suppressions = _apply_payload(tmp_path, payload)
+
+    assert kept == [finding]
+    assert suppressions == []
+    assert "exact matching product" in finding.vex_conflict
+
+
+def test_opposing_wrong_product_does_not_conflict_with_matching_legacy_suppressor(tmp_path):
+    fixed = _chronology_statement("fixed")
+    affected = _chronology_statement("affected")
+    affected["products"] = ["pkg:deb/debian/openssl-evil@3.0.0-1"]
+    payload = _chronology_document([fixed, affected], author="publisher")
+
+    _, kept, suppressions = _apply_payload(tmp_path, payload)
+
+    assert kept == []
+    assert len(suppressions) == 1
+    assert suppressions[0].status == "fixed"
+
+
+def test_opposing_openvex_alias_ids_without_shared_vulnerability_id_retain_finding(tmp_path):
+    fixed = _chronology_statement("fixed", "2026-10-14T12:00:00Z")
+    affected = _chronology_statement("affected", "2026-10-15T12:00:00Z")
+    fixed["vulnerability"] = {"name": "CVE-2024-9999"}
+    payload = _chronology_document([fixed, affected], author="publisher")
+    finding = _finding(aliases={"CVE-2024-9999"})
+
+    finding, kept, suppressions = _apply_payload(tmp_path, payload, finding)
+
+    assert kept == [finding]
+    assert suppressions == []
+    assert "vulnerability ID" in finding.vex_conflict
+
+
+def test_opposing_csaf_states_retain_finding_with_explanation(tmp_path):
+    payload = {
+        "document": {"csaf_version": "2.0", "category": "csaf_vex"},
+        "vulnerabilities": [
+            {
+                "cve": "CVE-2024-0001",
+                "product_status": {
+                    "fixed": ["openssl"],
+                    "known_affected": ["openssl"],
+                },
+            }
+        ],
+    }
+
+    finding, kept, suppressions = _apply_payload(tmp_path, payload, _finding(package="openssl"))
+
+    assert kept == [finding]
+    assert suppressions == []
+    assert "CSAF" in finding.vex_conflict
 
 
 # Alias matching

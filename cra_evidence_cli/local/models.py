@@ -45,6 +45,7 @@ class Finding:
     known_exploited: bool | None = None
     source: str = "unknown"
     ignored_by_policy: bool = False
+    vex_conflict: str | None = None
 
     @property
     def cve_aliases(self) -> set[str]:
@@ -71,6 +72,7 @@ class Finding:
             "known_exploited": self.known_exploited,
             "source": self.source,
             "ignored_by_policy": self.ignored_by_policy,
+            "vex_conflict": self.vex_conflict,
         }
 
 

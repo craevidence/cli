@@ -54,6 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use KEV and EPSS publication dates for freshness, retaining unknown dates as unknown
   instead of assigning the local fetch date. `--strict` now also fails when a feed's
   freshness is unknown.
+- Resolve opposing OpenVEX statuses by effective timestamp only when author, product and
+  vulnerability identity agree; retain unresolved conflicts in findings and reports with a
+  `vex_conflict` note.
 
 ## [4.9.0] - 2026-10-12
 

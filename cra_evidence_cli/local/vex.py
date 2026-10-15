@@ -11,7 +11,9 @@ No network, no subprocess, no exit codes, no printing.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +56,9 @@ class _Statement:
     status: str
     justification: str | None
     products: set[str] = field(default_factory=set)
+    author: str | None = None
+    effective_timestamp: datetime | None = None
+    format: str = "openvex"
 
 
 @dataclass
@@ -135,6 +140,12 @@ def _parse_openvex(data: dict[str, Any]) -> list[_Statement]:
         msg = "OpenVEX document has no 'statements' list"
         raise VexParseError(msg)
 
+    author = data.get("author")
+    if isinstance(author, str):
+        author = author.strip() or None
+    else:
+        author = None
+    document_timestamp = _parse_timestamp(data.get("timestamp"))
     statements: list[_Statement] = []
     for entry in statements_raw:
         if not isinstance(entry, dict):
@@ -148,12 +159,17 @@ def _parse_openvex(data: dict[str, Any]) -> list[_Statement]:
         if not isinstance(justification, str) or not justification.strip():
             justification = None
         products = _openvex_products(entry.get("products"))
+        effective_timestamp = (
+            _parse_timestamp(entry.get("timestamp")) if "timestamp" in entry else document_timestamp
+        )
         statements.append(
             _Statement(
                 vuln_ids=vuln_ids,
                 status=status.strip().lower(),
                 justification=justification,
                 products=products,
+                author=author,
+                effective_timestamp=effective_timestamp,
             )
         )
     return statements
@@ -235,6 +251,7 @@ def _parse_csaf(data: dict[str, Any]) -> list[_Statement]:
                     status=mapped,
                     justification=justification,
                     products=product_set,
+                    format="csaf",
                 )
             )
     return statements
@@ -290,35 +307,157 @@ def apply_vex(
     suppressions: list[Suppression] = []
 
     for finding in findings:
-        suppression = _first_suppressing_match(finding, statements)
+        suppression, conflict = _vex_decision(finding, statements)
         if suppression is None:
+            finding.vex_conflict = conflict
             kept.append(finding)
         else:
+            finding.vex_conflict = None
             suppressions.append(suppression)
 
     return kept, suppressions
 
 
-def _first_suppressing_match(
+def _vex_decision(
     finding: Finding, statements: list[_Statement]
-) -> Suppression | None:
+) -> tuple[Suppression | None, str | None]:
     finding_ids = _finding_id_set(finding)
-    for statement in statements:
-        if not (statement.vuln_ids & finding_ids):
-            continue
-        product = _matched_product(finding, statement)
-        if product is None:
-            continue
-        if not _is_suppressing(statement):
-            continue
-        return Suppression(
-            vuln_id=finding.id,
-            status=statement.status,
-            justification=statement.justification,
-            product=product,
-            kev_conflict=finding.known_exploited is True,
+    applicable = [
+        (statement, product)
+        for statement in statements
+        if statement.vuln_ids & finding_ids
+        if (product := _matched_product(finding, statement)) is not None
+    ]
+    opposing_pairs = [
+        (left, right)
+        for index, (left, _) in enumerate(applicable)
+        for right, _ in applicable[index + 1 :]
+        if _opposing(left, right)
+    ]
+    if opposing_pairs:
+        conflict = _resolve_openvex_conflict(finding, opposing_pairs)
+        if isinstance(conflict, str):
+            return None, conflict
+        statement, product = conflict
+        if _is_suppressing(statement):
+            return (
+                Suppression(
+                    vuln_id=finding.id,
+                    status=statement.status,
+                    justification=statement.justification,
+                    product=product,
+                    kev_conflict=finding.known_exploited is True,
+                ),
+                None,
+            )
+        return None, None
+
+    for statement, product in applicable:
+        if _is_suppressing(statement):
+            return (
+                Suppression(
+                    vuln_id=finding.id,
+                    status=statement.status,
+                    justification=statement.justification,
+                    product=product,
+                    kev_conflict=finding.known_exploited is True,
+                ),
+                None,
+            )
+    return None, None
+
+
+def _opposing(left: _Statement, right: _Statement) -> bool:
+    suppressor = left if _is_suppressing(left) else right
+    other = right if suppressor is left else left
+    return _is_suppressing(suppressor) and other.status in {"affected", "under_investigation"}
+
+
+def _resolve_openvex_conflict(
+    finding: Finding, pairs: list[tuple[_Statement, _Statement]]
+) -> tuple[_Statement, str] | str:
+    statements = {id(statement): statement for pair in pairs for statement in pair}.values()
+    statements = list(statements)
+    if any(statement.format != "openvex" for statement in statements):
+        return (
+            "Conflicting CSAF VEX statuses have no supported chronology; the finding was retained."
         )
-    return None
+    if (
+        any(not statement.author for statement in statements)
+        or len({statement.author for statement in statements}) != 1
+    ):
+        return (
+            "Conflicting VEX statuses do not share a nonblank document author; "
+            "the finding was retained."
+        )
+    if any(statement.effective_timestamp is None for statement in statements):
+        return (
+            "Conflicting VEX statuses have an unknown effective timestamp; "
+            "the finding was retained."
+        )
+    if any(not _shared_matching_product(finding, left, right) for left, right in pairs):
+        return (
+            "Conflicting VEX statuses do not share an exact matching product; "
+            "the finding was retained."
+        )
+    if any(not left.vuln_ids & right.vuln_ids for left, right in pairs):
+        return "Conflicting VEX statuses do not share a vulnerability ID; the finding was retained."
+    shared_vuln_ids = set.intersection(*(statement.vuln_ids for statement in statements))
+    if not shared_vuln_ids:
+        return (
+            "Conflicting VEX statuses do not share one vulnerability ID; the finding was retained."
+        )
+    shared_products = set.intersection(*(statement.products for statement in statements))
+    matching_products = sorted(
+        product for product in shared_products if _product_matches_item(finding, product)
+    )
+    if not matching_products:
+        return (
+            "Conflicting VEX statuses do not share one exact matching product; "
+            "the finding was retained."
+        )
+
+    latest = max(statement.effective_timestamp for statement in statements)
+    latest_statements = [
+        statement for statement in statements if statement.effective_timestamp == latest
+    ]
+    if len({statement.status for statement in latest_statements}) > 1:
+        return "Conflicting VEX statuses have tied effective timestamps; the finding was retained."
+    winner = latest_statements[0]
+    return winner, matching_products[0]
+
+
+def _shared_matching_product(finding: Finding, left: _Statement, right: _Statement) -> bool:
+    return any(
+        item in right.products and _product_matches_item(finding, item) for item in left.products
+    )
+
+
+def _product_matches_item(finding: Finding, product: str) -> bool:
+    return (
+        _matched_product(
+            finding,
+            _Statement(vuln_ids=set(), status="", justification=None, products={product}),
+        )
+        is not None
+    )
+
+
+_RFC3339_TIMESTAMP = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not _RFC3339_TIMESTAMP.fullmatch(value):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(UTC)
 
 
 def _is_suppressing(statement: _Statement) -> bool:

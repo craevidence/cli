@@ -98,6 +98,7 @@ def print_text_report(
         console.print("- Keep the SBOM and vulnerability source snapshots current.")
 
     _print_suppressions(console, data)
+    _print_vex_conflicts(console, data)
     _print_ignored(console, data)
     _print_baseline(console, data)
 
@@ -162,6 +163,7 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
             )
             if note:
                 lines.append(note)
+    lines.extend(_vex_conflict_lines(data))
     ignored = [f for f in data["findings"] if f.get("ignored_by_policy")]
     if ignored:
         shown = ", ".join(sorted(f["id"] for f in ignored)[:5])
@@ -309,6 +311,27 @@ def _print_suppressions(console: Console, data: dict[str, Any]) -> None:
                 "  WARNING: this is a known-exploited (KEV) finding suppressed by VEX",
                 style=STYLE_BLOCKER,
             )
+
+
+def _vex_conflict_lines(data: dict[str, Any]) -> list[str]:
+    conflicts = [finding for finding in data["findings"] if finding.get("vex_conflict")]
+    if not conflicts:
+        return []
+    return [
+        "",
+        f"VEX conflicts retained: {len(conflicts)}",
+        *[f"- {finding['id']}: {finding['vex_conflict']}" for finding in conflicts],
+    ]
+
+
+def _print_vex_conflicts(console: Console, data: dict[str, Any]) -> None:
+    lines = _vex_conflict_lines(data)
+    if not lines:
+        return
+    console.print()
+    console.print(Text(lines[1], style=STYLE_TITLE))
+    for line in lines[2:]:
+        console.print(line)
 
 
 def _print_ignored(console: Console, data: dict[str, Any]) -> None:

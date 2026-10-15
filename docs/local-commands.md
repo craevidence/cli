@@ -68,6 +68,11 @@ Notes:
   matches any version of the same package; a versioned one matches that version only). Every
   suppression is recorded in the JSON/SARIF output and counted in the text summary, and a
   known-exploited (KEV) finding suppressed by VEX is always surfaced, never silently hidden.
+  Opposing OpenVEX affected and suppressing statements use the latest effective timestamp only
+  when author, exact product identifier and vulnerability ID agree. Ties, unknown timestamps,
+  insufficient shared scope and opposing CSAF states retain the finding with a conflict note.
+  A statement timestamp inherits the document timestamp when omitted; `last_updated` is not
+  used to determine which status is current.
 - `--policy-file` supplies committed defaults for `fail-on`, `fail-on-new`, `deny-license`,
   `vex`, `sbom-quality`, `fail-on-score`, and an `ignore` list of CVE ids. It is auto-loaded
   from `.cra/check.yaml` when present. Explicit CLI flags always override the file. An `ignore`d

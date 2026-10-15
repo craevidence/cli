@@ -140,6 +140,32 @@ def test_sarif_results_have_locations() -> None:
         assert loc, "SARIF location URI is empty"
 
 
+def test_vex_conflict_is_visible_in_text_markdown_and_sarif_properties() -> None:
+    finding = Finding(
+        id="CVE-2026-0001",
+        package="demo",
+        version="1.0.0",
+        severity="high",
+        vex_conflict=(
+            "Conflicting VEX statuses have tied effective timestamps; the finding was retained."
+        ),
+    )
+    result = _result()
+    result.findings = [finding]
+
+    text = render(result, "text")
+    markdown = render(result, "markdown")
+    sarif = json.loads(render(result, "sarif"))
+
+    assert "VEX conflicts retained: 1" in text
+    assert "tied effective timestamps" in text
+    assert "VEX conflicts retained: 1" in markdown
+    assert "tied effective timestamps" in markdown
+    sarif_finding = sarif["runs"][0]["results"][0]
+    assert sarif_finding["properties"]["vex_conflict"] == finding.vex_conflict
+    assert sarif["runs"][0]["tool"]["driver"]["properties"]["vexSuppressions"] == []
+
+
 def test_sarif_location_uses_sbom_path_not_tmp() -> None:
     """SARIF URI uses the user-supplied sbom_path, never an absolute /tmp path."""
     result = _result()
