@@ -5,10 +5,13 @@ import tempfile
 import warnings
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import parse_qsl
 
+import httpx
 import pytest
 import yaml
 from click.testing import CliRunner
+from pydantic import ValidationError
 
 from cra_evidence_cli.cli import cli
 from cra_evidence_cli.config import (
@@ -71,6 +74,11 @@ class TestCRAEvidenceConfig:
         assert config.output_format == "json"
         assert config.timeout == 120
 
+    @pytest.mark.parametrize("timeout", [0, -1])
+    def test_timeout_must_be_positive(self, timeout):
+        with pytest.raises(ValidationError):
+            CRAEvidenceConfig(timeout=timeout)
+
 
 class TestLoadConfig:
     """Tests for load_config function."""
@@ -129,7 +137,41 @@ class TestLoadConfig:
                 with pytest.raises(ConfigurationError) as exc_info:
                     load_config()
 
-        assert "Invalid timeout" in str(exc_info.value)
+        assert "Invalid CRA_EVIDENCE_TIMEOUT" in str(exc_info.value)
+
+    def test_invalid_environment_timeout_does_not_echo_value(self):
+        marker = "TIMEOUT_SECRET_MARKER"
+        with patch.dict(os.environ, {"CRA_EVIDENCE_TIMEOUT": marker}, clear=False):
+            with patch("cra_evidence_cli.config.load_config_file", return_value={}):
+                with pytest.raises(ConfigurationError) as exc_info:
+                    load_config()
+
+        assert marker not in str(exc_info.value)
+        assert "CRA_EVIDENCE_TIMEOUT" in str(exc_info.value)
+
+    def test_invalid_model_value_does_not_echo_value(self):
+        marker = "MODEL_SECRET_MARKER"
+        with patch(
+            "cra_evidence_cli.config.load_config_file",
+            return_value={"timeout": marker},
+        ):
+            with pytest.raises(ConfigurationError) as exc_info:
+                load_config()
+
+        assert marker not in str(exc_info.value)
+        assert "timeout" in str(exc_info.value)
+
+    def test_nested_model_input_diagnostic_omits_value(self):
+        marker = "NESTED_CREDENTIAL_MARKER"
+        with patch(
+            "cra_evidence_cli.config.load_config_file",
+            return_value={"api_key": {"nested": marker}},
+        ):
+            with pytest.raises(ConfigurationError) as exc_info:
+                load_config()
+
+        assert marker not in str(exc_info.value)
+        assert "api_key" in str(exc_info.value)
 
     def test_load_config_file_priority(self):
         """Env vars override file config; file config is used for keys absent from env."""
@@ -370,6 +412,245 @@ class TestLoadConfigFile:
             assert "Failed to load config file" in str(exc_info.value)
         finally:
             temp_path.unlink()
+
+    def test_invalid_yaml_date_raises_safe_configuration_error(self, monkeypatch):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write("date: 2024-02-30\n")
+            temp_path = Path(f.name)
+
+        try:
+            monkeypatch.setattr("cra_evidence_cli.config.get_config_file_path", lambda: temp_path)
+            with pytest.raises(
+                ConfigurationError, match="Failed to load config file: invalid YAML"
+            ):
+                load_config_file()
+        finally:
+            temp_path.unlink()
+
+    def test_malformed_yaml_diagnostic_omits_nearby_credential(self, monkeypatch):
+        marker = "YAML_CREDENTIAL_MARKER"
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
+            f.write(f"api_key: {marker}\ninvalid: [\n")
+            temp_path = Path(f.name)
+
+        try:
+            monkeypatch.setattr("cra_evidence_cli.config.get_config_file_path", lambda: temp_path)
+            with pytest.raises(ConfigurationError) as exc_info:
+                load_config_file()
+        finally:
+            temp_path.unlink()
+
+        message = str(exc_info.value)
+        assert marker not in message
+        assert "line 3" in message
+        assert "column" in message
+
+    def test_cli_malformed_yaml_diagnostic_is_safe_on_stdout(self, tmp_path):
+        marker = "YAML_CREDENTIAL_MARKER"
+        config_dir = tmp_path / ".cra-evidence"
+        config_dir.mkdir()
+        config_path = config_dir / "config.yaml"
+        config_path.write_text(f"api_key: {marker}\ninvalid: [\n", encoding="utf-8")
+        config_path.chmod(0o600)
+
+        result = CliRunner().invoke(
+            cli,
+            ["components", "list", "--product", "sample"],
+            env={"HOME": str(tmp_path)},
+        )
+
+        assert result.exit_code == 6
+        assert marker not in result.stdout
+        assert "line 3" in result.stdout
+        assert result.stderr == ""
+
+    def test_invalid_text_encoding_diagnostic_does_not_echo_file_bytes(self, monkeypatch):
+        marker = b"ENCODING_CREDENTIAL_MARKER"
+        with tempfile.NamedTemporaryFile(mode="wb", suffix=".yaml", delete=False) as f:
+            f.write(b"api_key: " + marker + b"\n\xff")
+            temp_path = Path(f.name)
+
+        try:
+            monkeypatch.setattr("cra_evidence_cli.config.get_config_file_path", lambda: temp_path)
+            with pytest.raises(ConfigurationError) as exc_info:
+                load_config_file()
+        finally:
+            temp_path.unlink()
+
+        assert marker.decode() not in str(exc_info.value)
+        assert "invalid text encoding" in str(exc_info.value)
+
+
+class TestOIDCBootstrap:
+    """OIDC bootstrap uses a bounded, redirect-disabled request."""
+
+    def _set_runner_env(self, monkeypatch, request_url="https://runner.example/token?run=1"):
+        monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", request_url)
+        monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "RUNNER_TOKEN_MARKER")
+
+    def _use_transport(self, monkeypatch, handler):
+        client_options = []
+        requests = []
+        original_client = httpx.Client
+
+        def client_factory(*, timeout, follow_redirects):
+            client_options.append({"timeout": timeout, "follow_redirects": follow_redirects})
+
+            def capture(request):
+                requests.append(request)
+                return handler(request)
+
+            return original_client(
+                transport=httpx.MockTransport(capture),
+                timeout=timeout,
+                follow_redirects=follow_redirects,
+            )
+
+        monkeypatch.setattr("cra_evidence_cli.config.httpx.Client", client_factory)
+        return client_options, requests
+
+    def test_valid_runner_token_uses_https_once_and_validates_response(self, monkeypatch):
+        self._set_runner_env(monkeypatch)
+        monkeypatch.setenv("CRA_EVIDENCE_TIMEOUT", "37")
+        expected_value = "OIDC_RESPONSE_MARKER"
+        options, requests = self._use_transport(
+            monkeypatch,
+            lambda request: httpx.Response(200, json={"value": expected_value}),
+        )
+
+        config = load_config(oidc_mode=True)
+
+        assert config.oidc_token == expected_value
+        assert len(requests) == 1
+        assert requests[0].headers["Authorization"] == "bearer RUNNER_TOKEN_MARKER"
+        assert "audience=https%3A%2F%2Fgithub.com%2Fcraevidence" in str(requests[0].url)
+        assert options == [{"timeout": 37, "follow_redirects": False}]
+
+    def test_runner_url_audience_is_replaced_with_one_fixed_value(self, monkeypatch):
+        self._set_runner_env(
+            monkeypatch,
+            "https://runner.example/token?run=1&audience=other&audience=stale",
+        )
+        _options, requests = self._use_transport(
+            monkeypatch,
+            lambda request: httpx.Response(200, json={"value": "OIDC_RESPONSE_MARKER"}),
+        )
+
+        load_config(oidc_mode=True)
+
+        query = parse_qsl(requests[0].url.query.decode(), keep_blank_values=True)
+        assert query.count(("audience", "https://github.com/craevidence")) == 1
+        assert not any(
+            key == "audience" and value != "https://github.com/craevidence" for key, value in query
+        )
+        assert ("run", "1") in query
+
+    @pytest.mark.parametrize(
+        "request_url",
+        [
+            "http://runner.example/token?marker=URL_SECRET_MARKER",
+            "https://user:password@runner.example/token?marker=URL_SECRET_MARKER",
+            "https://runner.example/token?marker=URL_SECRET_MARKER#fragment",
+            "https://bad host/token?marker=URL_SECRET_MARKER",
+        ],
+    )
+    def test_invalid_runner_url_is_rejected_before_sending_token(self, monkeypatch, request_url):
+        self._set_runner_env(monkeypatch, request_url)
+        options, requests = self._use_transport(
+            monkeypatch,
+            lambda request: httpx.Response(200, json={"value": "OIDC_TOKEN_MARKER"}),
+        )
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            load_config(oidc_mode=True)
+
+        assert not options
+        assert not requests
+        assert "URL_SECRET_MARKER" not in str(exc_info.value)
+        assert "RUNNER_TOKEN_MARKER" not in str(exc_info.value)
+
+    def test_cli_configuration_error_does_not_echo_runner_credentials(self, monkeypatch):
+        marker = "RUNNER_CREDENTIAL_MARKER"
+        monkeypatch.setenv(
+            "ACTIONS_ID_TOKEN_REQUEST_URL",
+            "http://runner.example/token?value=OIDC_URL_MARKER",
+        )
+        monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", marker)
+        with patch("cra_evidence_cli.config.load_config_file", return_value={}):
+            result = CliRunner().invoke(
+                cli,
+                ["--oidc", "components", "list", "--product", "sample"],
+            )
+
+        assert result.exit_code == 6
+        assert "OIDC_URL_MARKER" not in result.output
+        assert marker not in result.output
+        assert "Invalid GitHub Actions OIDC request URL" in result.output
+
+    def test_redirect_is_not_followed_and_diagnostic_is_safe(self, monkeypatch):
+        self._set_runner_env(monkeypatch, "https://runner.example/token?marker=URL_SECRET_MARKER")
+        options, requests = self._use_transport(
+            monkeypatch,
+            lambda request: httpx.Response(
+                302,
+                headers={"Location": "https://redirect.example/token"},
+            ),
+        )
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            load_config(oidc_mode=True)
+
+        assert options == [{"timeout": 60, "follow_redirects": False}]
+        assert len(requests) == 1
+        assert "URL_SECRET_MARKER" not in str(exc_info.value)
+        assert "RUNNER_TOKEN_MARKER" not in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [[], None, {"value": ""}, {"value": 12}, {}],
+    )
+    def test_invalid_oidc_response_shape_is_a_safe_configuration_error(self, monkeypatch, payload):
+        self._set_runner_env(monkeypatch)
+        self._use_transport(
+            monkeypatch,
+            lambda request: httpx.Response(200, json=payload),
+        )
+
+        with pytest.raises(ConfigurationError, match="OIDC response") as exc_info:
+            load_config(oidc_mode=True)
+
+        assert "RUNNER_TOKEN_MARKER" not in str(exc_info.value)
+
+    def test_transport_error_does_not_echo_runner_url_or_token(self, monkeypatch):
+        self._set_runner_env(monkeypatch, "https://runner.example/token?marker=URL_SECRET_MARKER")
+
+        def fail(request):
+            message = "URL_SECRET_MARKER RUNNER_TOKEN_MARKER"
+            raise httpx.ConnectError(message, request=request)
+
+        self._use_transport(monkeypatch, fail)
+        with pytest.raises(ConfigurationError) as exc_info:
+            load_config(oidc_mode=True)
+
+        assert "URL_SECRET_MARKER" not in str(exc_info.value)
+        assert "RUNNER_TOKEN_MARKER" not in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "body",
+        [b"not-json-RUNNER_TOKEN_MARKER", b"\xff-RUNNER_TOKEN_MARKER"],
+    )
+    def test_invalid_json_response_has_safe_diagnostic(self, monkeypatch, body):
+        self._set_runner_env(monkeypatch)
+        self._use_transport(
+            monkeypatch,
+            lambda request: httpx.Response(200, content=body),
+        )
+
+        with pytest.raises(ConfigurationError) as exc_info:
+            load_config(oidc_mode=True)
+
+        assert "valid JSON" in str(exc_info.value)
+        assert "RUNNER_TOKEN_MARKER" not in str(exc_info.value)
 
     def test_load_empty_yaml_file(self):
         """Empty YAML file returns {} without raising."""

@@ -11,7 +11,6 @@ for example two CI steps.
 
 from __future__ import annotations
 
-import fcntl
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -51,6 +50,8 @@ def db_update_lock(cache_dir: str) -> Iterator[None]:
     handle. Serializes concurrent ``craevidence db update`` invocations so only
     one grype download runs at a time.
     """
+    import fcntl
+
     lock_path = Path(cache_dir) / LOCK_FILENAME
     # Open (or create) the lock file; the fd backs the advisory flock.
     fd = os.open(str(lock_path), os.O_RDWR | os.O_CREAT, 0o600)

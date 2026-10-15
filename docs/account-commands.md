@@ -9,10 +9,10 @@ Back to the [README](../README.md).
 
 ## Authentication
 
-The CLI supports four authentication methods. They are evaluated in the
-following precedence order (highest wins):
+For API key and URL settings, the CLI uses this precedence order (highest
+priority first):
 
-1. **Command-line flags** (highest priority):
+1. **Command-line options**:
 
    ```bash
    craevidence --api-key cra_key_xxx --url https://api.craevidence.com upload-sbom ...
@@ -35,21 +35,25 @@ following precedence order (highest wins):
 
    > **Security note:** Restrict config file permissions so only your user can read it: `chmod 600 ~/.cra-evidence/config.yaml`
 
-4. **OIDC identity** (GitHub Actions only):
+Unset values use the CLI defaults. OIDC is a separate authentication mode,
+not another precedence level. Select it with the global `--oidc` flag; while
+that mode is selected, the CLI uses the GitHub Actions token instead of an API
+key, even if an API key is configured.
 
-   Pass `--oidc` as a global flag. The CLI exchanges the GitHub Actions OIDC
-   token (audience `https://github.com/craevidence`) for a short-lived access
-   token that works for all commands in the session. The job needs:
+Pass `--oidc` to use the GitHub Actions identity. The CLI exchanges the GitHub
+Actions OIDC token (audience `https://github.com/craevidence`) for a
+short-lived access token that works for all commands in the session. The job
+needs:
 
-   ```yaml
-   permissions:
-     id-token: write
-     contents: read
-   ```
+```yaml
+permissions:
+  id-token: write
+  contents: read
+```
 
-   `--oidc` can be combined with `--sign` for signed-SBOM uploads (which also
-   requires `id-token: write`), but it is not limited to upload commands. Use
-   it whenever you want keyless authentication from a GitHub Actions workflow.
+`--oidc` can be combined with `--sign` for signed-SBOM uploads (which also
+requires `id-token: write`), but it is not limited to upload commands. Use it
+whenever you want keyless authentication from a GitHub Actions workflow.
 
 ### Global `--output` option
 

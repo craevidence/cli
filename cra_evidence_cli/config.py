@@ -7,16 +7,18 @@ Supports configuration from:
 3. Config file (~/.cra-evidence/config.yaml)
 """
 
+import json
 import os
 import ssl
 import warnings
 from ipaddress import ip_address
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import httpx
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from cra_evidence_cli.exceptions import ConfigurationError
 
@@ -50,7 +52,7 @@ class CRAEvidenceConfig(BaseModel):
         default="text",
         description="Default output format (text|json|sarif|markdown)",
     )
-    timeout: int = Field(default=60, description="HTTP request timeout in seconds")
+    timeout: int = Field(gt=0, default=60, description="HTTP request timeout in seconds")
     oidc_mode: bool = Field(default=False, description="Use OIDC authentication (GitHub Actions)")
     oidc_token: str | None = Field(default=None, description="GitHub Actions OIDC token")
 
@@ -65,7 +67,11 @@ def load_config_file() -> dict[str, Any]:
     if not config_path.exists():
         return {}
 
-    mode = config_path.stat().st_mode & 0o777
+    try:
+        mode = config_path.stat().st_mode & 0o777
+    except OSError:
+        msg = "Failed to read config file"
+        raise ConfigurationError(msg) from None
     if mode & 0o077:
         warnings.warn(
             f"Config file {config_path} has permissions {oct(mode)} which allow group or "
@@ -76,20 +82,86 @@ def load_config_file() -> dict[str, Any]:
     try:
         with open(config_path) as f:
             data = yaml.safe_load(f)
-            if not isinstance(data, dict):
-                return {}
-            if "verify_ssl" in data:
-                warnings.warn(
-                    "The 'verify_ssl' config key is deprecated and has no effect. "
-                    "Remove it from ~/.cra-evidence/config.yaml.",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-                data.pop("verify_ssl")
-            return data
-    except Exception as e:
-        msg = f"Failed to load config file: {e}"
-        raise ConfigurationError(msg) from e
+    except yaml.YAMLError as exc:
+        mark = getattr(exc, "problem_mark", None)
+        if mark is None:
+            detail = "invalid YAML"
+        else:
+            detail = f"invalid YAML at line {mark.line + 1}, column {mark.column + 1}"
+        msg = f"Failed to load config file: {detail}"
+        raise ConfigurationError(msg) from None
+    except UnicodeError:
+        msg = "Failed to load config file: invalid text encoding"
+        raise ConfigurationError(msg) from None
+    except ValueError:
+        msg = "Failed to load config file: invalid YAML"
+        raise ConfigurationError(msg) from None
+    except OSError:
+        msg = "Failed to read config file"
+        raise ConfigurationError(msg) from None
+
+    if not isinstance(data, dict):
+        return {}
+    if "verify_ssl" in data:
+        warnings.warn(
+            "The 'verify_ssl' config key is deprecated and has no effect. "
+            "Remove it from ~/.cra-evidence/config.yaml.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        data.pop("verify_ssl")
+    return data
+
+
+def _safe_validation_message(exc: ValidationError) -> str:
+    fields = sorted(
+        {
+            error["loc"][0]
+            for error in exc.errors(include_input=False)
+            if error.get("loc") and error["loc"][0] in CRAEvidenceConfig.model_fields
+        }
+    )
+    if fields:
+        return f"Invalid configuration for: {', '.join(fields)}"
+    return "Invalid configuration values"
+
+
+def _oidc_request_url(value: str) -> str:
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        _ = parsed.port
+    except ValueError:
+        parsed = None
+        hostname = None
+    if (
+        parsed is None
+        or not value
+        or value != value.strip()
+        or any(character.isspace() for character in value)
+        or parsed.scheme.lower() != "https"
+        or not parsed.netloc
+        or hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.fragment
+    ):
+        msg = "Invalid GitHub Actions OIDC request URL"
+        raise ConfigurationError(msg) from None
+
+    query = [
+        (key, item_value)
+        for key, item_value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key != "audience"
+    ]
+    query.append(("audience", "https://github.com/craevidence"))
+    request_url = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), ""))
+    try:
+        httpx.URL(request_url)
+    except httpx.InvalidURL:
+        msg = "Invalid GitHub Actions OIDC request URL"
+        raise ConfigurationError(msg) from None
+    return request_url
 
 
 def load_config(
@@ -138,7 +210,7 @@ def load_config(
         try:
             config_data["timeout"] = int(env_timeout)
         except ValueError:
-            msg = f"Invalid timeout value: {env_timeout}"
+            msg = "Invalid CRA_EVIDENCE_TIMEOUT: expected a positive integer"
             raise ConfigurationError(msg) from None
 
     if oidc_mode:
@@ -146,26 +218,37 @@ def load_config(
         if token_url := os.getenv("ACTIONS_ID_TOKEN_REQUEST_URL"):
             if token_request := os.getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"):
                 try:
-                    import urllib.parse
-                    import urllib.request
+                    oidc_timeout = CRAEvidenceConfig(timeout=config_data.get("timeout", 60)).timeout
+                except ValidationError as exc:
+                    raise ConfigurationError(_safe_validation_message(exc)) from None
 
-                    req = urllib.request.Request(  # noqa: S310
-                        token_url + "&audience=https://github.com/craevidence",
-                        headers={"Authorization": f"bearer {token_request}"}
-                    )
-                    with urllib.request.urlopen(req) as response:  # noqa: S310
-                        import json
-                        token_data = json.load(response)
-                        config_data["oidc_token"] = token_data["value"]
-                except Exception as e:
-                    msg = (
-                        f"Failed to get GitHub Actions OIDC token: {e}. "
-                        f"Ensure this is running in a GitHub Actions workflow with "
-                        f"id-token: write permission."
-                    )
-                    raise ConfigurationError(
-                        msg
-                    ) from e
+                request_url = _oidc_request_url(token_url)
+                try:
+                    with httpx.Client(
+                        timeout=oidc_timeout,
+                        follow_redirects=False,
+                    ) as client:
+                        response = client.get(
+                            request_url,
+                            headers={"Authorization": f"bearer {token_request}"},
+                        )
+                        response.raise_for_status()
+                        token_data = response.json()
+                except (httpx.HTTPError, httpx.InvalidURL):
+                    msg = "Failed to get GitHub Actions OIDC token"
+                    raise ConfigurationError(msg) from None
+                except (json.JSONDecodeError, UnicodeError):
+                    msg = "GitHub Actions OIDC response was not valid JSON"
+                    raise ConfigurationError(msg) from None
+
+                if not isinstance(token_data, dict):
+                    msg = "GitHub Actions OIDC response must be an object"
+                    raise ConfigurationError(msg)
+                oidc_token = token_data.get("value")
+                if not isinstance(oidc_token, str) or not oidc_token.strip():
+                    msg = "GitHub Actions OIDC response must contain a token value"
+                    raise ConfigurationError(msg)
+                config_data["oidc_token"] = oidc_token
             else:
                 msg = (
                     "ACTIONS_ID_TOKEN_REQUEST_TOKEN environment variable not found. "
@@ -197,9 +280,8 @@ def load_config(
 
     try:
         return CRAEvidenceConfig(**config_data)
-    except Exception as e:
-        msg = f"Invalid configuration: {e}"
-        raise ConfigurationError(msg) from e
+    except ValidationError as exc:
+        raise ConfigurationError(_safe_validation_message(exc)) from None
 
 
 def _normalize_origin(value: str, *, setting_name: str) -> str:
@@ -336,9 +418,8 @@ def validate_config(config: CRAEvidenceConfig) -> None:
             )
 
         hostname = urlsplit(api_origin).hostname or ""
-        is_craevidence_origin = (
-            api_origin.startswith("https://")
-            and (hostname == "craevidence.com" or hostname.endswith(_TRUSTED_URL_SUFFIX))
+        is_craevidence_origin = api_origin.startswith("https://") and (
+            hostname == "craevidence.com" or hostname.endswith(_TRUSTED_URL_SUFFIX)
         )
         if not is_craevidence_origin and trusted_origin != api_origin:
             warnings.warn(

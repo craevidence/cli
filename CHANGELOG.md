@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `--fail-on` gate now exits 30 immediately when the server reports an
   incomplete assessment, even when the vulnerability summary is missing or
   omits its incomplete flag.
+- Bound GitHub identity-token requests, refuse redirects and unsafe request
+  URLs, and omit credential values from configuration errors.
+- Allow engine-free commands to start without the Unix database-lock module.
+- Show only a validated server origin in verbose version output.
 - Reject repeated mapping keys in check policy, repository identity and assessment
   gate configuration while preserving legal merge overrides and equals keys.
 

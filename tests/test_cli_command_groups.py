@@ -43,3 +43,62 @@ def test_distributor_module_is_gone() -> None:
         "/api/v1/distributor/verifications, which the server no longer serves."
     )
     raise AssertionError(msg)
+
+
+def test_verbose_version_omits_invalid_origins_without_echoing_credentials(monkeypatch):
+    from click.testing import CliRunner
+
+    from cra_evidence_cli.config import CRAEvidenceConfig
+
+    for url in (
+        "https://user:PRIVATE_MARKER@example.test",
+        "https://example.test?key=PRIVATE_MARKER",
+        "https://example.test/#PRIVATE_MARKER",
+    ):
+        monkeypatch.setattr(
+            "cra_evidence_cli.cli.load_config",
+            lambda captured_url=url, **_: CRAEvidenceConfig(url=captured_url),
+        )
+        result = CliRunner().invoke(cli, ["--verbose", "version"])
+        assert result.exit_code == 0, result.output
+        assert "craevidence version" in result.output
+        assert "PRIVATE_MARKER" not in result.output
+        assert "API URL:" not in result.output
+
+
+def test_verbose_version_displays_normalized_valid_origin(monkeypatch):
+    from click.testing import CliRunner
+
+    from cra_evidence_cli.config import CRAEvidenceConfig
+
+    monkeypatch.setattr(
+        "cra_evidence_cli.cli.load_config",
+        lambda **_: CRAEvidenceConfig(url="https://API.EXAMPLE.TEST:443/"),
+    )
+    result = CliRunner().invoke(cli, ["--verbose", "version"])
+    assert result.exit_code == 0, result.output
+    assert "API URL: https://api.example.test" in result.output
+
+
+def test_help_and_version_import_without_the_posix_lock_module():
+    """Catches eager import of a platform-only dependency by local startup."""
+    import subprocess
+    import sys
+
+    script = """
+import sys
+sys.modules["fcntl"] = None
+from click.testing import CliRunner
+from cra_evidence_cli.cli import cli
+from cra_evidence_cli.config import CRAEvidenceConfig
+import importlib
+module = importlib.import_module("cra_evidence_cli.cli")
+module.load_config = lambda **_: CRAEvidenceConfig()
+for args in (["--help"], ["version"], ["upload-sbom", "--help"]):
+    result = CliRunner().invoke(cli, args)
+    assert result.exit_code == 0, result.output
+"""
+    result = subprocess.run(  # noqa: S603
+        [sys.executable, "-c", script], capture_output=True, text=True, timeout=30
+    )
+    assert result.returncode == 0, result.stderr

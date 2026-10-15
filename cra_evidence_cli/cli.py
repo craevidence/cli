@@ -39,8 +39,8 @@ from cra_evidence_cli.commands import (
     verify,
 )
 from cra_evidence_cli.commands.status import wait_ready
-from cra_evidence_cli.config import CRAEvidenceConfig, load_config
-from cra_evidence_cli.exceptions import CRAEvidenceError
+from cra_evidence_cli.config import CRAEvidenceConfig, _normalize_origin, load_config
+from cra_evidence_cli.exceptions import ConfigurationError, CRAEvidenceError
 
 console = Console()
 
@@ -162,7 +162,11 @@ def version(ctx: click.Context) -> None:
     if ctx.obj.get("verbose"):
         config = ctx.obj.get("config")
         if config:
-            console.print(f"API URL: {config.url}")
+            try:
+                origin = _normalize_origin(config.url, setting_name="API URL")
+            except ConfigurationError:
+                return
+            console.print(f"API URL: {origin}")
 
 
 cli.add_command(upload.upload_sbom)
