@@ -5,10 +5,20 @@ All network calls are mocked. No live HTTP requests are made.
 
 from __future__ import annotations
 
+import json
 from datetime import date
 
+import httpx
+import pytest
+
+from cra_evidence_cli.commands.eol import _render_sarif
 from cra_evidence_cli.local.eol import (
+    EolFinding,
+    EolLookupError,
+    EolReport,
     evaluate_components,
+    fetch_cycles,
+    fetch_products,
     slug_candidates,
 )
 from cra_evidence_cli.local.models import Component
@@ -30,6 +40,61 @@ def _make_component(
     name: str, version: str | None = None, purl: str | None = None
 ) -> Component:
     return Component(name=name, version=version, purl=purl)
+
+
+def test_spring_security_uses_its_own_cycles_before_the_framework_prefix(monkeypatch):
+    """Catches using Spring Framework support dates for Spring Security."""
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products",
+        lambda **_: {"spring-security", "spring-framework"},
+    )
+    requested = []
+
+    def cycles(product, **_):
+        requested.append(product)
+        return [{"cycle": "6.1", "eol": product == "spring-security"}]
+
+    monkeypatch.setattr("cra_evidence_cli.local.eol.fetch_cycles", cycles)
+    report = evaluate_components(
+        [
+            _make_component(
+                "spring-security-core",
+                "6.1.0",
+                "pkg:maven/org.springframework.security/spring-security-core@6.1.0",
+            ),
+            _make_component(
+                "spring-core", "6.1.0", "pkg:maven/org.springframework/spring-core@6.1.0"
+            ),
+        ],
+        today=date(2026, 1, 1),
+    )
+    assert requested == ["spring-security", "spring-framework"]
+    assert [(row.product, row.is_eol) for row in report.findings] == [
+        ("spring-security", True),
+        ("spring-framework", False),
+    ]
+
+
+def test_eol_sarif_encodes_sbom_filesystem_path():
+    report = EolReport(
+        findings=[
+            EolFinding(
+                component="python",
+                version="3.7.17",
+                product="python",
+                cycle="3.7",
+                eol_date=PAST_DATE,
+                is_eol=True,
+            )
+        ]
+    )
+
+    data = json.loads(_render_sarif(report, "build/package #50%.json"))
+    uri = data["runs"][0]["results"][0]["locations"][0]["physicalLocation"][
+        "artifactLocation"
+    ]["uri"]
+
+    assert uri == "build/package%20%2350%25.json"
 
 
 # Core evaluation tests
@@ -92,6 +157,7 @@ def test_unrecognized_component_produces_no_finding(monkeypatch):
     assert report.recognized == 0
     assert report.eol_count == 0
     assert report.findings == []
+    assert report.lookup_status == "available"
 
 
 def test_purl_namespace_maps_to_endoflife_slug(monkeypatch):
@@ -142,9 +208,26 @@ def test_recognized_but_unmatched_cycle(monkeypatch):
 
     assert report.recognized == 1
     assert report.eol_count == 0
+    assert report.lookup_status == "available"
     assert len(report.findings) == 1
     assert report.findings[0].cycle is None
     assert report.findings[0].is_eol is False
+
+
+def test_empty_cycles_are_available_and_mean_no_matching_cycle(monkeypatch):
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products", lambda **kwargs: {"python"}
+    )
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_cycles", lambda product, **kwargs: []
+    )
+
+    report = evaluate_components([_make_component("python", "99.99.0")])
+
+    assert report.lookup_status == "available"
+    assert report.unavailable_products == []
+    assert report.findings[0].lookup_available is True
+    assert report.findings[0].status == "unknown"
 
 
 # Boolean eol field
@@ -327,8 +410,7 @@ def test_to_dict_includes_support_fields(monkeypatch):
 
 
 def test_per_product_network_error_skips_component(monkeypatch):
-    """A network error fetching a single product's cycles is swallowed;
-    the overall run still completes without raising."""
+    """A known cycle lookup failure stays distinct while successful rows survive."""
     monkeypatch.setattr(
         "cra_evidence_cli.local.eol.fetch_products",
         lambda **kwargs: {"python", "brokenlib"},
@@ -336,8 +418,7 @@ def test_per_product_network_error_skips_component(monkeypatch):
 
     def _fetch_cycles(product, **kwargs):
         if product == "brokenlib":
-            msg = "simulated network failure"
-            raise RuntimeError(msg)
+            raise EolLookupError
         return PYTHON_CYCLES
 
     monkeypatch.setattr("cra_evidence_cli.local.eol.fetch_cycles", _fetch_cycles)
@@ -346,11 +427,111 @@ def test_per_product_network_error_skips_component(monkeypatch):
         _make_component("python", "3.7.17"),
         _make_component("brokenlib", "1.2.3"),
     ]
-    # Should not raise.
     report = evaluate_components(components, today=date(2026, 1, 1))
 
-    # python is evaluated normally; brokenlib is skipped silently.
     assert report.total_components == 2
     assert report.eol_count == 1
+    assert report.lookup_status == "partial"
+    assert report.unavailable_products == ["brokenlib"]
     python_findings = [f for f in report.findings if f.component == "python"]
     assert python_findings[0].is_eol is True
+    broken_finding = next(f for f in report.findings if f.component == "brokenlib")
+    assert broken_finding.status == "unknown"
+    assert broken_finding.lookup_available is False
+    assert report.unknown_count == 1
+
+
+def test_all_cycle_lookups_unavailable_are_not_successful_no_match(monkeypatch):
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products", lambda **kwargs: {"python"}
+    )
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_cycles",
+        lambda product, **kwargs: (_ for _ in ()).throw(EolLookupError()),
+    )
+
+    report = evaluate_components([_make_component("python", "99.99.0")])
+
+    assert report.lookup_status == "unavailable"
+    assert report.unavailable_products == ["python"]
+    assert report.findings[0].lookup_available is False
+    assert report.unknown_count == 1
+
+
+def test_unexpected_cycle_failure_propagates(monkeypatch):
+    monkeypatch.setattr("cra_evidence_cli.local.eol.fetch_products", lambda **kwargs: {"python"})
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_cycles",
+        lambda product, **kwargs: (_ for _ in ()).throw(RuntimeError("bug")),
+    )
+
+    with pytest.raises(RuntimeError, match="bug"):
+        evaluate_components([_make_component("python", "3.7.17")])
+
+
+@pytest.mark.parametrize(
+    ("fetch", "response_data"),
+    [
+        (fetch_products, {"python": True}),
+        (fetch_cycles, [{"not-cycle": "3.7"}]),
+        (fetch_cycles, [None]),
+    ],
+)
+def test_invalid_consumed_feed_shapes_raise_typed_lookup_error(monkeypatch, fetch, response_data):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return response_data
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url):
+            return Response()
+
+    monkeypatch.setattr("cra_evidence_cli.local.eol.httpx.Client", Client)
+
+    with pytest.raises(EolLookupError):
+        fetch("python") if fetch is fetch_cycles else fetch()
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [httpx.ConnectError("offline"), json.JSONDecodeError("invalid", "", 0)],
+)
+def test_known_http_and_json_failures_become_typed_lookup_error(monkeypatch, failure):
+    class Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            raise failure
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def get(self, url):
+            if isinstance(failure, httpx.HTTPError):
+                raise failure
+            return Response()
+
+    monkeypatch.setattr("cra_evidence_cli.local.eol.httpx.Client", Client)
+
+    with pytest.raises(EolLookupError):
+        fetch_products()

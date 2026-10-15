@@ -22,7 +22,8 @@ from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.local.disclaimer import (
     advisory_block,
 )
-from cra_evidence_cli.local.eol import EolReport, evaluate_components
+from cra_evidence_cli.local.eol import EolLookupError, EolReport, evaluate_components
+from cra_evidence_cli.local.report import sarif_path_uri
 from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
 
 
@@ -53,11 +54,26 @@ def _render_text(report: EolReport, verbose: bool = False) -> str:
         )
     unknown = [f for f in report.findings if f.status == "unknown"]
     for finding in unknown:
+        if not finding.lookup_available:
+            version = f" {finding.version}" if finding.version else ""
+            lines.append(
+                f"- {finding.component}{version} is recognized as {finding.product}, "
+                "but its support data could not be retrieved."
+            )
+            continue
         version = f" {finding.version}" if finding.version else ""
         lines.append(
             f"- {finding.component}{version} is recognized as {finding.product}, "
             "but no matching support cycle was found."
         )
+
+    if report.lookup_status == "unavailable" and not report.unavailable_products:
+        lines.append(
+            "Support data is unavailable because the product catalog could not be retrieved."
+        )
+    elif report.unavailable_products:
+        products = ", ".join(report.unavailable_products)
+        lines.append(f"Support data is unavailable for these products: {products}.")
 
     lines.append(
         "EOL status is not the same as vulnerable. "
@@ -86,7 +102,9 @@ def _render_json(report: EolReport) -> str:
 
 def _render_sarif(report: EolReport, sbom_uri: str = "sbom.json") -> str:
     results = []
-    location = {"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}
+    location = {
+        "physicalLocation": {"artifactLocation": {"uri": sarif_path_uri(sbom_uri)}}
+    }
     for finding in report.findings:
         if finding.is_eol:
             message = (
@@ -130,6 +148,10 @@ def _render_sarif(report: EolReport, sbom_uri: str = "sbom.json") -> str:
                             "advisory": advisory_block(),
                         },
                     }
+                },
+                "properties": {
+                    "lookup_status": report.lookup_status,
+                    "unavailable_products": report.unavailable_products,
                 },
                 "results": results,
             }
@@ -231,21 +253,24 @@ def eol_check(
     except SBOMParseError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    # Evaluate against endoflife.date. A failure to reach the product list
-    # is caught here and reported as a warning; the command still exits 0.
+    # Lookup failures are advisory, but remain distinct from a successful no-match.
     try:
         report = evaluate_components(components)
-    except Exception as exc:
+    except EolLookupError:
+        report = EolReport(
+            total_components=len(components),
+            lookup_status="unavailable",
+        )
+    if report.lookup_status == "unavailable" and not report.unavailable_products:
         click.echo(
-            f"Warning: could not reach endoflife.date ({exc}). "
-            "Skipping EOL lookup.",
+            "Warning: endoflife.date product catalog is unavailable; support data was not checked.",
             err=True,
         )
-        report = EolReport(
-            findings=[],
-            total_components=len(components),
-            recognized=0,
-            eol_count=0,
+    elif report.unavailable_products:
+        click.echo(
+            "Warning: endoflife.date support data is unavailable for product(s): "
+            + ", ".join(report.unavailable_products),
+            err=True,
         )
 
     # Render output.

@@ -14,6 +14,7 @@ from click.testing import CliRunner
 
 from cra_evidence_cli.commands.eol import eol_check
 from cra_evidence_cli.config import CRAEvidenceConfig
+from cra_evidence_cli.local.eol import EolLookupError
 
 # Shared fixtures
 
@@ -329,14 +330,12 @@ def test_invalid_sbom_file_raises_click_exception(runner, tmp_path):
 
 
 def test_network_error_on_product_list_falls_back_gracefully(runner, tmp_path, monkeypatch):
-    """A failure to reach the endoflife.date product list is reported as a warning
-    and the command still exits 0."""
+    """Catalog failure is visible in text while the advisory command exits 0."""
     sbom = tmp_path / "sbom.json"
     _write_cyclonedx_sbom(sbom)
 
     def _raise(**kwargs):
-        msg = "network unreachable"
-        raise RuntimeError(msg)
+        raise EolLookupError
 
     monkeypatch.setattr("cra_evidence_cli.local.eol.fetch_products", _raise)
 
@@ -347,6 +346,70 @@ def test_network_error_on_product_list_falls_back_gracefully(runner, tmp_path, m
     )
 
     assert result.exit_code == 0, result.output
+    assert "product catalog is unavailable" in result.output
+    assert "Warning: endoflife.date product catalog is unavailable" in result.stderr
+
+
+@pytest.mark.parametrize("output_format", ["json", "sarif"])
+def test_catalog_failure_is_preserved_in_saved_machine_report(
+    runner, tmp_path, monkeypatch, output_format
+):
+    sbom = tmp_path / "sbom.json"
+    _write_cyclonedx_sbom(sbom)
+    out = tmp_path / f"eol.{output_format}"
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products",
+        lambda **kwargs: (_ for _ in ()).throw(EolLookupError()),
+    )
+
+    result = runner.invoke(
+        eol_check,
+        ["--sbom", str(sbom), "--output-file", str(out)],
+        obj=_make_obj(output_format),
+    )
+
+    assert result.exit_code == 0, result.output
+    saved = json.loads(out.read_text(encoding="utf-8"))
+    if output_format == "json":
+        assert saved["report"]["lookup_status"] == "unavailable"
+        assert saved["report"]["unavailable_products"] == []
+    else:
+        assert saved["runs"][0]["properties"] == {
+            "lookup_status": "unavailable",
+            "unavailable_products": [],
+        }
+
+
+def test_cycle_failure_is_not_reported_as_successful_no_match(runner, tmp_path, monkeypatch):
+    sbom = tmp_path / "sbom.json"
+    _write_cyclonedx_sbom(sbom)
+    monkeypatch.setattr("cra_evidence_cli.local.eol.fetch_products", lambda **kwargs: {"python"})
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_cycles",
+        lambda product, **kwargs: (_ for _ in ()).throw(EolLookupError()),
+    )
+
+    result = runner.invoke(eol_check, ["--sbom", str(sbom)], obj=_make_obj("text"))
+
+    assert result.exit_code == 0, result.output
+    assert "Support data is unavailable for these products: python." in result.output
+    assert "recognized as python, but its support data could not be retrieved" in result.output
+    assert "no matching support cycle was found" not in result.output
+    assert "support data is unavailable for product(s): python" in result.stderr
+
+
+def test_unexpected_eol_programming_error_is_not_hidden(runner, tmp_path, monkeypatch):
+    sbom = tmp_path / "sbom.json"
+    _write_cyclonedx_sbom(sbom)
+    monkeypatch.setattr(
+        "cra_evidence_cli.local.eol.fetch_products",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("bug")),
+    )
+
+    result = runner.invoke(eol_check, ["--sbom", str(sbom)], obj=_make_obj("text"))
+
+    assert result.exit_code != 0
+    assert isinstance(result.exception, RuntimeError)
 
 
 # Unsupported format notice (fix 9)

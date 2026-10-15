@@ -12,6 +12,7 @@ as "no EOL concern".
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any
@@ -23,6 +24,11 @@ from cra_evidence_cli.local.models import Component
 
 ENDOFLIFE_ALL_URL = "https://endoflife.date/api/all.json"
 ENDOFLIFE_PRODUCT_URL = "https://endoflife.date/api/{product}.json"
+
+
+class EolLookupError(Exception):
+    """A known failure while retrieving or interpreting endoflife.date data."""
+
 
 _COMMON_SUFFIXES = (
     "-core",
@@ -37,6 +43,7 @@ _COMMON_SUFFIXES = (
 _PURL_NAMESPACE_SLUGS = {
     ("maven", "org.apache.logging.log4j"): "log4j",
     ("maven", "org.springframework.boot"): "spring-boot",
+    ("maven", "org.springframework.security"): "spring-security",
     ("maven", "org.springframework"): "spring-framework",
     ("maven", "org.apache.tomcat"): "tomcat",
     ("maven", "org.postgresql"): "postgresql",
@@ -63,6 +70,7 @@ class EolFinding:
     is_supported: bool | None = None
     lts: bool | str | None = None
     status: str = "unknown"
+    lookup_available: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -76,6 +84,7 @@ class EolFinding:
             "is_supported": self.is_supported,
             "lts": self.lts,
             "status": self.status,
+            "lookup_available": self.lookup_available,
         }
 
 
@@ -90,6 +99,8 @@ class EolReport:
     active_count: int = 0
     security_only_count: int = 0
     unknown_count: int = 0
+    lookup_status: str = "available"
+    unavailable_products: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -99,27 +110,47 @@ class EolReport:
             "active_count": self.active_count,
             "security_only_count": self.security_only_count,
             "unknown_count": self.unknown_count,
+            "lookup_status": self.lookup_status,
+            "unavailable_products": self.unavailable_products,
             "findings": [f.to_dict() for f in self.findings],
         }
 
 
 def fetch_products(timeout: float = 20.0) -> set[str]:
     """Fetch the list of product slugs tracked by endoflife.date."""
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-        response = client.get(ENDOFLIFE_ALL_URL)
-        response.raise_for_status()
-        data = response.json()
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.get(ENDOFLIFE_ALL_URL)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise EolLookupError() from exc
+    if not isinstance(data, list) or any(
+        not isinstance(product, str) or not product for product in data
+    ):
+        raise EolLookupError()
     return set(data)
 
 
 def fetch_cycles(product: str, timeout: float = 20.0) -> list[dict]:
     """Fetch the cycle list for a single endoflife.date product slug."""
     url = ENDOFLIFE_PRODUCT_URL.format(product=product)
-    with httpx.Client(timeout=timeout, follow_redirects=True) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        data = response.json()
-    return list(data)
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise EolLookupError() from exc
+    if not isinstance(data, list) or any(
+        not isinstance(cycle, dict)
+        or isinstance(cycle.get("cycle"), bool)
+        or not isinstance(cycle.get("cycle"), (str, int))
+        or not str(cycle.get("cycle"))
+        for cycle in data
+    ):
+        raise EolLookupError()
+    return data
 
 
 def _parse_date(value: Any) -> date | None:
@@ -269,6 +300,7 @@ def evaluate_components(
     findings: list[EolFinding] = []
     recognized = 0
     cycle_cache: dict[str, list[dict]] = {}
+    unavailable_products: set[str] = set()
 
     for comp in components:
         slug = next(
@@ -283,10 +315,9 @@ def evaluate_components(
         if slug not in cycle_cache:
             try:
                 cycle_cache[slug] = fetch_cycles(slug)
-            except Exception:  # noqa: BLE001
-                # Network error for a single product: treat as no cycle data
-                # rather than crashing the whole run.
+            except EolLookupError:
                 cycle_cache[slug] = []
+                unavailable_products.add(slug)
 
         cycles = cycle_cache[slug]
         version_str = comp.version or ""
@@ -322,13 +353,18 @@ def evaluate_components(
                     eol_date=None,
                     is_eol=False,
                     status="unknown",
+                    lookup_available=slug not in unavailable_products,
                 )
             )
 
     eol_count = sum(1 for f in findings if f.is_eol)
     active_count = sum(1 for f in findings if f.status == "active")
     security_only_count = sum(1 for f in findings if f.status == "security-only")
-    unknown_count = sum(1 for f in findings if f.status == "unknown")
+    unknown_count = sum(1 for finding in findings if finding.status == "unknown")
+
+    lookup_status = "available"
+    if unavailable_products:
+        lookup_status = "partial" if cycle_cache.keys() - unavailable_products else "unavailable"
 
     return EolReport(
         findings=findings,
@@ -338,4 +374,6 @@ def evaluate_components(
         active_count=active_count,
         security_only_count=security_only_count,
         unknown_count=unknown_count,
+        lookup_status=lookup_status,
+        unavailable_products=sorted(unavailable_products),
     )

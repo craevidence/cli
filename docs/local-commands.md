@@ -311,6 +311,11 @@ back to `text`.
   reviewing product support periods. This report does not produce or verify the
   manufacturer's published support commitment. Verify against the vendor's
   stated support dates.
+- Lookup availability is separate from support status. JSON includes
+  `lookup_status` (`available`, `partial`, `unavailable`), `unavailable_products`
+  and each finding's `lookup_available`. Saved SARIF retains the report-level
+  availability fields. Failed lookups stay visible and the command remains
+  advisory; zero EOL findings alone does not establish that lookup succeeded.
 
 ## `egress-check`
 
