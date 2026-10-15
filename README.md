@@ -281,7 +281,7 @@ for runner egress, proxy, GitHub Action, and GitLab Component examples.
 | `CRA_EVIDENCE_URL` | CRA Evidence API URL. Defaults to `https://api.craevidence.com`. |
 | `CRA_EVIDENCE_TRUSTED_ORIGIN` | Exact trusted API origin for a self-hosted instance. |
 | `CRA_EVIDENCE_CA_BUNDLE` | Path to a PEM CA bundle for API TLS verification. |
-| `CRA_EVIDENCE_ORG` | Default organization slug. |
+| `CRA_EVIDENCE_ORG` | Default organization slug; also selects the customer for workload OIDC exchange. |
 | `CRA_EVIDENCE_PRODUCT` | Default product slug for upload commands. |
 | `CRA_EVIDENCE_VERSION` | Default product version for upload commands. |
 | `CRA_EVIDENCE_COMPONENT` | Default component slug for component-aware uploads. |

@@ -88,12 +88,15 @@ class CRAEvidenceClient:
 
         # Exchange OIDC token for CRA Evidence access token
         oidc_url = f"{self.base_url}/api/v1/oidc/token"
+        exchange_body = {"github_token": self.config.oidc_token}
+        if self.config.default_org is not None:
+            exchange_body["org_slug"] = self.config.default_org
 
         async with self._http_client() as client:
             try:
                 response = await client.post(
                     oidc_url,
-                    json={"github_token": self.config.oidc_token},
+                    json=exchange_body,
                     headers={
                         "User-Agent": f"craevidence-cli/{__version__}",
                         "X-CLI-Version": __version__,

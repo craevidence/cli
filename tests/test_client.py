@@ -1041,7 +1041,8 @@ async def test_required_account_result_shapes_reject_wrong_json_types(
 
 
 @pytest.mark.asyncio
-async def test_oidc_get_exchanges_token_before_request(monkeypatch):
+@pytest.mark.parametrize("org_slug", [None, "customer-a"])
+async def test_oidc_get_exchanges_token_before_request(monkeypatch, org_slug):
     """In OIDC mode with no cached token, a GET first exchanges the OIDC
     token, then sends the request with the exchanged bearer token."""
     from cra_evidence_cli.config import CRAEvidenceConfig
@@ -1050,6 +1051,7 @@ async def test_oidc_get_exchanges_token_before_request(monkeypatch):
         url="https://api.test.craevidence.com",
         oidc_mode=True,
         oidc_token="github-oidc-token",  # noqa: S106
+        default_org=org_slug,
     )
     client = CRAEvidenceClient(config)
 
@@ -1082,7 +1084,10 @@ async def test_oidc_get_exchanges_token_before_request(monkeypatch):
     exchange = calls[0]
     assert exchange[0] == "POST"
     assert exchange[1] == "https://api.test.craevidence.com/api/v1/oidc/token"
-    assert exchange[3] == {"github_token": "github-oidc-token"}
+    expected_body = {"github_token": "github-oidc-token"}
+    if org_slug is not None:
+        expected_body["org_slug"] = org_slug
+    assert exchange[3] == expected_body
     get_call = calls[1]
     assert get_call[0] == "GET"
     assert get_call[1].endswith("/api/v1/ci/status")

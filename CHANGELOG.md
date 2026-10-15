@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Forward the configured organization selector during GitHub workload identity exchange.
+
 ### Fixed
 
 - The `--fail-on` gate now exits 30 immediately when the server reports an
