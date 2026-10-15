@@ -127,7 +127,7 @@ def _validate_output_destinations(destinations: list[tuple[str, Path]]) -> None:
 @click.option(
     "--strict",
     is_flag=True,
-    help="Fail on stale or unavailable sources, or an incomplete Grype assessment.",
+    help="Fail on unknown, stale, or unavailable sources, or an incomplete Grype assessment.",
 )
 @click.option(
     "--vex",
@@ -650,8 +650,12 @@ def _run_local_check_on_sbom(
         suppressions=suppressions,
         identifier_coverage=id_coverage,
     )
-    if strict and any(source.status in {"stale", "unavailable"} for source in coverage):
-        result.provenance["strict_failure"] = "stale or unavailable source"
+    if strict and any(
+        source.status in {"stale", "unavailable"}
+        or (source.source in {"cisa-kev", "first-epss"} and source.status == "unknown")
+        for source in coverage
+    ):
+        result.provenance["strict_failure"] = "unknown, stale, or unavailable source"
     if strict and any(
         source.source == "grype-db" and source.status == "partial" for source in coverage
     ):
@@ -675,8 +679,12 @@ def _enforce_gate(
     ):
         msg = "Strict mode failed because the local vulnerability assessment is incomplete"
         raise ScanEngineUnavailable(msg)
-    if strict and any(source.status in {"stale", "unavailable"} for source in result.coverage):
-        msg = "Strict mode failed because a consulted source is stale/unavailable"
+    if strict and any(
+        source.status in {"stale", "unavailable"}
+        or (source.source in {"cisa-kev", "first-epss"} and source.status == "unknown")
+        for source in result.coverage
+    ):
+        msg = "Strict mode failed because a consulted source is unknown, stale, or unavailable"
         raise ScanEngineUnavailable(msg)
 
     # Policy-ignored findings are shown in the report but excluded from every gate below.

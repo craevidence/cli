@@ -270,6 +270,32 @@ def test_stale_source_downgrades_vulnerability_dimension():
     assert any(item["result"].startswith("Unknown - stale") for item in dimensions)
 
 
+@pytest.mark.parametrize("as_of", [None, "not-a-date", "2026-10-15T00:00:00Z-extra"])
+def test_unknown_kev_freshness_is_reported_without_calling_it_stale(as_of):
+    coverage = [CoverageSource("cisa-kev", "present", as_of=as_of)]
+    mark_stale_sources(coverage)
+
+    dimensions = build_dimensions(
+        components=[],
+        findings=[Finding(id="CVE-2026-0001", package="pkg", version="1.0")],
+        coverage=coverage,
+    )
+
+    assert coverage[0].status == "unknown"
+    vulnerability = next(
+        item for item in dimensions if item["title"] == "Known vulnerability snapshot"
+    )
+    assert vulnerability["result"] == "Unknown - freshness cannot be verified"
+
+
+def test_malformed_grype_date_keeps_legacy_stale_prefix_behavior():
+    coverage = [CoverageSource("grype-db", "present", as_of="2000-01-01 garbage")]
+
+    mark_stale_sources(coverage)
+
+    assert coverage[0].status == "stale"
+
+
 def test_grype_partial_source_marks_incomplete_dimension_not_stale():
     dimensions = build_dimensions(
         components=[],
@@ -301,6 +327,18 @@ def test_strict_gate_does_not_fail_for_osv_partial_coverage_alone():
     result.coverage = [CoverageSource("osv.dev", "partial")]
 
     check_module._enforce_gate(result, None, True)
+
+
+def test_unknown_feed_freshness_fails_strict_but_keeps_findings_in_optional_mode():
+    finding = Finding(id="CVE-2026-0001", package="pkg", version="1.0")
+    result = _result(findings=[finding])
+    result.coverage = [CoverageSource("first-epss", "unknown")]
+
+    with pytest.raises(ScanEngineUnavailable, match="unknown, stale, or unavailable"):
+        check_module._enforce_gate(result, None, True)
+
+    check_module._enforce_gate(result, None, False)
+    assert result.findings == [finding]
 
 
 def test_osv_batches_under_size_limit():

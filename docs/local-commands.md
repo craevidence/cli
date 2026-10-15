@@ -43,6 +43,9 @@ craevidence check [PATH]
 ```
 
 Notes:
+- `--strict` fails when a consulted source is unavailable, stale, or has unknown freshness,
+  and when Grype returns an incomplete vulnerability assessment. Missing or malformed KEV/EPSS
+  publication dates remain unknown; optional mode still reports valid findings and enrichment.
 - `--fail-on-new` is the brownfield ratchet: it fails only on vulnerabilities introduced
   since `--baseline` (a previous `--output json` report), so a backlog of known issues does
   not block every build.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from datetime import UTC, datetime
 
 import httpx
@@ -13,6 +14,9 @@ CISA_KEV_URL = (
     "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 )
 FIRST_EPSS_URL = "https://api.first.org/data/v1/epss"
+_RFC3339_DATE_TIME = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
 
 
 def apply_cve_alias_enrichment(
@@ -55,8 +59,8 @@ def fetch_kev_catalog(timeout: float = 20.0) -> tuple[set[str], CoverageSource]:
             msg = "CISA KEV vulnerability must contain a CVE ID"
             raise ValueError(msg)
         cves.add(cve_id.strip().upper())
-    as_of = data.get("dateReleased") or data.get("catalogVersion") or _today()
-    return cves, CoverageSource("cisa-kev", "present", as_of=str(as_of))
+    as_of = data.get("dateReleased")
+    return cves, CoverageSource("cisa-kev", "present", as_of=_date_text(as_of))
 
 
 def fetch_epss_scores(
@@ -65,6 +69,7 @@ def fetch_epss_scores(
     if not cves:
         return {}, CoverageSource("first-epss", "skipped", detail="No CVE aliases found")
     scores: dict[str, float] = {}
+    publication_dates: list[str | None] = []
     with httpx.Client(timeout=timeout) as client:
         for batch in _chunks(sorted(cves), 100):
             response = client.get(FIRST_EPSS_URL, params={"cve": ",".join(batch)})
@@ -94,31 +99,68 @@ def fetch_epss_scores(
                     msg = "FIRST EPSS score must be finite and within [0, 1]"
                     raise ValueError(msg)
                 scores[cve.strip().upper()] = score
-    return scores, CoverageSource("first-epss", "present", as_of=_today())
+                publication_dates.append(_date_text(item.get("date")))
+    as_of = (
+        min((date for date in publication_dates if date is not None), default=None)
+        if all(date is not None for date in publication_dates)
+        else None
+    )
+    return scores, CoverageSource("first-epss", "present", as_of=as_of)
 
 
 def stale_status(as_of: str | None, max_age_days: int, today: datetime | None = None) -> bool:
     if not as_of:
         return False
     today = today or datetime.now(UTC)
-    parsed = _parse_date(as_of)
+    parsed = _parse_grype_date(as_of)
     if not parsed:
         return False
     return (today - parsed).days > max_age_days
 
 
+def feed_freshness_status(
+    as_of: str | None, max_age_days: int, today: datetime | None = None
+) -> str:
+    if not as_of:
+        return "unknown"
+    today = today or datetime.now(UTC)
+    parsed = _parse_date(as_of)
+    if parsed is None or parsed > today:
+        return "unknown"
+    return "stale" if (today - parsed).days > max_age_days else "fresh"
+
+
 def _parse_date(value: str) -> datetime | None:
+    try:
+        parsed_date = datetime.fromisoformat(f"{value}T00:00:00+00:00")
+        if parsed_date.date().isoformat() == value:
+            return parsed_date
+    except ValueError:
+        pass
+    if not _RFC3339_DATE_TIME.fullmatch(value):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
+def _parse_grype_date(value: str) -> datetime | None:
     for fmt, width in (("%Y-%m-%d", 10), ("%Y.%m.%d", 10), ("%Y-%m-%dT%H:%M:%SZ", 20)):
         try:
-            parsed = datetime.strptime(value[:width], fmt).replace(tzinfo=UTC)
-            return parsed
+            return datetime.strptime(value[:width], fmt).replace(tzinfo=UTC)
         except ValueError:
             continue
     return None
 
 
-def _today() -> str:
-    return datetime.now(UTC).date().isoformat()
+def _date_text(value: object) -> str | None:
+    if not isinstance(value, str) or _parse_date(value) is None:
+        return None
+    return value
 
 
 def _chunks(items: list[str], size: int) -> list[list[str]]:

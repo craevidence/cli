@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Show only a validated server origin in verbose version output.
 - Reject repeated mapping keys in check policy, repository identity and assessment
   gate configuration while preserving legal merge overrides and equals keys.
+- Use KEV and EPSS publication dates for freshness, retaining unknown dates as unknown
+  instead of assigning the local fetch date. `--strict` now also fails when a feed's
+  freshness is unknown.
 
 ## [4.9.0] - 2026-10-12
 
