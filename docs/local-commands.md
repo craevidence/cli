@@ -406,6 +406,9 @@ back to `text`.
   configuration.
 - Use the results to review secure defaults and attack-surface exposure. Static
   scanning cannot observe every runtime or organisational control.
+  Recognized files that cannot be read are counted as skipped, rather than
+  scanned. JSON and SARIF mark partial results; the existing finding-only
+  `--fail-on-match` gate does not fail solely because files were skipped.
 
 ## `code-evidence`
 

@@ -1688,6 +1688,56 @@ def test_upload_sarif_preserves_sanitized_degraded_coverage_status():
     assert "/secret/path" not in json.dumps(sanitized)
 
 
+def test_upload_sarif_file_uri_is_decoded_once_then_reencoded_relative(tmp_path):
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    source = source_root / "package #50%.py"
+    source.write_text("x = 1\n", encoding="utf-8")
+    report = _clean_report()
+    report.scan_root = str(source_root)
+    report.sarif_raw = {
+        "version": "2.1.0",
+        "runs": [
+            {
+                "results": [
+                    {
+                        "locations": [
+                            {
+                                "physicalLocation": {
+                                    "artifactLocation": {"uri": source.as_uri()}
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "locations": [
+                            {
+                                "physicalLocation": {
+                                    "artifactLocation": {
+                                        "uri": "https://example.com/source.py"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                ]
+            }
+        ],
+    }
+
+    sanitized = _sanitized_sarif(report)
+    first_uri = sanitized["runs"][0]["results"][0]["locations"][0][
+        "physicalLocation"
+    ]["artifactLocation"]["uri"]
+    external_uri = sanitized["runs"][0]["results"][1]["locations"][0][
+        "physicalLocation"
+    ]["artifactLocation"]["uri"]
+
+    assert first_uri == "package%20%2350%25.py"
+    assert external_uri == "https://example.com/source.py"
+    assert str(tmp_path) not in json.dumps(sanitized)
+
+
 def test_upload_exactly_at_limit_is_allowed(runner, tmp_path):
     """A SARIF payload of exactly 10 MiB must not be refused (operator is >)."""
     overhead = len(json.dumps({"payload": ""}, indent=2).encode("utf-8"))

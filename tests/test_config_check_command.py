@@ -64,6 +64,31 @@ def test_json_output_schema_and_fields(runner, tmp_path):
     assert "container-user-root" in rules
 
 
+def test_unreadable_config_is_reported_as_partial_in_text_and_json(
+    runner, tmp_path, monkeypatch
+):
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM alpine\nUSER root\n", encoding="utf-8")
+    monkeypatch.setattr("cra_evidence_cli.local.config_audit._read_text", lambda _path: None)
+
+    text_result = runner.invoke(config_check, [str(tmp_path)], obj=_make_obj("text"))
+    assert text_result.exit_code == 0, text_result.output
+    assert "Files scanned: 0 | Skipped: 1" in text_result.output
+    assert "results are partial" in text_result.output
+
+    json_result = runner.invoke(config_check, [str(tmp_path)], obj=_make_obj("json"))
+    assert json_result.exit_code == 0, json_result.output
+    report = json.loads(json_result.output)["report"]
+    assert report["files_scanned"] == 0
+    assert report["files_skipped"] == 1
+    assert report["partial"] is True
+
+    sarif_result = runner.invoke(config_check, [str(tmp_path)], obj=_make_obj("sarif"))
+    assert sarif_result.exit_code == 0, sarif_result.output
+    run_properties = json.loads(sarif_result.output)["runs"][0]["properties"]
+    assert run_properties == {"filesScanned": 0, "filesSkipped": 1, "partial": True}
+
+
 def test_sarif_output_structure(runner, tmp_path):
     _bad_dockerfile(tmp_path)
     result = runner.invoke(config_check, [str(tmp_path)], obj=_make_obj("sarif"))
@@ -72,6 +97,18 @@ def test_sarif_output_structure(runner, tmp_path):
     assert data["version"] == "2.1.0"
     rule_ids = {r["ruleId"] for r in data["runs"][0]["results"]}
     assert "CONFIG-container-user-root" in rule_ids
+
+
+def test_sarif_file_location_encodes_filesystem_path_characters(runner, tmp_path):
+    config_file = tmp_path / "config #50%.yaml"
+    config_file.write_text("privileged: true\n", encoding="utf-8")
+
+    result = runner.invoke(config_check, [str(tmp_path)], obj=_make_obj("sarif"))
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    location = data["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
+    assert location["artifactLocation"]["uri"] == "config%20%2350%25.yaml"
 
 
 def test_advisory_default_exits_zero_with_findings(runner, tmp_path):

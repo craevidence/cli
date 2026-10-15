@@ -19,6 +19,7 @@ from cra_evidence_cli.local.config_audit import ConfigReport, evaluate
 from cra_evidence_cli.local.disclaimer import (
     advisory_block,
 )
+from cra_evidence_cli.local.report import sarif_path_uri
 
 _CRA_NOTE = (
     "Findings are candidates to review, not a determination. This is not a full "
@@ -32,8 +33,14 @@ _CONFIG_EXIT_CODE = 19
 def _render_text(report: ConfigReport, verbose: bool = False) -> str:
     lines = ["Secure-by-default configuration audit"]
     lines.append(
-        f"Files scanned: {report.files_scanned} | Findings: {len(report.findings)}"
+        f"Files scanned: {report.files_scanned} | Skipped: {report.files_skipped} | "
+        f"Findings: {len(report.findings)}"
     )
+    if report.files_skipped:
+        lines.append(
+            f"Note: {report.files_skipped} recognized file(s) could not be read; "
+            "results are partial."
+        )
     if report.capped:
         lines.append(
             f"Note: scan stopped at the {len(report.findings)}-finding cap; results are partial."
@@ -62,7 +69,7 @@ def _render_json(report: ConfigReport) -> str:
 def _render_sarif(report: ConfigReport) -> str:
     results = []
     for finding in report.findings:
-        physical: dict = {"artifactLocation": {"uri": finding.location}}
+        physical: dict = {"artifactLocation": {"uri": sarif_path_uri(finding.location)}}
         if finding.line:
             physical["region"] = {"startLine": finding.line}
         results.append(
@@ -86,6 +93,11 @@ def _render_sarif(report: ConfigReport) -> str:
                         "informationUri": "https://craevidence.com",
                         "properties": {"advisory": advisory_block()},
                     }
+                },
+                "properties": {
+                    "filesScanned": report.files_scanned,
+                    "filesSkipped": report.files_skipped,
+                    "partial": report.files_skipped > 0 or report.capped,
                 },
                 "results": results,
             }

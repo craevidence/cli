@@ -245,11 +245,14 @@ class ConfigReport:
 
     findings: list[ConfigFinding]
     files_scanned: int
+    files_skipped: int
     capped: bool
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "files_scanned": self.files_scanned,
+            "files_skipped": self.files_skipped,
+            "partial": self.files_skipped > 0 or self.capped,
             "finding_count": len(self.findings),
             "capped": self.capped,
             "findings": [f.to_dict() for f in self.findings],
@@ -321,6 +324,11 @@ def scan_file(path: Path, kind: str, location: str) -> list[ConfigFinding]:
     text = _read_text(path)
     if text is None:
         return []
+    return _scan_text(text, kind, location)
+
+
+def _scan_text(text: str, kind: str, location: str) -> list[ConfigFinding]:
+    """Apply the curated rules to text that was already read successfully."""
     lines = text.splitlines()
     findings: list[ConfigFinding] = []
     for lineno, line in enumerate(lines, start=1):
@@ -349,6 +357,7 @@ def evaluate(target: Path) -> ConfigReport:
 
     findings: list[ConfigFinding] = []
     files_scanned = 0
+    files_skipped = 0
     capped = False
     for path in paths:
         if len(findings) >= _MAX_FINDINGS:
@@ -357,15 +366,24 @@ def evaluate(target: Path) -> ConfigReport:
         kind = classify_file(path)
         if kind is None:
             continue
-        files_scanned += 1
         try:
             rel = str(path.relative_to(base))
         except ValueError:
             rel = str(path)
-        for finding in scan_file(path, kind, rel):
+        text = _read_text(path)
+        if text is None:
+            files_skipped += 1
+            continue
+        files_scanned += 1
+        for finding in _scan_text(text, kind, rel):
             findings.append(finding)
             if len(findings) >= _MAX_FINDINGS:
                 capped = True
                 break
 
-    return ConfigReport(findings=findings, files_scanned=files_scanned, capped=capped)
+    return ConfigReport(
+        findings=findings,
+        files_scanned=files_scanned,
+        files_skipped=files_skipped,
+        capped=capped,
+    )

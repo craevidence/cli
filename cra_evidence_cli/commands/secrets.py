@@ -18,6 +18,7 @@ from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.local.disclaimer import (
     advisory_block,
 )
+from cra_evidence_cli.local.report import sarif_path_uri
 from cra_evidence_cli.local.secrets import SecretsReport, evaluate
 
 # Kept in the default output: the anti-over-claim caveat and the actionable
@@ -76,7 +77,7 @@ def _render_json(report: SecretsReport) -> str:
 def _render_sarif(report: SecretsReport) -> str:
     results = []
     for hit in report.hits:
-        physical: dict = {"artifactLocation": {"uri": hit.location}}
+        physical: dict = {"artifactLocation": {"uri": sarif_path_uri(hit.location)}}
         if hit.line:
             physical["region"] = {"startLine": hit.line}
         message = f"Candidate {hit.detector} ({hit.source}): {hit.redacted}"

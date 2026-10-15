@@ -17,6 +17,7 @@ import subprocess
 import sys
 from dataclasses import replace
 from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 import click
 
@@ -24,6 +25,7 @@ from cra_evidence_cli.config import validate_config
 from cra_evidence_cli.display import warn_unsupported_output_format
 from cra_evidence_cli.exceptions import CRAEvidenceError
 from cra_evidence_cli.local.disclaimer import advisory_block
+from cra_evidence_cli.local.report import sarif_path_uri
 from cra_evidence_cli.local.rules_pack import PACK_VERSION, inspect_rule_pack
 from cra_evidence_cli.local.sast_scanner import (
     OPENGREP_INSTALL_HINT,
@@ -1062,15 +1064,23 @@ def _sanitized_sarif(report: SASTReport) -> dict:
         artifact = value.get("artifactLocation")
         if isinstance(artifact, dict) and isinstance(artifact.get("uri"), str):
             uri = artifact["uri"]
-            candidate = Path(uri.removeprefix("file://"))
-            if candidate.is_absolute():
+            parsed_uri = urlsplit(uri)
+            candidate: Path | None = None
+            if parsed_uri.scheme == "file" and parsed_uri.netloc in {"", "localhost"}:
+                candidate = Path(unquote(parsed_uri.path))
+            elif not parsed_uri.scheme:
+                raw_path = Path(uri)
+                if raw_path.is_absolute():
+                    candidate = raw_path
+            if candidate is not None:
                 root = Path(report.scan_root) if report.scan_root else None
                 if root and root.is_file():
                     root = root.parent
                 try:
-                    artifact["uri"] = str(candidate.relative_to(root)) if root else candidate.name
+                    relative_path = candidate.relative_to(root) if root else Path(candidate.name)
                 except ValueError:
-                    artifact["uri"] = candidate.name
+                    relative_path = Path(candidate.name)
+                artifact["uri"] = sarif_path_uri(relative_path.as_posix())
         for nested in value.values():
             scrub_locations(nested)
 

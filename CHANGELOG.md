@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   upload results only for upload commands.
 - Preserve compliance template and source-download destinations unless --force
   was supplied, including files created while input was being retrieved.
+- Report unreadable configuration files as skipped and encode report file paths
+  as URIs.
 - Reject incomplete or invalidly encoded OSV responses and retain the existing fallback when
   the local scanning process cannot start or times out.
 - Link SARIF findings to a retained generated SBOM when requested. GitLab locations use that retained

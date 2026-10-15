@@ -104,6 +104,21 @@ def test_sarif_output_structure(runner, tmp_path):
     assert res0["level"] == "warning"
 
 
+def test_sarif_file_location_encodes_filesystem_path_characters(runner, tmp_path):
+    secret_file = tmp_path / "credentials #50%.env"
+    secret_file.write_text(f'KEY = "{AWS}"\n', encoding="utf-8")
+
+    result = runner.invoke(
+        secrets_check, [str(tmp_path), "--no-git-history"], obj=_make_obj("sarif")
+    )
+
+    assert result.exit_code == 0, result.output
+    location = json.loads(result.output)["runs"][0]["results"][0]["locations"][0][
+        "physicalLocation"
+    ]
+    assert location["artifactLocation"]["uri"] == "credentials%20%2350%25.env"
+
+
 def test_advisory_default_exits_zero_with_findings(runner, tmp_path):
     _project(tmp_path, f'KEY = "{AWS}"\n')
     result = runner.invoke(
