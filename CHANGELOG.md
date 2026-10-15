@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `--fail-on` gate now exits 30 immediately when the server reports an
   incomplete assessment, even when the vulnerability summary is missing or
   omits its incomplete flag.
+- Reject repeated mapping keys in check policy, repository identity and assessment
+  gate configuration while preserving legal merge overrides and equals keys.
 
 ## [4.9.0] - 2026-10-12
 

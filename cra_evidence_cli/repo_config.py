@@ -47,6 +47,7 @@ from typing import Any
 import yaml
 
 from cra_evidence_cli.exceptions import ConfigurationError, CRAEvidenceError
+from cra_evidence_cli.yaml_config import load_yaml
 
 _DEFAULT_CONFIG_PATH = Path(".cra/evidence.yaml")
 
@@ -121,7 +122,7 @@ def load_repo_config(path: Path) -> RepoConfig:
         raise ConfigurationError(msg) from exc
 
     try:
-        data = yaml.safe_load(raw)
+        data = load_yaml(raw)
     except yaml.YAMLError as exc:
         msg = f"Failed to parse repo config {path}: {exc}"
         raise ConfigurationError(msg) from exc

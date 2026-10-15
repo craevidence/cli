@@ -65,6 +65,7 @@ Notes:
   `vex`, `sbom-quality`, `fail-on-score`, and an `ignore` list of CVE ids. It is auto-loaded
   from `.cra/check.yaml` when present. Explicit CLI flags always override the file. An `ignore`d
   CVE is still shown (marked "ignored by policy") and excluded only from the gates, never dropped.
+  Repeated mapping keys are configuration errors rather than last-value overrides.
   Schema:
   ```yaml
   # .cra/check.yaml
@@ -659,6 +660,8 @@ Two optional committed files tune the gate, both auto-discovered in `.cra/`:
   requirement can never be marked not-applicable, in the matrix or here.
 
 `--template`, `--matrix`, `--config`, and `--exceptions` override the defaults.
+Gate and exception files reject repeated mapping keys; existing null/default and
+list-entry validation rules still apply.
 You can also seed a product-type risk set into the existing scaffold with
 `craevidence draft risk-assessment --template <id>` or
 `craevidence compliance-as-code template --type risk-catalog --template <id>`.

@@ -196,6 +196,45 @@ def test_gate_config_fail_on_parsing(tmp_path: Path) -> None:
     assert conf.fail_on == ("missing_mandatory",)
 
 
+def test_gate_config_rejects_duplicate_mandatory_selection_key(tmp_path: Path) -> None:
+    path = tmp_path / "g.yaml"
+    path.write_text(
+        "fail_on: [missing_mandatory]\n"
+        "fail_on: [unjustified_waiver]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError, match="duplicate mapping key"):
+        cfg.load_gate_config(path)
+
+
+def test_gate_config_keeps_duplicate_list_entries_deduplicated(tmp_path: Path) -> None:
+    path = tmp_path / "g.yaml"
+    path.write_text(
+        "fail_on: [missing_mandatory, missing_mandatory]\n",
+        encoding="utf-8",
+    )
+
+    conf = cfg.load_gate_config(path)
+
+    assert conf is not None
+    assert conf.fail_on == ("missing_mandatory",)
+
+
+def test_nested_exception_mapping_rejects_duplicate_status_key(tmp_path: Path) -> None:
+    path = tmp_path / "e.yaml"
+    path.write_text(
+        "schema_version: 1\nkind: cra-assessment-exceptions\n"
+        "exceptions:\n  - key: part_i_2_g\n"
+        "    status: not_applicable\n    status: addressed_elsewhere\n"
+        "    justification: covered by another control\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigurationError, match="duplicate mapping key"):
+        cfg.load_exceptions(path)
+
+
 def test_exceptions_rejects_mandatory_not_applicable(tmp_path: Path) -> None:
     path = tmp_path / "e.yaml"
     path.write_text(

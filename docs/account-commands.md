@@ -82,6 +82,9 @@ A repository can commit `.cra/evidence.yaml` so CI commands do not need
 `--product`, `--version`, and `--component` on every invocation. Discovery
 walks up from the working directory; the git root is the fallback.
 
+Repeated mapping keys are configuration errors; a later value cannot silently
+replace an earlier product or version setting.
+
 ```yaml
 schema_version: 1
 product: my-product

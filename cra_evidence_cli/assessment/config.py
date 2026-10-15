@@ -22,6 +22,7 @@ import yaml
 
 from cra_evidence_cli.assessment.requirements import CANONICAL_KEYS, is_waivable
 from cra_evidence_cli.exceptions import ConfigurationError
+from cra_evidence_cli.yaml_config import load_yaml
 
 DEFAULT_GATE_PATH = Path(".cra/assessment-gate.yaml")
 DEFAULT_MATRIX_PATH = Path(".cra/assessment.yaml")
@@ -205,7 +206,7 @@ def _read_yaml_mapping(path: Path) -> dict[str, Any] | None:
         msg = f"Failed to read {path}: {exc}"
         raise ConfigurationError(msg) from exc
     try:
-        data = yaml.safe_load(raw)
+        data = load_yaml(raw)
     except yaml.YAMLError as exc:
         msg = f"Failed to parse {path}: {exc}"
         raise ConfigurationError(msg) from exc

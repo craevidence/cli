@@ -54,6 +54,7 @@ from typing import Any
 import yaml
 
 from cra_evidence_cli.exceptions import ConfigurationError
+from cra_evidence_cli.yaml_config import load_yaml
 
 DEFAULT_POLICY_PATH = Path(".cra/check.yaml")
 
@@ -228,7 +229,7 @@ def load_policy(explicit_path: Path | None) -> Policy | None:
         raise ConfigurationError(msg) from exc
 
     try:
-        data = yaml.safe_load(raw)
+        data = load_yaml(raw)
     except yaml.YAMLError as exc:
         msg = f"Failed to parse policy file {path}: {exc}"
         raise ConfigurationError(msg) from exc

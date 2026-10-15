@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -60,6 +62,68 @@ def test_explicit_path_missing_raises(tmp_path: Path) -> None:
         load_policy(tmp_path / "does-not-exist.yaml")
     assert "not found" in str(exc.value)
     assert exc.value.exit_code == 6
+
+
+@pytest.mark.parametrize(
+    "contents", ["fail_on: critical\nfail_on: null\n", "fail_on_score: 10\nfail_on_score: 90\n"]
+)
+def test_duplicate_threshold_key_is_rejected_without_echoing_values(
+    tmp_path: Path, contents: str
+) -> None:
+    policy_file = _write(
+        tmp_path / "check.yaml",
+        contents,
+    )
+
+    with pytest.raises(ConfigurationError) as exc:
+        load_policy(policy_file)
+
+    assert "duplicate mapping key at line 2, column 1" in str(exc.value)
+    assert "fail_on:" not in str(exc.value)
+    assert "fail_on_score:" not in str(exc.value)
+
+
+def test_duplicate_policy_key_refuses_check_command(tmp_path: Path) -> None:
+    policy_file = _write(
+        tmp_path / "check.yaml",
+        "fail_on_score: 10\nfail_on_score: 90\n",
+    )
+    sbom_file = _write(tmp_path / "sbom.json", "{}\n")
+
+    result = subprocess.run(  # noqa: S603
+        [
+            sys.executable,
+            "-m",
+            "cra_evidence_cli",
+            "check",
+            "--policy-file",
+            str(policy_file),
+            "--sbom",
+            str(sbom_file),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+    assert result.returncode == 6, result.stdout + result.stderr
+    assert "duplicate mapping key" in result.stdout + result.stderr
+    assert "fail_on_score:" not in result.stdout + result.stderr
+
+
+def test_false_zero_and_null_policy_values_keep_existing_meaning(tmp_path: Path) -> None:
+    policy_file = _write(
+        tmp_path / "check.yaml",
+        "sbom_quality: false\nfail_on_score: 0\nfail_on: null\n",
+    )
+
+    policy = load_policy(policy_file)
+
+    assert policy is not None
+    assert policy.sbom_quality is False
+    assert policy.fail_on_score == 0
+    assert policy.fail_on is None
 
 
 def test_autodiscovery_finds_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

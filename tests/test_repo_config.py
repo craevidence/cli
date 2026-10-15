@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import yaml
 
 from cra_evidence_cli.exceptions import ConfigurationError, CRAEvidenceError
 from cra_evidence_cli.repo_config import (
@@ -17,6 +18,7 @@ from cra_evidence_cli.repo_config import (
     resolve_upload_identity,
     resolve_version,
 )
+from cra_evidence_cli.yaml_config import load_yaml
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -115,6 +117,57 @@ def test_schema_version_wrong_value_raises(tmp_path: Path) -> None:
 def test_unknown_key_raises(tmp_path: Path) -> None:
     path = _evidence_yaml(tmp_path, "schema_version: 1\ntypoo: foo\n")
     with pytest.raises(ConfigurationError, match="Unknown key"):
+        load_repo_config(path)
+
+
+def test_duplicate_product_key_is_rejected(tmp_path: Path) -> None:
+    path = _evidence_yaml(
+        tmp_path,
+        "schema_version: 1\nproduct: first\nproduct: second\n",
+    )
+
+    with pytest.raises(ConfigurationError, match="duplicate mapping key") as exc:
+        load_repo_config(path)
+
+    assert "first" not in str(exc.value)
+    assert "second" not in str(exc.value)
+
+
+def test_merge_override_remains_valid_and_explicit_value_wins(tmp_path: Path) -> None:
+    path = _evidence_yaml(
+        tmp_path,
+        "<<: &defaults\n  product: inherited\nschema_version: 1\nproduct: explicit\n",
+    )
+
+    config = load_repo_config(path)
+
+    assert config.product == "explicit"
+
+
+def test_duplicate_inside_merge_source_is_rejected(tmp_path: Path) -> None:
+    path = _evidence_yaml(
+        tmp_path,
+        "<<: &defaults\n  product: first\n  product: second\nschema_version: 1\n",
+    )
+
+    with pytest.raises(ConfigurationError, match="duplicate mapping key"):
+        load_repo_config(path)
+
+
+def test_value_tag_key_is_loaded_as_string_and_checked_for_duplicates() -> None:
+    assert load_yaml("=: 1\na: 2\n") == {"=": 1, "a": 2}
+
+    with pytest.raises(yaml.YAMLError, match="duplicate mapping key"):
+        load_yaml("=: 1\n'=': 2\n")
+
+
+def test_unsafe_python_yaml_tag_remains_rejected(tmp_path: Path) -> None:
+    path = _evidence_yaml(
+        tmp_path,
+        "schema_version: 1\nproduct: !!python/object/new:builtins.object {}\n",
+    )
+
+    with pytest.raises(ConfigurationError, match="Failed to parse repo config"):
         load_repo_config(path)
 
 
