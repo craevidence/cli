@@ -889,13 +889,12 @@ class CRAEvidenceClient:
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
         )
-        versions = self._handle_response(version_response)
+        versions = self._version_entries(self._handle_response(version_response))
         version_id: str | None = None
-        if isinstance(versions, list):
-            for v in versions:
-                if v.get("version_number") == version:
-                    version_id = str(v["id"])
-                    break
+        for v in versions:
+            if v.get("version_number") == version:
+                version_id = v["id"]
+                break
         if version_id is None:
             raise APIError(
                 message=f"Version '{version}' not found for product '{product}'.",
@@ -954,13 +953,12 @@ class CRAEvidenceClient:
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
         )
-        versions = self._handle_response(version_response)
+        versions = self._version_entries(self._handle_response(version_response))
         version_id: str | None = None
-        if isinstance(versions, list):
-            for v in versions:
-                if v.get("version_number") == version:
-                    version_id = str(v["id"])
-                    break
+        for v in versions:
+            if v.get("version_number") == version:
+                version_id = v["id"]
+                break
         if version_id is None:
             raise APIError(
                 message=f"Version '{version}' not found for product '{product}'.",
@@ -2055,6 +2053,16 @@ class CRAEvidenceClient:
 
     # CRA Profile (Product-level compliance defaults)
 
+    @staticmethod
+    def _version_entries(versions: Any) -> list[dict[str, Any]]:
+        """Return a version list response, rejecting one that is not a list of versions."""
+        if not isinstance(versions, list) or any(
+            not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"]
+            for item in versions
+        ):
+            raise APIError(message="API returned an invalid version list response.")
+        return versions
+
     async def _resolve_product_id(self, product: str) -> str:
         """
         Resolve a product slug or UUID to a product UUID string.
@@ -2123,15 +2131,14 @@ class CRAEvidenceClient:
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
         )
-        versions = self._handle_response(response)
+        versions = self._version_entries(self._handle_response(response))
 
         matches: dict[str, dict[str, Any]] = {}
-        if isinstance(versions, list):
-            for item in versions:
-                item_id = str(item.get("id", ""))
-                item_number = item.get("version_number") or item.get("number")
-                if item_id == version or item_number == version:
-                    matches[item_id] = item
+        for item in versions:
+            item_id = item["id"]
+            item_number = item.get("version_number") or item.get("number")
+            if item_id == version or item_number == version:
+                matches[item_id] = item
 
         if len(matches) == 1:
             return next(iter(matches))
@@ -2174,12 +2181,11 @@ class CRAEvidenceClient:
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
         )
-        versions = self._handle_response(response)
+        versions = self._version_entries(self._handle_response(response))
 
-        if isinstance(versions, list):
-            for item in versions:
-                if item.get("version_number") == version:
-                    return item
+        for item in versions:
+            if item.get("version_number") == version:
+                return item
 
         return None
 
@@ -2256,14 +2262,13 @@ class CRAEvidenceClient:
             "GET",
             f"{self.base_url}/api/v1/products/{product_id}/versions",
         )
-        versions = self._handle_response(response)
+        versions = self._version_entries(self._handle_response(response))
 
         version_id: str | None = None
-        if isinstance(versions, list):
-            for v in versions:
-                if v.get("version_number") == version:
-                    version_id = str(v["id"])
-                    break
+        for v in versions:
+            if v.get("version_number") == version:
+                version_id = v["id"]
+                break
 
         if version_id is None:
             raise APIError(

@@ -1258,6 +1258,65 @@ async def test_resolve_product_matches_valid_id_without_slug(test_config):
     assert await client._resolve_product_id("target-product") == "target-product"
 
 
+_MALFORMED_VERSION_LISTS = [
+    pytest.param({}, id="empty-mapping"),
+    pytest.param({"versions": []}, id="mapping-envelope"),
+    pytest.param(["not-an-object"], id="scalar-row"),
+    pytest.param([{"version_number": "1.0.0"}], id="missing-id"),
+    pytest.param([{"id": "", "version_number": "1.0.0"}], id="empty-id"),
+    pytest.param([{"id": 7, "version_number": "1.0.0"}], id="non-string-id"),
+]
+
+
+async def _call_version_lookup(client, method, tmp_path):
+    if method == "resolve":
+        return await client._resolve_version_id("prod-123", "1.0.0", "target-product")
+    if method == "find":
+        return await client._find_version_by_number("prod-123", "1.0.0")
+    if method == "cra_settings":
+        return await client.get_version_cra_settings("target-product", "1.0.0")
+    report = tmp_path / "report.json"
+    report.write_text("{}")
+    if method == "sarif":
+        return await client.upload_sarif("target-product", "1.0.0", report)
+    return await client.upload_attestation("target-product", "1.0.0", report)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "method", ["resolve", "find", "cra_settings", "sarif", "attestation"]
+)
+@pytest.mark.parametrize("versions", _MALFORMED_VERSION_LISTS)
+async def test_version_lookups_reject_malformed_success_lists(
+    test_config, tmp_path, method, versions
+):
+    """A malformed 200 version list must not become a 404, a missing version or a row error."""
+    client = CRAEvidenceClient(test_config)
+    client._resolve_product_id = AsyncMock(return_value="prod-123")
+    client._request_with_retry = AsyncMock(return_value=Response(status_code=200, json=versions))
+
+    with pytest.raises(APIError, match="invalid version list response") as exc_info:
+        await _call_version_lookup(client, method, tmp_path)
+
+    assert exc_info.value.status_code is None
+
+
+@pytest.mark.asyncio
+async def test_version_lookups_keep_not_found_for_a_valid_list_without_match(test_config):
+    client = CRAEvidenceClient(test_config)
+    client._request_with_retry = AsyncMock(
+        return_value=Response(
+            status_code=200,
+            json=[{"id": "ver-other", "version_number": "2.0.0"}],
+        )
+    )
+
+    assert await client._find_version_by_number("prod-123", "1.0.0") is None
+    with pytest.raises(APIError, match="Version '1.0.0' not found") as exc_info:
+        await client._resolve_version_id("prod-123", "1.0.0", "target-product")
+    assert exc_info.value.status_code == 404
+
+
 @pytest.mark.asyncio
 async def test_resolve_product_preserves_real_not_found_response(test_config):
     """An HTTP 404 must retain its server status and message through interpretation."""

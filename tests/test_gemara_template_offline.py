@@ -304,3 +304,172 @@ def test_template_does_not_write_when_product_detail_is_invalid(
     assert result.exit_code == 3, result.output
     assert "API returned an invalid product response." in result.output
     assert not output.exists()
+
+
+_PRODUCT_ID = "12345678-1234-1234-1234-123456789abc"
+_VERSION_ID = "aaaaaaaa-1234-1234-1234-123456789abc"
+_SBOM_ID = "bbbbbbbb-1234-1234-1234-123456789abc"
+
+
+class _HttpStatus:
+    """Marker response that the fake response handler turns into an HTTP APIError."""
+
+
+def _component_client(responses: dict[str, object]):
+    """Build a fake client whose GET responses are keyed by URL suffix."""
+    from cra_evidence_cli.client import CRAEvidenceClient
+
+    class FakeHttpClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def get(self, url, *, headers, params=None):
+            for suffix, response in responses.items():
+                if url.endswith(suffix):
+                    return response
+            msg = f"unexpected request {url}"
+            raise AssertionError(msg)
+
+    def handle(response):
+        if isinstance(response, _HttpStatus):
+            raise APIError(message="Version not available", status_code=404)
+        return response
+
+    class FakeClient:
+        _version_entries = staticmethod(CRAEvidenceClient._version_entries)
+
+        def __init__(self, _config):
+            self.base_url = "https://api.test.craevidence.com"
+            self._http_client = FakeHttpClient
+            self._get_headers = lambda: {"Authorization": "Bearer test"}
+            self._handle_response = handle
+
+        async def _resolve_product_id(self, _product):
+            return _PRODUCT_ID
+
+    return FakeClient
+
+
+def _invoke_risk_catalog(monkeypatch, tmp_path: Path, responses: dict[str, object]):
+    monkeypatch.setattr("cra_evidence_cli.commands.gemara.validate_config", lambda _config: None)
+    monkeypatch.setattr(
+        "cra_evidence_cli.commands.gemara.CRAEvidenceClient", _component_client(responses)
+    )
+    output = tmp_path / "risk-catalog.yaml"
+    result = CliRunner().invoke(
+        gemara,
+        [
+            "template",
+            "--type",
+            "risk-catalog",
+            "--product",
+            "target-product",
+            "--output",
+            str(output),
+        ],
+        obj=_obj_without_key(),
+    )
+    return result, output
+
+
+def _product_responses(**overrides) -> dict[str, object]:
+    responses: dict[str, object] = {
+        f"/products/{_PRODUCT_ID}": {"id": _PRODUCT_ID, "name": "Target product"},
+        f"/products/{_PRODUCT_ID}/versions": [{"id": _VERSION_ID, "version_number": "1.0.0"}],
+        f"/versions/{_VERSION_ID}": {"id": _VERSION_ID, "sboms": [{"id": _SBOM_ID}]},
+        f"/sboms/{_SBOM_ID}/components": [{"name": "openssl"}, {"name": "zlib"}],
+    }
+    responses.update(overrides)
+    return responses
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        pytest.param(
+            {f"/products/{_PRODUCT_ID}/versions": {"versions": []}},
+            "invalid version list response",
+            id="version-envelope",
+        ),
+        pytest.param(
+            {f"/products/{_PRODUCT_ID}/versions": [None]},
+            "invalid version list response",
+            id="null-version-row",
+        ),
+        pytest.param(
+            {f"/products/{_PRODUCT_ID}/versions": [{"version_number": "1.0.0"}]},
+            "invalid version list response",
+            id="missing-version-id",
+        ),
+        pytest.param(
+            {f"/products/{_PRODUCT_ID}/versions": [{"id": 7}]},
+            "invalid version list response",
+            id="non-string-version-id",
+        ),
+        pytest.param(
+            {f"/versions/{_VERSION_ID}": ["not-a-detail"]},
+            "invalid version detail response",
+            id="version-detail",
+        ),
+        pytest.param(
+            {f"/versions/{_VERSION_ID}": {"id": _VERSION_ID, "sboms": [None]}},
+            "invalid version detail response",
+            id="sbom-entry",
+        ),
+        pytest.param(
+            {f"/sboms/{_SBOM_ID}/components": {"items": "openssl"}},
+            "invalid component list response",
+            id="component-envelope",
+        ),
+        pytest.param(
+            {f"/sboms/{_SBOM_ID}/components": [None]},
+            "invalid component list response",
+            id="null-component-row",
+        ),
+    ],
+)
+def test_template_refuses_malformed_component_data_instead_of_placeholders(
+    monkeypatch, tmp_path: Path, overrides, message
+) -> None:
+    """A malformed successful response must not crash or silently become placeholders."""
+    result, output = _invoke_risk_catalog(monkeypatch, tmp_path, _product_responses(**overrides))
+
+    assert result.exit_code == 3, result.output
+    assert message in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+    assert not output.exists()
+
+
+def test_template_uses_placeholders_with_a_warning_when_component_fetch_is_refused(
+    monkeypatch, tmp_path: Path
+) -> None:
+    responses = _product_responses(**{f"/versions/{_VERSION_ID}": _HttpStatus()})
+    result, output = _invoke_risk_catalog(monkeypatch, tmp_path, responses)
+
+    assert result.exit_code == 0, result.output
+    assert "Could not fetch SBOM components (Version not available)" in result.output
+    assert output.exists()
+    assert "openssl" not in output.read_text(encoding="utf-8")
+
+
+def test_template_renders_placeholders_for_a_product_without_versions(
+    monkeypatch, tmp_path: Path
+) -> None:
+    responses = _product_responses(**{f"/products/{_PRODUCT_ID}/versions": []})
+    result, output = _invoke_risk_catalog(monkeypatch, tmp_path, responses)
+
+    assert result.exit_code == 0, result.output
+    assert "Could not fetch SBOM components" not in result.output
+    assert output.exists()
+
+
+def test_template_seeds_components_from_the_latest_sbom(monkeypatch, tmp_path: Path) -> None:
+    result, output = _invoke_risk_catalog(monkeypatch, tmp_path, _product_responses())
+
+    assert result.exit_code == 0, result.output
+    rendered = output.read_text(encoding="utf-8")
+    assert "openssl" in rendered
+    assert "zlib" in rendered

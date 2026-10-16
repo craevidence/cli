@@ -468,35 +468,38 @@ async def _fetch_latest_components(client: CRAEvidenceClient, product_id: str) -
             f"{client.base_url}/api/v1/products/{product_id}/versions",
             headers=client._get_headers(),
         )
-        versions = client._handle_response(versions_resp)
-        if not isinstance(versions, list) or not versions:
-            return []
-        # Versions are typically returned newest-first by created_at; take the
-        # first with any SBOM. Fall back to the first version.
-        for v in versions:
-            vid = v.get("id")
-            if not vid:
-                continue
+        versions = client._version_entries(client._handle_response(versions_resp))
+        # Versions are returned newest-first by created_at; only the newest
+        # version's latest SBOM seeds the template.
+        for v in versions[:1]:
             detail_resp = await http.get(
-                f"{client.base_url}/api/v1/products/{product_id}/versions/{vid}",
+                f"{client.base_url}/api/v1/products/{product_id}/versions/{v['id']}",
                 headers=client._get_headers(),
             )
             detail = client._handle_response(detail_resp)
-            sboms = detail.get("sboms") if isinstance(detail, dict) else None
-            if sboms:
-                sbom_id = sboms[0].get("id")
-                if sbom_id:
-                    comps_resp = await http.get(
-                        f"{client.base_url}/api/v1/sboms/{sbom_id}/components",
-                        headers=client._get_headers(),
-                        params={"limit": 50},
-                    )
-                    comps = client._handle_response(comps_resp)
-                    if isinstance(comps, list):
-                        return comps
-                    if isinstance(comps, dict) and isinstance(comps.get("items"), list):
-                        return comps["items"]
-            break
+            if not isinstance(detail, dict):
+                raise APIError(message="API returned an invalid version detail response.")
+            sboms = detail.get("sboms")
+            if not sboms:
+                return []
+            if (
+                not isinstance(sboms, list)
+                or not isinstance(sboms[0], dict)
+                or not isinstance(sboms[0].get("id"), str)
+                or not sboms[0]["id"]
+            ):
+                raise APIError(message="API returned an invalid version detail response.")
+            comps_resp = await http.get(
+                f"{client.base_url}/api/v1/sboms/{sboms[0]['id']}/components",
+                headers=client._get_headers(),
+                params={"limit": 50},
+            )
+            comps = client._handle_response(comps_resp)
+            if isinstance(comps, dict):
+                comps = comps.get("items")
+            if not isinstance(comps, list) or any(not isinstance(c, dict) for c in comps):
+                raise APIError(message="API returned an invalid component list response.")
+            return comps
         return []
 
 
@@ -630,8 +633,15 @@ def template(
             if gemara_type in {"RiskCatalog", "ThreatCatalog"}:
                 try:
                     components = await _fetch_latest_components(client, str(product_obj["id"]))
-                except APIError:
-                    # Non-fatal: template still renders with bracketed placeholders.
+                except APIError as exc:
+                    # An HTTP refusal or failure leaves the template on bracketed
+                    # placeholders; a malformed successful response is not recoverable.
+                    if exc.status_code is None:
+                        raise
+                    err_console.print(
+                        f"[yellow]Warning:[/yellow] Could not fetch SBOM components ({exc}). "
+                        "The template uses placeholders instead."
+                    )
                     components = []
             # Product API objects do not carry an org name; use --org when provided.
             org_name = org_name_opt or ""

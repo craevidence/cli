@@ -57,6 +57,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resolve opposing OpenVEX statuses by effective timestamp only when author, product and
   vulnerability identity agree; retain unresolved conflicts in findings and reports with a
   `vex_conflict` note.
+- Report a malformed version list response as invalid instead of as a missing version when
+  resolving versions for uploads, version settings and version creation.
+- `compliance-as-code template` refuses malformed version, version detail and component
+  responses instead of crashing or silently rendering placeholders, and warns when the
+  component fetch itself fails before falling back to placeholders.
 
 ## [4.9.0] - 2026-10-12
 
