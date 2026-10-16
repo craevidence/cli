@@ -174,7 +174,7 @@ jobs:
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       # Login to the DHI registry to pull pinned base images. When DHI_REGISTRY_USERNAME
       # or DHI_REGISTRY_TOKEN is absent (e.g., forks or PRs without repository secrets),
@@ -195,7 +195,7 @@ jobs:
       - name: Configure AWS credentials for the engine pull
         id: ecr-creds
         continue-on-error: true
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c  # v6.2.3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_ECR_ENGINE_ROLE_ARN }}
           aws-region: eu-west-1
@@ -272,7 +272,7 @@ jobs:
 
       - name: Preserve the promoted engine payload for release packaging
         if: steps.ecr-login.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: promoted-engine-payload
           path: ${{ runner.temp }}/craevidence-promoted-engine
@@ -282,7 +282,7 @@ jobs:
 
       - name: Preserve the verified Opengrep payload for release packaging
         if: steps.ecr-login.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: verified-opengrep-payload
           path: ${{ runner.temp }}/craevidence-opengrep
@@ -434,7 +434,7 @@ jobs:
 
       - name: Install Syft
         if: steps.ecr-login.outcome == 'success'
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
 
       - name: Generate SBOM (CycloneDX)
         if: steps.ecr-login.outcome == 'success'
@@ -449,7 +449,7 @@ jobs:
 
       - name: Upload SBOM as artifact
         if: steps.ecr-login.outcome == 'success'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: sbom
           path: sbom.cdx.json
@@ -700,7 +700,7 @@ jobs:
           path: release-src
 
       - name: Restore the verified Opengrep source payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: verified-opengrep-payload
           path: opengrep
@@ -765,13 +765,13 @@ jobs:
       # both image stages, so an amd64 runner needs arm64 binfmt support before
       # Buildx can produce the declared arm64 image.
       - name: Set up QEMU for ARM64
-        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4.2.0
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
         with:
           image: tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e  # v4.3.0
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
 
       # The canonical release image must come from the hardened base, so a
       # failed DHI login fails the release here.
@@ -786,7 +786,7 @@ jobs:
       # This login is non-optional: a failed OIDC/ECR step fails the release,
       # exactly like the hardened-base requirement above.
       - name: Configure AWS credentials for the engine pull
-        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c  # v6.2.3
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd  # v6.3.0
         with:
           role-to-assume: ${{ secrets.AWS_ECR_ENGINE_ROLE_ARN }}
           aws-region: eu-west-1
@@ -898,7 +898,7 @@ jobs:
       - name: Build and push the canonical multi-arch image to GHCR
         if: steps.existing.outputs.digest == ''
         id: build-ghcr
-        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a  # v7.3.0
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
         with:
           context: ./release-src
           platforms: linux/amd64,linux/arm64
@@ -1090,7 +1090,7 @@ jobs:
       # The published SBOMs describe the canonical released digests, one per
       # platform, never a separate local build.
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26  # v0.24.2
+        uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c  # v0.24.3
 
       - name: Generate digest-bound per-platform SBOMs
         run: |
@@ -1246,13 +1246,13 @@ jobs:
         run: python -m pip install pip==26.2.1 build==1.5.0 sigstore==4.5.0
 
       - name: Restore the promoted engine payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: promoted-engine-payload
           path: engine
 
       - name: Restore the verified Opengrep payload
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333  # v8.0.2
         with:
           name: verified-opengrep-payload
           path: opengrep

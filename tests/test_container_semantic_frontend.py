@@ -72,7 +72,7 @@ def test_c_family_schemas_accept_both_supported_frontend_versions():
 
 def test_release_ci_pins_arm64_emulation_before_release_buildx():
     workflow = WORKFLOW.read_text(encoding="utf-8")
-    qemu_action = "docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8"
+    qemu_action = "docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1"
     binfmt_image = (
         "tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0"
     )
@@ -82,5 +82,5 @@ def test_release_ci_pins_arm64_emulation_before_release_buildx():
     assert release_workflow.count(qemu_action) == 1
     assert release_workflow.count(binfmt_image) == 1
     assert release_workflow.index(qemu_action) < release_workflow.index(
-        "docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e"
+        "docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069"
     )
