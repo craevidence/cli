@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   honest network claims, commit conventions, release gates and the root layout).
   `CLAUDE.md` imports it so Claude Code loads the same rules.
 
+### Changed
+
+- The hardened Python 3.14 builder base-image digest is refreshed and remains
+  pinned by digest.
+
 ## [4.9.1] - 2026-10-16
 
 ### Changed
