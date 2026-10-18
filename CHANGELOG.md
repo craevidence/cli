@@ -18,6 +18,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The hardened Python 3.14 builder base-image digest is refreshed and remains
   pinned by digest.
 
+### Security
+
+- The container image ships Debian's `libexpat1` 2.9.0-1~deb13u1 in place of the
+  hardened runtime base's 2.8.3 build, which has published High-severity fixes,
+  and records it in the package database so SBOMs and scanners report the
+  installed version. The build stops carrying it once the hardened base ships
+  that version or newer.
+
 ## [4.9.1] - 2026-10-16
 
 ### Changed

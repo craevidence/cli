@@ -60,6 +60,10 @@ ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:c73dad82bf13f79fc2677318eb9
 ARG BASE_IMAGE=dhi.io/python:3.14@sha256:b2dee88be07689a608f86c392dd863f20399f8ffcbe99eff6bdb4f04485d9298
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
+# The runtime base, read by the builder to decide which of its packages need a
+# newer Debian build (see the runtime package upgrade below).
+FROM ${BASE_IMAGE} AS runtime-base
+
 FROM ${BASE_IMAGE_BUILDER} AS builder
 ARG TARGETARCH
 ARG OPENGREP_VERSION=1.26.0
@@ -68,6 +72,7 @@ ARG LIBCLANG_VERSION=1:18.1.8-18+b1
 ARG LIBEDIT_VERSION=3.1-20250104-1
 ARG LIBXML2_VERSION=2.12.7+dfsg+really2.9.14-2.1+deb13u3
 ARG LIBZ3_VERSION=4.13.3-1
+ARG LIBEXPAT_VERSION=2.9.0-1~deb13u1
 
 # Build-time environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -167,6 +172,45 @@ RUN set -eux; \
     test -d "${runtime_root}/usr/lib/llvm-18/lib/clang/18/include"; \
     test -d "${runtime_root}/usr/include/c++/14"
 
+# Runtime package upgrade. The pinned hardened runtime ships libexpat1
+# 2.8.3-1~deb13u1+dhi5; Debian 13 fixes its published vulnerabilities in
+# LIBEXPAT_VERSION. Stage that exact Debian build, with its dpkg records, for the
+# runtime stage. A base without libexpat1, or a public base that already has this
+# version or newer, needs no upgrade. Once the hardened base ships this version or
+# newer the build fails, so the upgrade is removed instead of lingering.
+COPY --from=runtime-base /var/lib/dpkg/status /tmp/runtime-base-status
+RUN set -eux; \
+    package=libexpat1; \
+    staging=/runtime-upgrade-records; \
+    mkdir -p /runtime-upgrade "${staging}/info" "${staging}/status.d"; \
+    : > "${staging}/DPKG-STATUS"; \
+    base_stanza="$(awk -v RS= -v name="${package}" '$1 == "Package:" && $2 == name' /tmp/runtime-base-status)"; \
+    if [ -n "${base_stanza}" ]; then \
+      base_version="$(printf '%s\n' "${base_stanza}" | sed -n 's/^Version: //p')"; \
+      if dpkg --compare-versions "${base_version}" lt "${LIBEXPAT_VERSION}"; then \
+        apt-get update; \
+        apt-get install -y --no-install-recommends "${package}=${LIBEXPAT_VERSION}"; \
+        rm -rf /var/lib/apt/lists/*; \
+        test "$(dpkg-query -W -f='${Version}' "${package}")" = "${LIBEXPAT_VERSION}"; \
+        dpkg-query -L "${package}" | while IFS= read -r path; do \
+          if [ -f "${path}" ] || [ -L "${path}" ]; then \
+            (cd / && cp -a --parents "${path#/}" /runtime-upgrade); \
+          fi; \
+        done; \
+        dpkg-query -s "${package}" > "${staging}/DPKG-STATUS"; \
+        find /var/lib/dpkg/info -maxdepth 1 \( -name "${package}.*" -o -name "${package}:*" \) \
+          -exec cp -a {} "${staging}/info/" \; ; \
+        if [ -f "/var/lib/dpkg/status.d/${package}" ]; then \
+          cp -a "/var/lib/dpkg/status.d/${package}" "${staging}/status.d/"; \
+        fi; \
+      elif printf '%s\n' "${base_stanza}" | grep -q '^Maintainer: Docker Hardened Images'; then \
+        printf 'The hardened runtime base now ships %s %s; remove the runtime package upgrade.\n' \
+          "${package}" "${base_version}" >&2; \
+        exit 1; \
+      fi; \
+    fi; \
+    rm /tmp/runtime-base-status
+
 # Create virtual environment for clean dependency isolation
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -258,6 +302,14 @@ COPY --from=builder /semantic-runtime/ /
 # packages must have the same exact version or the build fails.
 USER 0:0
 RUN ["python", "-c", "from pathlib import Path; base=Path('/var/lib/dpkg/status'); extra=Path('/licenses/semantic/DPKG-STATUS'); stanzas=lambda text:[item for item in text.strip().split('\\n\\n') if item]; field=lambda item,name:next(line[len(name)+2:] for line in item.splitlines() if line.startswith(name+': ')); current=stanzas(base.read_text(encoding='utf-8')); incoming=stanzas(extra.read_text(encoding='utf-8')); key=lambda item:(field(item,'Package'),field(item,'Architecture')); versions={key(item):field(item,'Version') for item in current}; conflicts=[(key(item),versions[key(item)],field(item,'Version')) for item in incoming if key(item) in versions and versions[key(item)]!=field(item,'Version')]; assert not conflicts, f'package inventory version conflict: {conflicts}'; additions=[item for item in incoming if key(item) not in versions]; base.write_text('\\n\\n'.join(current+additions)+'\\n', encoding='utf-8')"]
+
+# Apply the runtime package upgrade staged by the builder: copy the new files,
+# then bring the dpkg records in line so SBOMs and scanners see the installed
+# version. The script removes the staging directory and itself.
+COPY --from=builder /runtime-upgrade/ /
+COPY --from=builder /runtime-upgrade-records/ /tmp/runtime-upgrade-records/
+COPY scripts/upgrade_runtime_packages.py /tmp/upgrade_runtime_packages.py
+RUN ["python", "/tmp/upgrade_runtime_packages.py", "/", "/tmp/runtime-upgrade-records"]
 USER 1001:1001
 
 # Copy CA certificates for HTTPS connections
