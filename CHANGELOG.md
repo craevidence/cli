@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `AGENTS.md`: contribution rules for people and coding agents (command interfaces,
+  honest network claims, commit conventions, release gates and the root layout).
+  `CLAUDE.md` imports it so Claude Code loads the same rules.
+
 ## [4.9.1] - 2026-10-16
 
 ### Changed
