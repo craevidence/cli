@@ -853,10 +853,14 @@ def _baseline_delta(
             not_reassessed.setdefault(item["id"], set()).update(reasons)
         else:
             removed.append(item)
+    # The lists are by vulnerability ID. An ID the baseline listed on several
+    # packages is reported as removed only when no occurrence is unresolved.
+    reclassified_ids = {item["id"] for item in reclassified}
+    removed_ids = {item["id"] for item in removed} - reclassified_ids - set(not_reassessed)
     return {
         "new_vulnerabilities": sorted({finding.id for finding in new_findings}),
-        "removed_vulnerabilities": sorted({item["id"] for item in removed}),
-        "reclassified_vulnerabilities": sorted({item["id"] for item in reclassified}),
+        "removed_vulnerabilities": sorted(removed_ids),
+        "reclassified_vulnerabilities": sorted(reclassified_ids),
         "not_reassessed_vulnerabilities": sorted(not_reassessed),
         "not_reassessed_reasons": {
             key: sorted(not_reassessed[key]) for key in sorted(not_reassessed)

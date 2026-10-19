@@ -44,6 +44,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `not_reassessed_vulnerabilities`, with the engine reason codes under
   `not_reassessed_reasons`. The text report adds a "Not reassessed" line. It is
   not counted as removed, and it does not affect `--fail-on-new`.
+- `check --baseline` lists a vulnerability ID as removed only when none of its
+  baseline occurrences is unresolved. An ID the baseline lists on several packages
+  that is not reassessed or only indicative on one of them is reported under
+  `not_reassessed_vulnerabilities` or `reclassified_vulnerabilities`, no longer
+  also under `removed_vulnerabilities`.
 - `check` reads the identifiers related to a Grype finding from the match, where
   Grype reports them. A GHSA finding now carries its CVE alias, so CISA KEV and
   FIRST EPSS enrichment and alias-based baseline matching apply to it.

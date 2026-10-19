@@ -19,7 +19,12 @@ from cra_evidence_cli.engine import EngineIdentity, EngineInspection
 from cra_evidence_cli.exceptions import ScanEngineUnavailable
 from cra_evidence_cli.local import annotations
 from cra_evidence_cli.local import scanner as scanner_module
-from cra_evidence_cli.local.models import CoverageSource, Finding, LocalCheckResult
+from cra_evidence_cli.local.models import (
+    CoverageSource,
+    Finding,
+    LocalCheckResult,
+    UnassessedPackage,
+)
 from cra_evidence_cli.local.scanner import parse_grype_output
 
 TODAY = datetime.now(UTC).date().isoformat()
@@ -843,6 +848,50 @@ def test_indicative_reclassification_wins_over_not_reassessed(monkeypatch, tmp_p
     assert report["baseline"]["reclassified_vulnerabilities"] == ["CVE-2026-0002"]
     assert report["baseline"]["not_reassessed_vulnerabilities"] == ["CVE-2026-3333"]
     assert report["baseline"]["removed_vulnerabilities"] == []
+
+
+def _two_package_baseline(tmp_path):
+    return _write_baseline(
+        tmp_path / "baseline.json",
+        [
+            {"id": "CVE-2026-4444", "package": "a", "version": "1.0"},
+            {"id": "CVE-2026-4444", "package": "b", "version": "1.0"},
+        ],
+    )
+
+
+def test_id_on_two_packages_with_one_unassessed_is_not_also_removed(tmp_path):
+    """Fails if an ID with an unresolved occurrence is also listed as removed."""
+    path = _two_package_baseline(tmp_path)
+    unassessed = [UnassessedPackage("b", "1.0", None, "matcher-error")]
+
+    delta = check_module._baseline_delta(path, [], None, unassessed)
+
+    assert delta["not_reassessed_vulnerabilities"] == ["CVE-2026-4444"]
+    assert delta["not_reassessed_reasons"] == {"CVE-2026-4444": ["matcher-error"]}
+    assert delta["removed_vulnerabilities"] == []
+
+
+def test_id_on_two_packages_with_one_indicative_is_not_also_removed(tmp_path):
+    """Fails if an ID that is now only indicative on one package is also listed as removed."""
+    path = _two_package_baseline(tmp_path)
+    indicative = [Finding(id="CVE-2026-4444", package="a", version="1.0")]
+
+    delta = check_module._baseline_delta(path, [], indicative)
+
+    assert delta["reclassified_vulnerabilities"] == ["CVE-2026-4444"]
+    assert delta["removed_vulnerabilities"] == []
+
+
+def test_id_removed_on_every_package_is_still_removed(tmp_path):
+    """Fails if the ID-level precedence drops a removal where every occurrence was reassessed."""
+    path = _two_package_baseline(tmp_path)
+    unassessed = [UnassessedPackage("c", "1.0", None, "matcher-error")]
+
+    delta = check_module._baseline_delta(path, [], None, unassessed)
+
+    assert delta["removed_vulnerabilities"] == ["CVE-2026-4444"]
+    assert delta["not_reassessed_vulnerabilities"] == []
 
 
 def test_complete_scan_reports_a_vanished_vulnerability_as_removed(monkeypatch, tmp_path):
