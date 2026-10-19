@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `reclassified_vulnerabilities` (version could not be confirmed), not as
   removed. Unrecognised or missing match details are treated as malformed Grype
   output.
+- A component version of `NOASSERTION`, which SPDX writes when no version is
+  asserted, is treated like `unknown`: matches that rest on it are indicative
+  candidates, not confirmed findings.
 
 ### Fixed
 

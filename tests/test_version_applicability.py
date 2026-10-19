@@ -64,7 +64,10 @@ def test_is_concrete_version_allows_escaped_wildcard():
     assert is_concrete_version(r"a\*b") is True
 
 
-@pytest.mark.parametrize("value", ["unknown", "UNKNOWN", "Unknown", "NA", "na", "N/A", "n/a"])
+@pytest.mark.parametrize(
+    "value",
+    ["unknown", "UNKNOWN", "Unknown", "NA", "na", "N/A", "n/a", "NOASSERTION", "noassertion"],
+)
 def test_is_concrete_version_rejects_placeholders_case_insensitive(value):
     """Fails if a placeholder spelling is accepted as a version."""
     assert is_concrete_version(value) is False

@@ -46,7 +46,7 @@ _WFN_ANY = "*"
 _WFN_NA = "-"
 
 # Case-insensitive placeholder strings treated as "no real version".
-_PLACEHOLDER_VERSIONS = frozenset({"unknown", "na", "n/a"})
+_PLACEHOLDER_VERSIONS = frozenset({"unknown", "na", "n/a", "noassertion"})
 
 POLICY = "concrete-v1"
 
@@ -98,7 +98,8 @@ def is_concrete_version(value: object) -> bool:
     1. it is a string and remains nonempty after trimming;
     2. it is not CPE ANY (``*``) or CPE NA (``-``);
     3. it contains no unescaped wildcard character (``*`` or ``?``);
-    4. it is not a case-insensitive placeholder (``unknown``, ``NA``, ``N/A``).
+    4. it is not a case-insensitive placeholder (``unknown``, ``NA``, ``N/A``,
+       or ``NOASSERTION``, which SPDX writes when no version is asserted).
 
     ``0`` is concrete. No SemVer canonicalization is applied. Callers pass the
     logical (unbound or decoded) version, so CPE binding escapes are already gone.
