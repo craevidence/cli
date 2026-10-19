@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 from cra_evidence_cli.local.disclaimer import advisory_block
+from cra_evidence_cli.local.version_applicability import (
+    REASON_UNVERSIONED,
+    REASON_VERSION_CONFLICT,
+)
 
 SEVERITY_ORDER = {
     "unknown": 0,
@@ -46,6 +50,12 @@ class Finding:
     source: str = "unknown"
     ignored_by_policy: bool = False
     vex_conflict: str | None = None
+    indicative_reason: str | None = None
+    applicability_evidence: dict[str, Any] | None = None
+
+    @property
+    def is_indicative(self) -> bool:
+        return self.indicative_reason is not None
 
     @property
     def cve_aliases(self) -> set[str]:
@@ -74,6 +84,18 @@ class Finding:
             "ignored_by_policy": self.ignored_by_policy,
             "vex_conflict": self.vex_conflict,
         }
+
+    def to_indicative_dict(self) -> dict[str, Any]:
+        """Report entry for a candidate whose component version is not confirmed.
+
+        Exploitation and EPSS signals are left out: they describe a vulnerability
+        in a confirmed version, which this candidate is not.
+        """
+        omitted = {"known_exploited", "epss_probability", "ignored_by_policy", "vex_conflict"}
+        entry = {key: value for key, value in self.to_dict().items() if key not in omitted}
+        entry["quality_reason"] = self.indicative_reason
+        entry["applicability_evidence"] = self.applicability_evidence
+        return entry
 
 
 @dataclass
@@ -107,6 +129,7 @@ class LocalCheckResult:
     baseline: dict[str, Any] | None = None
     suppressions: list[dict[str, Any]] = field(default_factory=list)
     identifier_coverage: dict[str, Any] | None = None
+    indicative_findings: list[Finding] = field(default_factory=list)
 
     def to_dict(self, exit_code: int = 0) -> dict[str, Any]:
         summary = summarize_findings(self.findings)
@@ -125,6 +148,10 @@ class LocalCheckResult:
                 "items": [component.__dict__ for component in self.components],
             },
             "findings": [finding.to_dict() for finding in self.findings],
+            "indicative_summary": summarize_indicative(self.indicative_findings),
+            "indicative_findings": [
+                finding.to_indicative_dict() for finding in self.indicative_findings
+            ],
             "cra_readiness_signal": {
                 "denominator": (
                     "This local snapshot checks SBOM, vulnerability and enrichment signals. "
@@ -173,6 +200,25 @@ def summarize_findings(findings: list[Finding]) -> dict[str, int]:
         if finding.known_exploited is True:
             summary["known_exploited"] += 1
     return summary
+
+
+def partition_by_applicability(
+    findings: list[Finding],
+) -> tuple[list[Finding], list[Finding]]:
+    """Split findings into confirmed ones and indicative candidates."""
+    confirmed = [finding for finding in findings if not finding.is_indicative]
+    indicative = [finding for finding in findings if finding.is_indicative]
+    return confirmed, indicative
+
+
+def summarize_indicative(findings: list[Finding]) -> dict[str, int]:
+    return {
+        "total": len(findings),
+        "unversioned": sum(1 for f in findings if f.indicative_reason == REASON_UNVERSIONED),
+        "version_conflict": sum(
+            1 for f in findings if f.indicative_reason == REASON_VERSION_CONFLICT
+        ),
+    }
 
 
 def utc_now_iso() -> str:

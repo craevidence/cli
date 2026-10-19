@@ -84,6 +84,19 @@ replacing them with OSV results. `--strict` rejects an incomplete Grype
 assessment. Without `--strict`, configured finding gates still apply, and exit
 0 does not mean every package was assessed.
 
+Grype returns match-all candidates for a component without a version, and
+candidates whose version evidence conflicts, for example a declared CPE at 1.10
+on a component shipped as 1.20. `check` applies the `concrete-v1` policy to each
+match. A match anchored to a concrete component version is a finding, counted
+and gated as before. Any other match is an indicative candidate. It is listed in
+its own section of every report (`indicative_findings` in JSON,
+`indicativeCandidates` in the SARIF driver properties, a separate section in the
+text, Markdown and GitHub step summary reports) and is not a confirmed
+vulnerability. It never counts toward `--fail-on`, `--fail-on-new`, the severity
+totals, the known-exploited count or EPSS, and it raises no annotation. Give the
+SBOM component its exact version to confirm it. Match details in a shape the
+policy does not recognise are treated like other malformed Grype output.
+
 SBOM license expressions are preserved as written. `--deny-license` compares
 complete license strings without evaluating `AND`, `OR`, or `WITH` expressions.
 

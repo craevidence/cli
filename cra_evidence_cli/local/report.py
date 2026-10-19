@@ -85,7 +85,7 @@ def print_text_report(
 
     console.print()
     console.print(Text("Summary", style=STYLE_TITLE))
-    console.print(_summary_text(data["components"]["count"], summary))
+    console.print(_summary_text(data["components"]["count"], summary, _indicative_total(data)))
     _print_identifier_coverage(console, data)
 
     console.print()
@@ -100,6 +100,7 @@ def print_text_report(
     _print_suppressions(console, data)
     _print_vex_conflicts(console, data)
     _print_ignored(console, data)
+    _print_indicative(console, data)
     _print_baseline(console, data)
 
     if verbose:
@@ -139,6 +140,7 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
                 f"(critical={summary['critical']}, high={summary['high']},"
                 f" medium={summary['medium']}) | "
                 f"Known-exploited: {summary['known_exploited']}"
+                f"{_indicative_count_suffix(data)}"
             ),
         ]
     )
@@ -174,6 +176,7 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
                 f"Ignored by policy (shown, not gated): {len(ignored)} ({shown}{more})",
             ]
         )
+    lines.extend(_indicative_lines(data))
     baseline = data.get("baseline")
     if baseline:
         new = baseline.get("new_vulnerabilities") or []
@@ -185,6 +188,7 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
                 "Changed since baseline",
                 f"- New vulnerabilities: {len(new)}{new_text}",
                 f"- Removed vulnerabilities: {len(removed)}",
+                *_reclassified_lines(baseline),
             ]
         )
     if verbose:
@@ -217,7 +221,7 @@ def _markdown(data: dict[str, Any], verbose: bool = False) -> str:
     return "# " + text.replace("\n\n", "\n\n## ")
 
 
-def _summary_text(component_count: int, summary: dict[str, int]) -> Text:
+def _summary_text(component_count: int, summary: dict[str, int], indicative: int = 0) -> Text:
     text = Text()
     text.append("Components: ")
     text.append(str(component_count), style=STYLE_LABEL)
@@ -235,6 +239,8 @@ def _summary_text(component_count: int, summary: dict[str, int]) -> Text:
         str(summary["known_exploited"]),
         style=STYLE_BLOCKER if summary["known_exploited"] else STYLE_OK,
     )
+    if indicative:
+        text.append(f" | Indicative, not counted: {indicative}", style=STYLE_MUTED)
     return text
 
 
@@ -355,6 +361,65 @@ def _print_baseline(console: Console, data: dict[str, Any]) -> None:
     console.print(Text("Changed since baseline", style=STYLE_TITLE))
     console.print(f"- New vulnerabilities: {len(new)}{new_text}")
     console.print(f"- Removed vulnerabilities: {len(removed)}")
+    for line in _reclassified_lines(baseline):
+        console.print(line, markup=False)
+
+
+_INDICATIVE_SHOWN = 10
+_INDICATIVE_REASON_TEXT = {
+    "unversioned": "version missing",
+    "version_conflict": "conflicting versions",
+}
+
+
+def _indicative_total(data: dict[str, Any]) -> int:
+    return len(data.get("indicative_findings") or [])
+
+
+def _indicative_count_suffix(data: dict[str, Any]) -> str:
+    total = _indicative_total(data)
+    return f" | Indicative, not counted: {total}" if total else ""
+
+
+def _indicative_lines(data: dict[str, Any]) -> list[str]:
+    """Candidates whose component version is missing or contradictory.
+
+    They are listed apart from the confirmed findings and never counted or gated.
+    """
+    items = data.get("indicative_findings") or []
+    if not items:
+        return []
+    lines = [
+        "",
+        f"Indicative candidates, version not confirmed (not counted, not gated): {len(items)}",
+        "These matches rest on a missing or conflicting component version, so they are "
+        "not confirmed vulnerabilities. Give the SBOM component its exact version and re-run.",
+    ]
+    for item in items[:_INDICATIVE_SHOWN]:
+        reason = _INDICATIVE_REASON_TEXT.get(item["quality_reason"], item["quality_reason"])
+        version = item.get("version") or "(no version)"
+        lines.append(f"- {item['package']} {version}: {item['id']}, {reason}")
+    if len(items) > _INDICATIVE_SHOWN:
+        lines.append(f"- ... and {len(items) - _INDICATIVE_SHOWN} more; see --output json")
+    return lines
+
+
+def _print_indicative(console: Console, data: dict[str, Any]) -> None:
+    lines = _indicative_lines(data)
+    if not lines:
+        return
+    console.print()
+    console.print(Text(lines[1], style=STYLE_TITLE))
+    for line in lines[2:]:
+        console.print(line, markup=False)
+
+
+def _reclassified_lines(baseline: dict[str, Any]) -> list[str]:
+    reclassified = baseline.get("reclassified_vulnerabilities") or []
+    if not reclassified:
+        return []
+    shown = ", ".join(reclassified[:5]) + ("..." if len(reclassified) > 5 else "")
+    return [f"- Reclassified: version could not be confirmed: {len(reclassified)} ({shown})"]
 
 
 def _identifier_coverage_lines(data: dict[str, Any]) -> list[str]:
@@ -414,6 +479,7 @@ def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
                             "provenance": data["provenance"],
                             "attributions": data["attributions"],
                             "vexSuppressions": data.get("suppressions") or [],
+                            "indicativeCandidates": data.get("indicative_findings") or [],
                             "advisory": data["advisory"],
                         },
                     }

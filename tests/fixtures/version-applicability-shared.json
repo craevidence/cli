@@ -1,0 +1,403 @@
+{
+  "requirement": "concrete-v1 original normalization sequence; RPM qualifier/prefix and source anchoring",
+  "cases": [
+    {
+      "id": "non_rpm_double_zero_equal",
+      "component_version": "0:0:1.0",
+      "purl": "pkg:pypi/widget@0%3A0%3A1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "0:0:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "non_rpm_double_zero_conflict",
+      "component_version": "0:0:1.0",
+      "purl": "pkg:pypi/widget@0%3A0%3A1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "0:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "indicative",
+        "reason": "version_conflict"
+      }
+    },
+    {
+      "id": "rpm_zero_detail",
+      "component_version": "1.0",
+      "purl": "pkg:rpm/redhat/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "0:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_unicode_zero_detail",
+      "component_version": "1.0",
+      "purl": "pkg:rpm/redhat/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "\u0660:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_positive_epoch_conflict",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@1.0?epoch=1",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "indicative",
+        "reason": "version_conflict"
+      }
+    },
+    {
+      "id": "rpm_same_prefix_qualifier",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@2%3A1.0?epoch=2",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_same_prefix_leading_zero",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@02%3A1.0?epoch=002",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_conflicting_prefix_qualifier",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@2%3A1.0?epoch=1",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "error": "InvalidPurlEpoch"
+      }
+    },
+    {
+      "id": "rpm_invalid_epoch",
+      "component_version": "1.0",
+      "purl": "pkg:rpm/redhat/widget@1.0?epoch=bad",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "error": "InvalidPurlEpoch"
+      }
+    },
+    {
+      "id": "rpm_duplicate_epoch",
+      "component_version": "1.0",
+      "purl": "pkg:rpm/redhat/widget@1.0?epoch=0&epoch=0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "error": "InvalidPurlEpoch"
+      }
+    },
+    {
+      "id": "rpm_scheme_slashes",
+      "component_version": "2:1.0",
+      "purl": "pkg://rpm/redhat/widget@1.0?epoch=2",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "debian_unchanged",
+      "component_version": "1:1.0",
+      "purl": "pkg:deb/debian/widget@1%3A1.0?epoch=2",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_indirect_other_package",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@1.0?epoch=2",
+      "match_details": [
+        {
+          "type": "exact-indirect-match",
+          "searchedBy": {
+            "package": {
+              "version": "4:9.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_zero_prefixed_qualifier",
+      "component_version": "1.0",
+      "purl": "pkg:rpm/redhat/widget@00%3A1.0?epoch=0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "0:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_cpe_formatted_escapes",
+      "component_version": "2:1.0~rc1+build-1",
+      "purl": "pkg:rpm/redhat/widget@1.0~rc1%2Bbuild-1?epoch=2",
+      "declared_cpes": [
+        "cpe:2.3:a:redhat:widget:2\\:1.0\\~rc1\\+build-1:*:*:*:*:*:*:*"
+      ],
+      "match_details": [
+        {
+          "type": "cpe-match",
+          "searchedBy": {
+            "cpes": [
+              "cpe:2.3:a:redhat:widget:2\\:1.0\\~rc1\\+build-1:*:*:*:*:*:*:*"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_cpe_uri_encoding",
+      "component_version": "2:1.0~rc1+build-1",
+      "purl": "pkg:rpm/redhat/widget@1.0~rc1%2Bbuild-1?epoch=2",
+      "declared_cpes": [
+        "cpe:/a:redhat:widget:2%3A1.0%7Erc1%2Bbuild-1"
+      ],
+      "match_details": [
+        {
+          "type": "cpe-match",
+          "searchedBy": {
+            "cpes": [
+              "cpe:/a:redhat:widget:2%3A1.0%7Erc1%2Bbuild-1"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "malformed_cpe_uri_overlong",
+      "component_version": "1.0",
+      "purl": "pkg:rpm/redhat/widget@1.0",
+      "match_details": [
+        {
+          "type": "cpe-match",
+          "searchedBy": {
+            "cpes": [
+              "cpe:/a:redhat:widget:1.0:edition:language:extra:overflow"
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "error": "MalformedMatchDetail"
+      }
+    },
+    {
+      "id": "rpm_placeholder_conflicting_prefix",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@2%3Aunknown?epoch=1",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "error": "InvalidPurlEpoch"
+      }
+    },
+    {
+      "id": "rpm_na_conflicting_prefix",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@02%3ANA?epoch=1",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "error": "InvalidPurlEpoch"
+      }
+    },
+    {
+      "id": "rpm_placeholder_matching_prefix",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@02%3Aunknown?epoch=002",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "rpm_wildcard_conflicting_prefix",
+      "component_version": "2:1.0",
+      "purl": "pkg:rpm/redhat/widget@2%3A%2A?epoch=1",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "2:1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "error": "InvalidPurlEpoch"
+      }
+    }
+  ]
+}

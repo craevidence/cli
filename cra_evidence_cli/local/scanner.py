@@ -17,6 +17,7 @@ from cra_evidence_cli.engine import (
 )
 from cra_evidence_cli.exceptions import ScanEngineUnavailable
 from cra_evidence_cli.local.models import CoverageSource, Finding, normalize_severity
+from cra_evidence_cli.local.version_applicability import classify_occurrence
 
 
 class GrypeLocalScanner:
@@ -226,7 +227,8 @@ def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
     ):
         message = "scanner returned malformed match data"
         raise ScanEngineUnavailable(message)
-    findings: list[Finding] = []
+    parsed: list[tuple[Finding, tuple[Any, ...]]] = []
+    evidence: dict[tuple[Any, ...], tuple[list[Any], set[str]]] = {}
     for match in data.get("matches", []):
         vulnerability = match.get("vulnerability") or {}
         artifact = match.get("artifact") or {}
@@ -241,22 +243,40 @@ def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
         aliases.discard(vuln_id)
         known_exploited_raw = vulnerability.get("knownExploited") or []
         fix = vulnerability.get("fix") or {}
-        findings.append(
-            Finding(
-                id=vuln_id,
-                package=str(artifact.get("name") or "unknown"),
-                version=artifact.get("version"),
-                severity=normalize_severity(vulnerability.get("severity")),
-                aliases=aliases,
-                fixed_versions=[str(item) for item in fix.get("versions") or []],
-                purl=artifact.get("purl"),
-                title=vulnerability.get("description"),
-                references=_references(vulnerability.get("urls") or []),
-                epss_probability=_first_epss(vulnerability.get("epss") or []),
-                known_exploited=True if known_exploited_raw else None,
-                source="grype",
-            )
+        finding = Finding(
+            id=vuln_id,
+            package=str(artifact.get("name") or "unknown"),
+            version=artifact.get("version"),
+            severity=normalize_severity(vulnerability.get("severity")),
+            aliases=aliases,
+            fixed_versions=[str(item) for item in fix.get("versions") or []],
+            purl=artifact.get("purl"),
+            title=vulnerability.get("description"),
+            references=_references(vulnerability.get("urls") or []),
+            epss_probability=_first_epss(vulnerability.get("epss") or []),
+            known_exploited=True if known_exploited_raw else None,
+            source="grype",
         )
+        # Matches of one vulnerability on one package occurrence share a single
+        # classification computed from all of their match details.
+        key = (vuln_id, artifact.get("name"), artifact.get("version"), artifact.get("purl"))
+        details, cpes = evidence.setdefault(key, ([], set()))
+        if isinstance(match.get("matchDetails"), list):
+            details.extend(match["matchDetails"])
+        if isinstance(artifact.get("cpes"), list):
+            cpes.update(cpe for cpe in artifact["cpes"] if isinstance(cpe, str))
+        parsed.append((finding, key))
+    classifications = {
+        key: classify_occurrence(key[2], key[3], details, sorted(cpes))
+        for key, (details, cpes) in evidence.items()
+    }
+    findings = []
+    for finding, key in parsed:
+        classification = classifications[key]
+        if classification.status == "indicative":
+            finding.indicative_reason = classification.reason
+            finding.applicability_evidence = classification.evidence
+        findings.append(finding)
     return findings, data
 
 

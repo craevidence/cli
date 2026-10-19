@@ -53,12 +53,37 @@ Notes:
   package/version. When both reports provide a PURL, it must also match exactly. Legacy
   id-only rows match by case-insensitive ID only; they do not gain alias matching. The gate compares
   new package occurrences so a known ID on one package does not hide a new occurrence on another.
+- A vulnerability that `--baseline` lists but that is now only an indicative candidate
+  (see below) is reported under `reclassified_vulnerabilities` as "reclassified: version could
+  not be confirmed". It is not counted as removed or fixed and it is not new, so `--fail-on-new`
+  ignores it. A baseline written before indicative candidates existed keeps working.
 - `--deny-license` reads the per-component licenses already parsed from the SBOM, e.g.
   `--deny-license AGPL-3.0-only,GPL-3.0-only`.
 - `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`.
   The compliance report interface is available in v1.3.0; release validation pins v2.0.11.
   If it is not installed the dimension is skipped (reported as `unavailable`, never a
   silent pass). Scores can change between versions, so CI thresholds require a version pin.
+- Indicative candidates: for every Grype match, `check` applies the `concrete-v1` version policy.
+  A match is confirmed when at least one match detail carries a concrete version and the
+  component's declarations (version, PURL, declared CPEs, searched versions) agree. A component
+  with an empty, wildcard or placeholder version yields reason `unversioned`; declarations that
+  contradict each other yield `version_conflict`. Such matches are indicative candidates, not
+  confirmed vulnerabilities. They are listed apart from the findings:
+  - JSON: the top-level `indicative_findings` array (each entry has `quality_reason` and
+    `applicability_evidence`, and no `known_exploited` or `epss_probability`) and
+    `indicative_summary` (`total`, `unversioned`, `version_conflict`). `findings` and `summary`
+    hold confirmed findings only, and `provenance.version_applicability_policy` names the policy
+    when the local Grype engine ran.
+  - SARIF: not in `results`; listed under `runs[0].tool.driver.properties.indicativeCandidates`.
+  - Text and Markdown: a section "Indicative candidates, version not confirmed" (first ten
+    shown) and an "Indicative, not counted" figure in the summary line.
+  - GitHub step summary: a separate table. GitHub and GitLab annotations: none.
+
+  They never count toward `--fail-on`, `--fail-on-new`, severity totals, the known-exploited
+  count or EPSS, and the KEV and EPSS lookups skip them. A match with an unknown match-detail
+  type, no match details, or a `cpe-match` without valid CPE evidence is malformed engine output:
+  it takes the same path as other malformed Grype output (OSV.dev fallback, and `--strict`
+  exits 15). The OSV.dev fallback does not classify matches.
 - Each finding's exploit probability is shown inline when available and used to
   rank the "Top actions".
 - `--vex` consumes an [OpenVEX](https://openvex.dev/) (or CSAF VEX) document and suppresses a

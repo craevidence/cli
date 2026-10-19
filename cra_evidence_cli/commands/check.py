@@ -36,6 +36,7 @@ from cra_evidence_cli.local.models import (
     CoverageSource,
     LocalCheckResult,
     identifier_coverage,
+    partition_by_applicability,
     summarize_findings,
 )
 from cra_evidence_cli.local.osv import OSVClient, OSVClientError
@@ -44,6 +45,7 @@ from cra_evidence_cli.local.report import print_text_report, render
 from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
 from cra_evidence_cli.local.scanner import GrypeLocalScanner
 from cra_evidence_cli.local.signal import assert_no_cra_pass, build_dimensions, mark_stale_sources
+from cra_evidence_cli.local.version_applicability import POLICY as APPLICABILITY_POLICY
 from cra_evidence_cli.local.vex import VexParseError, apply_vex, load_vex
 from cra_evidence_cli.sbom_generator import (
     SBOMGenerationError,
@@ -574,6 +576,11 @@ def _run_local_check_on_sbom(
         sources_consulted.add("osv.dev")
         engine = "osv-online"
 
+    # Indicative candidates rest on a missing or contradictory component version.
+    # They are set aside before enrichment and every gate, so they are never
+    # counted or flagged as exploited.
+    findings, indicative_findings = partition_by_applicability(findings)
+
     cves = set().union(*(finding.cve_aliases for finding in findings)) if findings else set()
     try:
         kev_cves, kev_source = fetch_kev_catalog()
@@ -622,7 +629,13 @@ def _run_local_check_on_sbom(
             coverage.append(CoverageSource("sbomqs", "unavailable", detail=str(exc)))
 
     mark_stale_sources(coverage)
-    dimensions = build_dimensions(components, findings, coverage, sbom_quality=quality)
+    dimensions = build_dimensions(
+        components,
+        findings,
+        coverage,
+        sbom_quality=quality,
+        indicative_count=len(indicative_findings),
+    )
     assert_no_cra_pass(dimensions)
     provenance = {
         "engine": engine,
@@ -631,6 +644,8 @@ def _run_local_check_on_sbom(
     }
     if generated_sbom is not None and sbom_output is not None:
         provenance["sbom_output"] = str(sbom_output)
+    if engine == "grype-local":
+        provenance["version_applicability_policy"] = APPLICABILITY_POLICY
     if quality is not None:
         provenance["sbom_quality"] = quality
     for source in coverage:
@@ -646,9 +661,10 @@ def _run_local_check_on_sbom(
         provenance=provenance,
         attributions=_attributions(sources_consulted),
         sources_consulted=sorted(sources_consulted),
-        baseline=_baseline_delta(baseline, findings) if baseline else None,
+        baseline=_baseline_delta(baseline, findings, indicative_findings) if baseline else None,
         suppressions=suppressions,
         identifier_coverage=id_coverage,
+        indicative_findings=indicative_findings,
     )
     if strict and any(
         source.status in {"stale", "unavailable"}
@@ -754,7 +770,9 @@ def _format_syft_version(version: str | None) -> str:
     return version
 
 
-def _baseline_delta(path: Path | None, findings: list[Any]) -> dict[str, Any] | None:
+def _baseline_delta(
+    path: Path | None, findings: list[Any], indicative: list[Any] | None = None
+) -> dict[str, Any] | None:
     if not path:
         return None
     try:
@@ -797,14 +815,23 @@ def _baseline_delta(path: Path | None, findings: list[Any]) -> dict[str, Any] | 
         for finding in findings
         if not any(_baseline_matches(finding, item) for item in previous)
     ]
-    removed = [
+    absent = [
         item
         for item in previous
         if not any(_baseline_matches(finding, item) for finding in findings)
     ]
+    # A vulnerability the baseline confirmed that is now only an indicative
+    # candidate has not been fixed; its version can no longer be confirmed.
+    reclassified = [
+        item
+        for item in absent
+        if any(_baseline_matches(finding, item) for finding in indicative or [])
+    ]
+    removed = [item for item in absent if item not in reclassified]
     return {
         "new_vulnerabilities": sorted({finding.id for finding in new_findings}),
         "removed_vulnerabilities": sorted({item["id"] for item in removed}),
+        "reclassified_vulnerabilities": sorted({item["id"] for item in reclassified}),
         "new_occurrences": [_baseline_occurrence(finding) for finding in new_findings],
     }
 

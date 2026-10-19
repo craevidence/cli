@@ -18,6 +18,7 @@ def build_dimensions(
     findings: list[Finding],
     coverage: list[CoverageSource],
     sbom_quality: dict[str, Any] | None = None,
+    indicative_count: int = 0,
 ) -> list[dict[str, Any]]:
     """Build local review dimensions.
 
@@ -53,7 +54,7 @@ def build_dimensions(
             "title": "Known vulnerability snapshot",
             "result": vuln_status,
             "citation_ids": ["annex_I.part-i-item-2-a", "art_013.002"],
-            "message": _vulnerability_message(summary),
+            "message": _vulnerability_message(summary, indicative_count),
         },
         {
             "entry_id": "cra:annex-i-part-ii-2",
@@ -124,16 +125,23 @@ _EUVD_NOTE = (
 )
 
 
-def _vulnerability_message(summary: dict[str, int]) -> str:
+def _vulnerability_message(summary: dict[str, int], indicative_count: int = 0) -> str:
+    indicative_note = (
+        f" {indicative_count} indicative candidate(s) with an unconfirmed component version "
+        "are listed separately and not counted."
+        if indicative_count
+        else ""
+    )
     if summary["total"]:
         return (
             f"Found {summary['total']} vulnerabilities "
             f"(critical={summary['critical']}, high={summary['high']}, "
-            f"medium={summary['medium']}, known-exploited={summary['known_exploited']}). "
-            f"{_EUVD_NOTE}"
+            f"medium={summary['medium']}, known-exploited={summary['known_exploited']})."
+            f"{indicative_note} {_EUVD_NOTE}"
         )
     return (
-        "No component matched the consulted vulnerability sources in this local snapshot. "
+        "No component matched the consulted vulnerability sources in this local snapshot."
+        f"{indicative_note} "
         "This does not establish Annex I Part I(2)(a) conformity, which is conditioned on the "
         f"Article 13(2) risk assessment. {_EUVD_NOTE}"
     )

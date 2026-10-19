@@ -1,0 +1,671 @@
+"""Local check: candidates whose component version is not confirmed.
+
+The engine returns match-all candidates for a component without a version and
+candidates whose version evidence conflicts. These tests drive engine-shaped JSON
+through the parser, the ``check`` command and every report format.
+"""
+
+import json
+from datetime import UTC, datetime
+from types import SimpleNamespace
+
+import click
+import pytest
+from click.testing import CliRunner
+
+from cra_evidence_cli.cli import cli
+from cra_evidence_cli.commands import check as check_module
+from cra_evidence_cli.engine import EngineIdentity, EngineInspection
+from cra_evidence_cli.exceptions import ScanEngineUnavailable
+from cra_evidence_cli.local import annotations
+from cra_evidence_cli.local import scanner as scanner_module
+from cra_evidence_cli.local.models import CoverageSource, Finding, LocalCheckResult
+from cra_evidence_cli.local.scanner import parse_grype_output
+
+TODAY = datetime.now(UTC).date().isoformat()
+WILDCARD_CPE = "cpe:2.3:a:widget:widget:*:*:*:*:*:*:*:*"
+VERSIONLESS_PURL = "pkg:pypi/widget"
+
+
+def _direct(version, name="widget"):
+    return {
+        "type": "exact-direct-match",
+        "matcher": "python-matcher",
+        "searchedBy": {
+            "language": "python",
+            "namespace": "github:language:python",
+            "package": {"name": name, "version": version},
+        },
+        "found": {"versionConstraint": "<2.0.0 (python)", "vulnerabilityID": "GHSA-x"},
+    }
+
+
+def _cpe(*cpes):
+    return {
+        "type": "cpe-match",
+        "matcher": "stock-matcher",
+        "searchedBy": {"namespace": "nvd:cpe", "cpes": list(cpes)},
+        "found": {"versionConstraint": "< 2.0.0 (unknown)", "vulnerabilityID": "CVE-x"},
+    }
+
+
+def _match(
+    vuln_id,
+    details,
+    *,
+    name="widget",
+    version="",
+    purl=VERSIONLESS_PURL,
+    severity="High",
+    cpes=(WILDCARD_CPE,),
+    related=(),
+    exploited=False,
+):
+    return {
+        "vulnerability": {
+            "id": vuln_id,
+            "severity": severity,
+            "description": f"{vuln_id} description",
+            "knownExploited": [{"cve": "x"}] if exploited else [],
+            "fix": {"state": "fixed", "versions": ["2.0.0"]},
+        },
+        "relatedVulnerabilities": [{"id": item} for item in related],
+        "artifact": {"name": name, "version": version, "purl": purl, "cpes": list(cpes)},
+        "matchDetails": details,
+    }
+
+
+def _confirmed_match(vuln_id="CVE-2026-1111", *, exploited=False, severity="High"):
+    return _match(
+        vuln_id,
+        [_direct("3.1.3", "jinja2")],
+        name="jinja2",
+        version="3.1.3",
+        purl="pkg:pypi/jinja2@3.1.3",
+        cpes=(),
+        exploited=exploited,
+        severity=severity,
+    )
+
+
+def _versionless_matches():
+    return [
+        _match("GHSA-aaaa-aaaa-aaaa", [_direct("")], related=("CVE-2026-0001",), exploited=True),
+        _match("CVE-2026-0002", [_cpe(WILDCARD_CPE)], severity="Critical"),
+    ]
+
+
+def _sbom(path):
+    path.write_text(
+        json.dumps(
+            {
+                "bomFormat": "CycloneDX",
+                "specVersion": "1.5",
+                "components": [{"type": "library", "name": "widget", "purl": VERSIONLESS_PURL}],
+            }
+        )
+    )
+    return path
+
+
+def _engine_scanner(monkeypatch, stdout, returncode=0):
+    monkeypatch.setattr(
+        scanner_module.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=returncode, stdout=stdout, stderr=""),
+    )
+    scanner = scanner_module.GrypeLocalScanner()
+    scanner._inspection = EngineInspection(
+        EngineIdentity(path="/opt/bin/grype", version="test-engine", syft_version="1.50.0"),
+        "",
+    )
+    return scanner
+
+
+def _run(monkeypatch, tmp_path, matches, args=(), *, kev=(), assessment=None, osv=None):
+    """Run ``check`` on an SBOM with a fake engine that returns ``matches``."""
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    document = {"matches": matches}
+    returncode = 0
+    if assessment is not None:
+        document["assessment"] = assessment
+        returncode = 1
+    scanner = _engine_scanner(monkeypatch, json.dumps(document), returncode)
+    monkeypatch.setattr(check_module, "GrypeLocalScanner", lambda: scanner)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
+    epss_queries = []
+
+    def fake_epss(cves):
+        epss_queries.append(set(cves))
+        return {}, CoverageSource("first-epss", "present", as_of=TODAY)
+
+    monkeypatch.setattr(
+        check_module,
+        "fetch_kev_catalog",
+        lambda: (set(kev), CoverageSource("cisa-kev", "present", as_of=TODAY)),
+    )
+    monkeypatch.setattr(check_module, "fetch_epss_scores", fake_epss)
+    if osv is not None:
+        monkeypatch.setattr(check_module, "OSVClient", osv)
+    sbom = _sbom(tmp_path / "sbom.json")
+    result = CliRunner().invoke(cli, ["check", "--sbom", str(sbom), *args])
+    result.epss_queries = epss_queries
+    return result
+
+
+def _snapshot_dimension(report):
+    dimensions = report["cra_readiness_signal"]["dimensions"]
+    return next(d for d in dimensions if "snapshot" in d["title"])
+
+
+def _json_run(monkeypatch, tmp_path, matches, args=(), **kwargs):
+    result = _run(monkeypatch, tmp_path, matches, ["--output", "json", *args], **kwargs)
+    return result, json.loads(result.stdout)
+
+
+# --- parser keeps the evidence the classifier needs -------------------------
+
+
+def test_parser_marks_versionless_component_matches_indicative():
+    """Fails if match-all candidates for an empty version stay confirmed findings."""
+    findings = parse_grype_output(json.dumps({"matches": _versionless_matches()}))
+
+    assert [f.indicative_reason for f in findings] == ["unversioned", "unversioned"]
+    assert all(f.is_indicative for f in findings)
+
+
+def test_parser_keeps_confirmed_finding_shape_unchanged():
+    """Fails if a version-anchored finding gains a flag or loses a reported field."""
+    (finding,) = parse_grype_output(json.dumps({"matches": [_confirmed_match(exploited=True)]}))
+
+    assert not finding.is_indicative
+    assert finding.known_exploited is True
+    assert set(finding.to_dict()) == {
+        "id",
+        "package",
+        "version",
+        "severity",
+        "aliases",
+        "cve_aliases",
+        "fixed_versions",
+        "purl",
+        "title",
+        "references",
+        "epss_probability",
+        "known_exploited",
+        "source",
+        "ignored_by_policy",
+        "vex_conflict",
+    }
+
+
+def test_parser_passes_searched_cpe_and_declared_cpe_to_the_classifier():
+    """Fails if the parser drops matchDetails or artifact.cpes, hiding a version conflict."""
+    matches = [
+        _match(
+            "CVE-2026-0003",
+            [_cpe("cpe:2.3:o:hp:ilo:1.10:*:*:*:*:*:*:*")],
+            name="ilo",
+            version="1.20",
+            purl=None,
+            cpes=("cpe:2.3:o:hp:ilo:1.30:*:*:*:*:*:*:*",),
+        )
+    ]
+    (finding,) = parse_grype_output(json.dumps({"matches": matches}))
+
+    assert finding.indicative_reason == "version_conflict"
+    evidence = finding.applicability_evidence
+    assert evidence["searched_cpes"] == ["cpe:2.3:o:hp:ilo:1.10:*:*:*:*:*:*:*"]
+    assert evidence["declared_cpes"] == ["cpe:2.3:o:hp:ilo:1.30:*:*:*:*:*:*:*"]
+    assert evidence["concrete_versions"] == ["1.10", "1.20", "1.30"]
+
+
+def test_parser_classifies_duplicate_occurrence_from_merged_evidence():
+    """Fails if two matches of one occurrence are classified apart, splitting its status."""
+    version = {"version": "2.0.0", "purl": "pkg:pypi/widget@2.0.0", "cpes": ()}
+    matches = [
+        _match("CVE-2026-0004", [_cpe("cpe:2.3:a:widget:widget:*:*:*:*:*:*:*:*")], **version),
+        _match("CVE-2026-0004", [_direct("2.0.0")], **version),
+    ]
+    findings = parse_grype_output(json.dumps({"matches": matches}))
+
+    assert [f.is_indicative for f in findings] == [False, False]
+
+
+def test_parser_keeps_duplicate_indicative_matches_as_separate_candidates():
+    """Fails if duplicate package copies are dropped or merged for indicative candidates."""
+    match = _match("CVE-2026-0005", [_direct("")])
+    findings = parse_grype_output(json.dumps({"matches": [match, match]}))
+
+    assert [f.indicative_reason for f in findings] == ["unversioned", "unversioned"]
+
+
+# --- malformed match evidence -----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "details",
+    [
+        [{"type": "future-unknown-match", "searchedBy": {"package": {"version": "1.0"}}}],
+        [{"searchedBy": {"package": {"version": "1.0"}}}],
+        [],
+        None,
+        [{"type": "cpe-match", "searchedBy": {"cpes": ["not-a-cpe"]}}],
+        [{"type": "cpe-match", "searchedBy": {}}],
+        ["not-an-object"],
+    ],
+    ids=[
+        "unknown-type",
+        "missing-type",
+        "empty-details",
+        "absent-details",
+        "cpe-match-without-valid-cpe",
+        "cpe-match-without-cpes",
+        "detail-not-object",
+    ],
+)
+def test_malformed_match_evidence_is_malformed_engine_output(monkeypatch, tmp_path, details):
+    """Fails if a malformed match is confirmed, dropped or reported with a different error."""
+    match = _match("CVE-2026-0006", details, version="1.0", purl="pkg:pypi/widget@1.0")
+    if details is None:
+        del match["matchDetails"]
+    scanner = _engine_scanner(monkeypatch, json.dumps({"matches": [match]}))
+
+    with pytest.raises(ScanEngineUnavailable) as exc_info:
+        scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert str(exc_info.value) == "scanner returned malformed match data"
+    assert isinstance(exc_info.value.__cause__, ValueError)
+
+
+@pytest.mark.parametrize(("strict", "expected_exit"), [(False, 0), (True, 15)])
+def test_malformed_match_evidence_takes_the_existing_fallback_path(
+    monkeypatch, tmp_path, strict, expected_exit
+):
+    """Fails if malformed evidence skips the OSV fallback notice or the strict failure."""
+
+    class NoFindingsOSV:
+        def query_components(self, components):
+            return [], CoverageSource("osv.dev", "present", as_of=TODAY)
+
+    matches = [_match("CVE-2026-0007", [{"type": "future-unknown-match"}])]
+    args = ["--output", "json", *(["--strict"] if strict else [])]
+    result = _run(monkeypatch, tmp_path, matches, args, osv=NoFindingsOSV)
+    report = json.loads(result.stdout)
+
+    assert result.exit_code == expected_exit, result.output
+    assert "Warning: local matcher failed (scanner returned malformed match data)" in result.stderr
+    assert report["provenance"]["engine"] == "osv-online"
+    assert report["provenance"]["grype-db"]["status"] == "unavailable"
+    assert report["findings"] == []
+    assert report["indicative_findings"] == []
+
+
+# --- gates, totals and enrichment -------------------------------------------
+
+
+@pytest.mark.parametrize("fail_on", ["critical", "high", "medium", "known-exploited"])
+def test_indicative_candidates_never_trip_a_fail_on_gate(monkeypatch, tmp_path, fail_on):
+    """Fails if an unversioned critical or KEV-listed candidate blocks the build."""
+    result, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        _versionless_matches(),
+        ["--fail-on", fail_on],
+        kev={"CVE-2026-0001"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert report["summary"]["total"] == 0
+    assert report["summary"]["critical"] == 0
+    assert report["summary"]["high"] == 0
+    assert report["summary"]["known_exploited"] == 0
+    assert [f["id"] for f in report["indicative_findings"]] == [
+        "GHSA-aaaa-aaaa-aaaa",
+        "CVE-2026-0002",
+    ]
+    assert report["indicative_summary"] == {"total": 2, "unversioned": 2, "version_conflict": 0}
+
+
+def test_confirmed_high_finding_still_fails_with_the_documented_exit(monkeypatch, tmp_path):
+    """Fails if setting indicative candidates aside also disables the confirmed gate."""
+    result, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [*_versionless_matches(), _confirmed_match()],
+        ["--fail-on", "high"],
+    )
+
+    assert result.exit_code == 11, result.output
+    assert report["summary"]["total"] == 1
+    assert report["summary"]["high"] == 1
+    assert [f["id"] for f in report["findings"]] == ["CVE-2026-1111"]
+    assert len(report["indicative_findings"]) == 2
+
+
+def test_known_exploited_gate_counts_only_the_confirmed_hit(monkeypatch, tmp_path):
+    """Fails if a KEV flag on an indicative candidate adds to the KEV count or gate."""
+    result, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [*_versionless_matches(), _confirmed_match(exploited=True)],
+        ["--fail-on", "known-exploited"],
+        kev={"CVE-2026-0001", "CVE-2026-1111"},
+    )
+
+    assert result.exit_code == 17, result.output
+    assert report["summary"]["known_exploited"] == 1
+
+
+def test_indicative_candidates_are_not_enriched_or_flagged(monkeypatch, tmp_path):
+    """Fails if EPSS is queried for, or exploitation is reported on, an indicative candidate."""
+    result, report = _json_run(monkeypatch, tmp_path, _versionless_matches(), kev={"CVE-2026-0001"})
+
+    assert result.epss_queries == [set()]
+    for entry in report["indicative_findings"]:
+        assert "known_exploited" not in entry
+        assert "epss_probability" not in entry
+
+
+def test_version_conflict_candidate_is_indicative_and_not_gated(monkeypatch, tmp_path):
+    """Fails if a component whose CPE says 1.10 while it ships 1.20 is confirmed."""
+    matches = [
+        _match(
+            "CVE-2026-0008",
+            [_cpe("cpe:2.3:o:hp:ilo:1.10:*:*:*:*:*:*:*")],
+            name="ilo",
+            version="1.20",
+            purl=None,
+            cpes=(),
+            severity="Critical",
+        )
+    ]
+    result, report = _json_run(monkeypatch, tmp_path, matches, ["--fail-on", "critical"])
+
+    assert result.exit_code == 0, result.output
+    assert report["findings"] == []
+    (entry,) = report["indicative_findings"]
+    assert entry["quality_reason"] == "version_conflict"
+    assert entry["applicability_evidence"]["concrete_versions"] == ["1.10", "1.20"]
+    assert report["indicative_summary"]["version_conflict"] == 1
+
+
+@pytest.mark.parametrize(("strict", "expected_exit"), [(False, 0), (True, 15)])
+def test_partial_assessment_and_strict_behaviour_are_unchanged(
+    monkeypatch, tmp_path, strict, expected_exit
+):
+    """Fails if indicative candidates change partial coverage or the strict failure."""
+    assessment = {
+        "status": "incomplete",
+        "unassessablePackages": [
+            {
+                "package": {"name": "broken", "version": "2.0", "purl": "pkg:pypi/broken@2.0"},
+                "matcher": "python",
+                "reasonCode": "version-comparison-error",
+            }
+        ],
+    }
+    args = ["--output", "json", *(["--strict"] if strict else [])]
+    result = _run(monkeypatch, tmp_path, _versionless_matches(), args, assessment=assessment)
+    report = json.loads(result.stdout)
+
+    assert result.exit_code == expected_exit, result.output
+    assert report["coverage"][0]["status"] == "partial"
+    assert len(report["indicative_findings"]) == 2
+    assert ("strict_failure" in report["provenance"]) is strict
+
+
+# --- report formats ---------------------------------------------------------
+
+
+def test_json_report_shape_for_indicative_candidates(monkeypatch, tmp_path):
+    """Fails if the JSON mixes the lists, drops the policy or omits the reason and evidence."""
+    _, report = _json_run(monkeypatch, tmp_path, [*_versionless_matches(), _confirmed_match()])
+
+    assert report["provenance"]["version_applicability_policy"] == "concrete-v1"
+    assert [f["id"] for f in report["findings"]] == ["CVE-2026-1111"]
+    assert report["summary"]["total"] == 1
+    first = report["indicative_findings"][0]
+    assert set(first) == {
+        "id",
+        "package",
+        "version",
+        "severity",
+        "aliases",
+        "cve_aliases",
+        "fixed_versions",
+        "purl",
+        "title",
+        "references",
+        "source",
+        "quality_reason",
+        "applicability_evidence",
+    }
+    assert first["quality_reason"] == "unversioned"
+    assert first["cve_aliases"] == ["CVE-2026-0001"]
+    assert first["applicability_evidence"]["declared_cpes"] == [WILDCARD_CPE]
+    dimension = _snapshot_dimension(report)
+    assert "2 indicative candidate(s)" in dimension["message"]
+
+
+def test_json_report_without_candidates_has_empty_indicative_section(monkeypatch, tmp_path):
+    """Fails if the section is missing when nothing is indicative, breaking consumers."""
+    _, report = _json_run(monkeypatch, tmp_path, [_confirmed_match()])
+
+    assert report["indicative_findings"] == []
+    assert report["indicative_summary"] == {"total": 0, "unversioned": 0, "version_conflict": 0}
+    dimension = _snapshot_dimension(report)
+    assert "indicative" not in dimension["message"]
+
+
+def test_sarif_keeps_indicative_candidates_out_of_results(monkeypatch, tmp_path):
+    """Fails if an indicative candidate becomes a SARIF result that code scanning alerts on."""
+    result = _run(
+        monkeypatch, tmp_path, [*_versionless_matches(), _confirmed_match()], ["--output", "sarif"]
+    )
+    sarif = json.loads(result.stdout)
+    run = sarif["runs"][0]
+
+    assert [item["ruleId"] for item in run["results"]] == ["CVE-2026-1111"]
+    candidates = run["tool"]["driver"]["properties"]["indicativeCandidates"]
+    assert [item["id"] for item in candidates] == ["GHSA-aaaa-aaaa-aaaa", "CVE-2026-0002"]
+
+
+@pytest.mark.parametrize("output", ["text", "markdown"])
+def test_human_reports_list_indicative_candidates_apart_from_the_count(
+    monkeypatch, tmp_path, output
+):
+    """Fails if candidates are hidden, or are counted in the vulnerability total."""
+    result = _run(monkeypatch, tmp_path, _versionless_matches(), ["--output", output])
+
+    assert result.exit_code == 0, result.output
+    assert "Vulnerabilities: 0 (critical=0, high=0, medium=0)" in result.stdout
+    assert "Indicative, not counted: 2" in result.stdout
+    heading = "Indicative candidates, version not confirmed (not counted, not gated): 2"
+    assert heading in result.stdout
+    assert "- widget (no version): GHSA-aaaa-aaaa-aaaa, version missing" in result.stdout
+    assert "- widget (no version): CVE-2026-0002, version missing" in result.stdout
+    assert "Exit 0 means no configured blocking findings" in result.stdout
+
+
+def test_human_report_caps_a_long_candidate_list(monkeypatch, tmp_path):
+    """Fails if a match-all dump floods the human report."""
+    matches = [_match(f"CVE-2026-{n:04d}", [_direct("")]) for n in range(1, 16)]
+    result = _run(monkeypatch, tmp_path, matches, ["--output", "text"])
+
+    assert "(not counted, not gated): 15" in result.stdout
+    assert "CVE-2026-0010" in result.stdout
+    assert "CVE-2026-0011" not in result.stdout
+    assert "... and 5 more; see --output json" in result.stdout
+
+
+def _result_with(findings=(), indicative=()):
+    return LocalCheckResult(
+        target="x",
+        target_type="sbom",
+        sbom_path=None,
+        components=[],
+        findings=list(findings),
+        dimensions=[],
+        coverage=[],
+        provenance={},
+        attributions=[],
+        sources_consulted=[],
+        indicative_findings=list(indicative),
+    )
+
+
+def _indicative_finding():
+    return Finding(
+        id="GHSA-aaaa-aaaa-aaaa",
+        package="widget",
+        version="",
+        severity="critical",
+        indicative_reason="unversioned",
+        applicability_evidence={},
+    )
+
+
+def test_annotation_outputs_never_carry_indicative_candidates():
+    """Fails if a PR annotation or code-quality entry is raised for an unconfirmed candidate."""
+    result = _result_with(indicative=[_indicative_finding()])
+
+    assert annotations.github_annotations(result) == ""
+    assert annotations.gitlab_codequality(result) == []
+
+
+def test_github_step_summary_lists_indicative_candidates_in_their_own_section():
+    """Fails if the summary counts candidates as findings or omits them."""
+    confirmed = Finding(id="CVE-2026-1111", package="jinja2", version="3.1.3", severity="high")
+    only_indicative = annotations.github_step_summary(
+        _result_with(indicative=[_indicative_finding()])
+    )
+    both = annotations.github_step_summary(
+        _result_with(findings=[confirmed], indicative=[_indicative_finding()])
+    )
+
+    assert "No blocking findings were found in this local snapshot." in only_indicative
+    assert "Indicative candidates, version not confirmed (not counted): 1" in only_indicative
+    assert "| widget |  | GHSA-aaaa-aaaa-aaaa | unversioned |" in only_indicative
+    assert "### Local SBOM Check - 1 findings" in both
+    assert both.index("jinja2") < both.index("Indicative candidates")
+
+
+def test_step_summary_without_candidates_is_unchanged():
+    """Fails if the summary text changes when nothing is indicative."""
+    assert annotations.github_step_summary(_result_with()) == (
+        "### Local SBOM Check\n\nNo blocking findings were found in this local snapshot."
+    )
+
+
+# --- baselines --------------------------------------------------------------
+
+
+def _write_baseline(path, findings):
+    path.write_text(json.dumps({"findings": findings}))
+    return path
+
+
+def test_baseline_vulnerability_now_indicative_is_reclassified_not_removed(monkeypatch, tmp_path):
+    """Fails if a vulnerability the baseline confirmed is reported as removed or fixed."""
+    baseline = _write_baseline(
+        tmp_path / "baseline.json",
+        [
+            {
+                "id": "GHSA-aaaa-aaaa-aaaa",
+                "aliases": ["CVE-2026-0001"],
+                "package": "widget",
+                "version": "",
+                "purl": VERSIONLESS_PURL,
+            },
+            {"id": "CVE-2020-9999", "package": "gone", "version": "1.0"},
+        ],
+    )
+    result, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        _versionless_matches(),
+        ["--baseline", str(baseline), "--fail-on-new", "any"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert report["baseline"]["reclassified_vulnerabilities"] == ["GHSA-aaaa-aaaa-aaaa"]
+    assert report["baseline"]["removed_vulnerabilities"] == ["CVE-2020-9999"]
+    assert report["baseline"]["new_vulnerabilities"] == []
+
+
+def test_baseline_text_report_states_the_reclassification(monkeypatch, tmp_path):
+    """Fails if the human report calls a reclassified vulnerability fixed or says nothing."""
+    baseline = _write_baseline(
+        tmp_path / "baseline.json",
+        [{"id": "CVE-2026-0002", "package": "widget", "version": "", "purl": VERSIONLESS_PURL}],
+    )
+    args = ["--output", "text", "--baseline", str(baseline)]
+    result = _run(monkeypatch, tmp_path, _versionless_matches(), args)
+
+    assert "- Removed vulnerabilities: 0" in result.stdout
+    assert "- Reclassified: version could not be confirmed: 1 (CVE-2026-0002)" in result.stdout
+
+
+def test_baseline_without_policy_fields_keeps_working(monkeypatch, tmp_path):
+    """Fails if an older baseline, written before the section existed, is rejected."""
+    baseline = _write_baseline(
+        tmp_path / "baseline.json",
+        [{"id": "CVE-2026-1111", "package": "jinja2", "version": "3.1.3"}],
+    )
+    result, report = _json_run(
+        monkeypatch, tmp_path, [_confirmed_match()], ["--baseline", str(baseline)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert report["baseline"]["new_vulnerabilities"] == []
+    assert report["baseline"]["removed_vulnerabilities"] == []
+    assert report["baseline"]["reclassified_vulnerabilities"] == []
+
+
+def test_baseline_report_written_with_indicative_candidates_is_a_valid_baseline(
+    monkeypatch, tmp_path
+):
+    """Fails if a report with an indicative section is rejected as a baseline or misread."""
+    _, first = _json_run(monkeypatch, tmp_path, [*_versionless_matches(), _confirmed_match()])
+    baseline = tmp_path / "previous.json"
+    baseline.write_text(json.dumps(first))
+
+    result, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [*_versionless_matches(), _confirmed_match()],
+        ["--baseline", str(baseline), "--fail-on-new", "any"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert report["baseline"]["new_vulnerabilities"] == []
+    assert report["baseline"]["reclassified_vulnerabilities"] == []
+
+
+def test_baseline_delta_matches_indicative_by_the_baseline_identity_rules(tmp_path):
+    """Fails if reclassification ignores package and version, hiding a real removal."""
+    path = _write_baseline(
+        tmp_path / "baseline.json",
+        [{"id": "GHSA-aaaa-aaaa-aaaa", "package": "widget", "version": "1.0"}],
+    )
+    other_version = Finding(
+        id="GHSA-aaaa-aaaa-aaaa",
+        package="widget",
+        version="",
+        indicative_reason="unversioned",
+    )
+
+    delta = check_module._baseline_delta(path, [], [other_version])
+
+    assert delta["removed_vulnerabilities"] == ["GHSA-aaaa-aaaa-aaaa"]
+    assert delta["reclassified_vulnerabilities"] == []
+
+
+def test_baseline_click_errors_are_unchanged_for_invalid_baseline(tmp_path):
+    """Fails if the new baseline parameter changes validation of a malformed baseline."""
+    path = tmp_path / "baseline.json"
+    path.write_text(json.dumps({"findings": [{"id": ""}]}))
+
+    with pytest.raises(click.ClickException, match="nonempty string id"):
+        check_module._baseline_delta(path, [], [])

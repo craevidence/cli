@@ -17,6 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The hardened Python 3.14 builder base-image digest is refreshed and remains
   pinned by digest.
+- `check` separates Grype matches whose component version is missing or whose
+  version evidence conflicts (policy `concrete-v1`) from confirmed findings.
+  These indicative candidates are listed in their own section of the text,
+  Markdown, JSON (`indicative_findings`, `indicative_summary`), SARIF
+  (`indicativeCandidates` driver property) and GitHub step summary reports. They
+  no longer count toward `--fail-on`, `--fail-on-new`, severity totals, the
+  known-exploited count or EPSS, and they raise no annotation. A vulnerability a
+  baseline lists that is now only indicative is reported as
+  `reclassified_vulnerabilities` (version could not be confirmed), not as
+  removed. Unrecognised or missing match details are treated as malformed Grype
+  output.
 
 ### Fixed
 

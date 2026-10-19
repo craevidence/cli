@@ -23,6 +23,8 @@ from .models import LocalCheckResult
 # Severities treated as "error" level for GitHub annotations.
 _GITHUB_ERROR_SEVERITIES = {"critical", "high"}
 
+_INDICATIVE_SUMMARY_ROWS = 25
+
 # Local-check severity -> GitLab Code Quality severity.
 _GITLAB_SEVERITY_MAP = {
     "critical": "blocker",
@@ -124,11 +126,57 @@ def github_annotations(result: LocalCheckResult) -> str:
     return "\n".join(lines)
 
 
+def _markdown_cell(value: object) -> str:
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("|", "\\|")
+        .replace("\r\n", " ")
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+
+
+def _indicative_summary_lines(result: LocalCheckResult) -> list[str]:
+    """Markdown section for candidates whose component version is not confirmed."""
+    indicative = result.to_dict().get("indicative_findings", [])
+    if not indicative:
+        return []
+    shown = indicative[:_INDICATIVE_SUMMARY_ROWS]
+    lines = [
+        "",
+        f"#### Indicative candidates, version not confirmed (not counted): {len(indicative)}",
+        "",
+        "| Package | Version | ID | Reason |",
+        "| --- | --- | --- | --- |",
+    ]
+    for item in shown:
+        package = _markdown_cell("" if item.get("package") is None else item.get("package"))
+        version = _markdown_cell("" if item.get("version") is None else item.get("version"))
+        fid = _markdown_cell("" if item.get("id") is None else item.get("id"))
+        reason = _markdown_cell(item.get("quality_reason", ""))
+        lines.append(f"| {package} | {version} | {fid} | {reason} |")
+    if len(indicative) > len(shown):
+        lines.extend(["", f"... and {len(indicative) - len(shown)} more in the JSON report."])
+    return lines
+
+
 def github_step_summary(result: LocalCheckResult) -> str:
-    """Render a GitHub-flavored markdown table of findings, or a no-findings notice."""
+    """Render a GitHub-flavored markdown table of findings, or a no-findings notice.
+
+    Indicative candidates follow in a separate section and are not counted.
+    """
     findings = _findings(result)
+    indicative_lines = _indicative_summary_lines(result)
     if not findings:
-        return "### Local SBOM Check\n\nNo blocking findings were found in this local snapshot."
+        return "\n".join(
+            [
+                "### Local SBOM Check",
+                "",
+                "No blocking findings were found in this local snapshot.",
+                *indicative_lines,
+            ]
+        )
 
     lines = [
         f"### Local SBOM Check - {len(findings)} findings",
@@ -137,24 +185,14 @@ def github_step_summary(result: LocalCheckResult) -> str:
         "| --- | --- | --- | --- | --- |",
     ]
 
-    def markdown_cell(value: object) -> str:
-        return (
-            str(value)
-            .replace("\\", "\\\\")
-            .replace("|", "\\|")
-            .replace("\r\n", " ")
-            .replace("\r", " ")
-            .replace("\n", " ")
-        )
-
     for finding in findings:
-        package = markdown_cell("" if finding.get("package") is None else finding.get("package"))
-        version = markdown_cell("" if finding.get("version") is None else finding.get("version"))
-        fid = markdown_cell("" if finding.get("id") is None else finding.get("id"))
-        severity = markdown_cell(finding.get("severity", "unknown")).lower()
+        package = _markdown_cell("" if finding.get("package") is None else finding.get("package"))
+        version = _markdown_cell("" if finding.get("version") is None else finding.get("version"))
+        fid = _markdown_cell("" if finding.get("id") is None else finding.get("id"))
+        severity = _markdown_cell(finding.get("severity", "unknown")).lower()
         kev = "yes" if finding.get("known_exploited") is True else ""
         lines.append(f"| {package} | {version} | {fid} | {severity} | {kev} |")
-    return "\n".join(lines)
+    return "\n".join([*lines, *indicative_lines])
 
 
 def gitlab_codequality(result: LocalCheckResult) -> list[dict[str, Any]]:

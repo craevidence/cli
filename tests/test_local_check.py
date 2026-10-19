@@ -29,6 +29,17 @@ from cra_evidence_cli.local.scanner import parse_grype_output
 from cra_evidence_cli.local.signal import build_dimensions, mark_stale_sources
 
 
+def _direct_match_details(version):
+    return [
+        {
+            "type": "exact-direct-match",
+            "matcher": "python-matcher",
+            "searchedBy": {"package": {"name": "pkg", "version": version}},
+            "found": {"versionConstraint": "<2.0 (python)", "vulnerabilityID": "CVE-0000-0000"},
+        }
+    ]
+
+
 def _write_sbom(path: Path) -> None:
     path.write_text(
         json.dumps(
@@ -247,6 +258,7 @@ def test_grype_cve_less_finding_keeps_unknown_kev_state():
                             "knownExploited": [],
                         },
                         "artifact": {"name": "pkg", "version": "1.0"},
+                        "matchDetails": _direct_match_details("1.0"),
                     }
                 ]
             }
@@ -276,6 +288,7 @@ def test_grype_match_level_related_cve_reaches_kev_and_epss_enrichment():
                             {"id": "GHSA-pg57-6jwg-q645"},
                         ],
                         "artifact": {"name": "pkg", "version": "1.0"},
+                        "matchDetails": _direct_match_details("1.0"),
                     }
                 ]
             }
@@ -484,6 +497,7 @@ def test_baseline_alias_swap_preserves_same_package_occurrence(tmp_path):
     assert delta == {
         "new_vulnerabilities": [],
         "removed_vulnerabilities": [],
+        "reclassified_vulnerabilities": [],
         "new_occurrences": [],
     }
     check_module._enforce_gate(
@@ -1150,6 +1164,7 @@ def _incomplete_grype_document():
                     "version": "1.0.0",
                     "purl": "pkg:pypi/acme@1.0.0",
                 },
+                "matchDetails": _direct_match_details("1.0.0"),
             }
         ],
         "assessment": {
