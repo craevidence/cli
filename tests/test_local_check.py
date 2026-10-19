@@ -257,6 +257,39 @@ def test_grype_cve_less_finding_keeps_unknown_kev_state():
     assert findings[0].known_exploited is None
 
 
+def test_grype_match_level_related_cve_reaches_kev_and_epss_enrichment():
+    # Grype places the CVE behind a GHSA finding on the match. Reading it from the
+    # vulnerability object left GHSA findings without CVE aliases, so KEV and EPSS
+    # never attached to them.
+    findings = parse_grype_output(
+        json.dumps(
+            {
+                "matches": [
+                    {
+                        "vulnerability": {
+                            "id": "GHSA-pg57-6jwg-q645",
+                            "severity": "High",
+                            "knownExploited": [],
+                        },
+                        "relatedVulnerabilities": [
+                            {"id": "CVE-2026-53493", "dataSource": "nvd"},
+                            {"id": "GHSA-pg57-6jwg-q645"},
+                        ],
+                        "artifact": {"name": "pkg", "version": "1.0"},
+                    }
+                ]
+            }
+        )
+    )
+
+    assert findings[0].aliases == {"CVE-2026-53493"}
+    apply_cve_alias_enrichment(
+        findings, kev_cves={"CVE-2026-53493"}, epss_scores={"CVE-2026-53493": 0.42}
+    )
+    assert findings[0].known_exploited is True
+    assert findings[0].epss_probability == 0.42
+
+
 def test_stale_source_downgrades_vulnerability_dimension():
     coverage = [CoverageSource("cisa-kev", "present", as_of="2000-01-01")]
     mark_stale_sources(coverage)

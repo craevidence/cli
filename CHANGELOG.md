@@ -18,6 +18,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The hardened Python 3.14 builder base-image digest is refreshed and remains
   pinned by digest.
 
+### Fixed
+
+- `check` reads the identifiers related to a Grype finding from the match, where
+  Grype reports them. A GHSA finding now carries its CVE alias, so CISA KEV and
+  FIRST EPSS enrichment and alias-based baseline matching apply to it.
+
 ### Security
 
 - The container image ships Debian's `libexpat1` 2.9.0-1~deb13u1 in place of the

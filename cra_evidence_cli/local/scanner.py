@@ -231,12 +231,13 @@ def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
         vulnerability = match.get("vulnerability") or {}
         artifact = match.get("artifact") or {}
         aliases = set()
-        for related in vulnerability.get("relatedVulnerabilities") or []:
+        # Grype reports related identifiers (for example the CVE behind a GHSA
+        # finding) on the match, not inside the vulnerability object.
+        for related in match.get("relatedVulnerabilities") or []:
             related_id = related.get("id") if isinstance(related, dict) else related
             if related_id:
                 aliases.add(str(related_id))
         vuln_id = str(vulnerability.get("id") or "UNKNOWN")
-        aliases.update(str(item) for item in vulnerability.get("aliases") or [])
         aliases.discard(vuln_id)
         known_exploited_raw = vulnerability.get("knownExploited") or []
         fix = vulnerability.get("fix") or {}
