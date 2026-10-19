@@ -189,6 +189,7 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
                 f"- New vulnerabilities: {len(new)}{new_text}",
                 f"- Removed vulnerabilities: {len(removed)}",
                 *_reclassified_lines(baseline),
+                *_not_reassessed_lines(baseline),
             ]
         )
     if verbose:
@@ -361,7 +362,7 @@ def _print_baseline(console: Console, data: dict[str, Any]) -> None:
     console.print(Text("Changed since baseline", style=STYLE_TITLE))
     console.print(f"- New vulnerabilities: {len(new)}{new_text}")
     console.print(f"- Removed vulnerabilities: {len(removed)}")
-    for line in _reclassified_lines(baseline):
+    for line in (*_reclassified_lines(baseline), *_not_reassessed_lines(baseline)):
         console.print(line, markup=False)
 
 
@@ -420,6 +421,15 @@ def _reclassified_lines(baseline: dict[str, Any]) -> list[str]:
         return []
     shown = ", ".join(reclassified[:5]) + ("..." if len(reclassified) > 5 else "")
     return [f"- Reclassified: version could not be confirmed: {len(reclassified)} ({shown})"]
+
+
+def _not_reassessed_lines(baseline: dict[str, Any]) -> list[str]:
+    not_reassessed = baseline.get("not_reassessed_vulnerabilities") or []
+    if not not_reassessed:
+        return []
+    shown = ", ".join(not_reassessed[:5]) + ("..." if len(not_reassessed) > 5 else "")
+    text = "package could not be assessed in this scan"
+    return [f"- Not reassessed: {text}: {len(not_reassessed)} ({shown})"]
 
 
 def _identifier_coverage_lines(data: dict[str, Any]) -> list[str]:

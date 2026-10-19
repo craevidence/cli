@@ -98,12 +98,21 @@ class Finding:
         return entry
 
 
+@dataclass(frozen=True)
+class UnassessedPackage:
+    name: str | None
+    version: str | None
+    purl: str | None
+    reason: str
+
+
 @dataclass
 class CoverageSource:
     source: str
     status: str
     as_of: str | None = None
     detail: str | None = None
+    unassessed_packages: list[UnassessedPackage] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {

@@ -22,6 +22,7 @@ from cra_evidence_cli.local.models import (
     CoverageSource,
     Finding,
     LocalCheckResult,
+    UnassessedPackage,
     identifier_coverage,
 )
 from cra_evidence_cli.local.osv import OSVClient, OSVClientError
@@ -498,6 +499,8 @@ def test_baseline_alias_swap_preserves_same_package_occurrence(tmp_path):
         "new_vulnerabilities": [],
         "removed_vulnerabilities": [],
         "reclassified_vulnerabilities": [],
+        "not_reassessed_vulnerabilities": [],
+        "not_reassessed_reasons": {},
         "new_occurrences": [],
     }
     check_module._enforce_gate(
@@ -1201,6 +1204,37 @@ def test_exit_one_actionable_incomplete_grype_report_keeps_findings_and_reason_d
     assert "pkg:pypi/broken-package@2.0" in coverage.detail
     assert "python" in coverage.detail
     assert "version-comparison-error" in coverage.detail
+
+
+def test_exit_one_keeps_the_identity_and_reason_of_each_unassessed_package(monkeypatch, tmp_path):
+    document = _incomplete_grype_document()
+    document["assessment"]["unassessablePackages"].append(
+        {
+            "package": {"name": "another-package", "version": "3.0"},
+            "matcher": "go-module-matcher",
+            "reasonCode": "unknown-package-version",
+        }
+    )
+    scanner = _install_process_scanner(monkeypatch, 1, json.dumps(document))
+
+    _, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert coverage.unassessed_packages == [
+        UnassessedPackage(
+            "broken-package", "2.0", "pkg:pypi/broken-package@2.0", "version-comparison-error"
+        ),
+        UnassessedPackage("another-package", "3.0", None, "unknown-package-version"),
+    ]
+    assert "unassessed_packages" not in coverage.to_dict()
+
+
+def test_complete_scan_has_no_unassessed_packages(monkeypatch, tmp_path):
+    scanner = _install_process_scanner(monkeypatch, 0, json.dumps({"matches": []}))
+
+    _, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert coverage.status == "present"
+    assert coverage.unassessed_packages == []
 
 
 @pytest.mark.parametrize(

@@ -34,6 +34,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `check --baseline` no longer reports a baseline vulnerability as removed when its
+  package could not be assessed in the current scan. When the engine returns an
+  incomplete assessment, a baseline vulnerability that is absent from the current
+  findings and whose package (name, version and, when both sides have one, PURL)
+  is one of the packages the engine could not assess is listed under
+  `not_reassessed_vulnerabilities`, with the engine reason codes under
+  `not_reassessed_reasons`. The text report adds a "Not reassessed" line. It is
+  not counted as removed, and it does not affect `--fail-on-new`.
 - `check` reads the identifiers related to a Grype finding from the match, where
   Grype reports them. A GHSA finding now carries its CVE alias, so CISA KEV and
   FIRST EPSS enrichment and alias-based baseline matching apply to it.

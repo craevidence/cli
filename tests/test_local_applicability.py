@@ -669,3 +669,262 @@ def test_baseline_click_errors_are_unchanged_for_invalid_baseline(tmp_path):
 
     with pytest.raises(click.ClickException, match="nonempty string id"):
         check_module._baseline_delta(path, [], [])
+
+
+# --- baselines on a partial assessment --------------------------------------
+
+
+def _unassessable(name, version, purl, reason="version-comparison-error", matcher="python"):
+    package = {"name": name}
+    if version is not None:
+        package["version"] = version
+    if purl is not None:
+        package["purl"] = purl
+    return {"package": package, "matcher": matcher, "reasonCode": reason}
+
+
+def _incomplete(*entries):
+    return {"status": "incomplete", "unassessablePackages": list(entries)}
+
+
+BROKEN_PURL = "pkg:pypi/broken@2.0"
+
+
+def _broken_baseline_row(vuln_id="CVE-2026-3333", **overrides):
+    row = {"id": vuln_id, "package": "broken", "version": "2.0", "purl": BROKEN_PURL}
+    return {**row, **overrides}
+
+
+def test_baseline_vulnerability_on_unassessed_package_is_not_reassessed_not_removed(
+    monkeypatch, tmp_path
+):
+    """Fails if a vulnerability on a package the engine could not assess is reported as fixed."""
+    baseline = _write_baseline(
+        tmp_path / "baseline.json",
+        [
+            _broken_baseline_row(),
+            {"id": "CVE-2026-1111", "package": "jinja2", "version": "3.1.3"},
+        ],
+    )
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    result, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--baseline", str(baseline), "--fail-on-new", "any"],
+        assessment=assessment,
+    )
+
+    assert result.exit_code == 0, result.output
+    assert report["baseline"]["not_reassessed_vulnerabilities"] == ["CVE-2026-3333"]
+    assert report["baseline"]["not_reassessed_reasons"] == {
+        "CVE-2026-3333": ["version-comparison-error"]
+    }
+    assert report["baseline"]["removed_vulnerabilities"] == []
+    assert report["baseline"]["reclassified_vulnerabilities"] == []
+
+
+def test_baseline_vulnerability_on_assessed_package_that_disappeared_is_still_removed(
+    monkeypatch, tmp_path
+):
+    """Fails if a partial scan stops reporting genuine removals on packages it did assess."""
+    baseline = _write_baseline(
+        tmp_path / "baseline.json",
+        [
+            _broken_baseline_row(),
+            {"id": "CVE-2020-9999", "package": "gone", "version": "1.0"},
+        ],
+    )
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    _, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--baseline", str(baseline)],
+        assessment=assessment,
+    )
+
+    assert report["baseline"]["removed_vulnerabilities"] == ["CVE-2020-9999"]
+    assert report["baseline"]["not_reassessed_vulnerabilities"] == ["CVE-2026-3333"]
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        _broken_baseline_row(version="1.0"),
+        _broken_baseline_row(purl="pkg:pypi/broken@3.0"),
+        _broken_baseline_row(package="other"),
+        {"id": "CVE-2026-3333"},
+    ],
+    ids=["other-version", "conflicting-purl", "other-package", "legacy-id-only-row"],
+)
+def test_baseline_row_that_is_not_the_unassessed_package_is_removed(monkeypatch, tmp_path, row):
+    """Fails if unassessed packages are matched more loosely than baseline findings are."""
+    baseline = _write_baseline(tmp_path / "baseline.json", [row])
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    _, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--baseline", str(baseline)],
+        assessment=assessment,
+    )
+
+    assert report["baseline"]["removed_vulnerabilities"] == ["CVE-2026-3333"]
+    assert report["baseline"]["not_reassessed_vulnerabilities"] == []
+
+
+def test_baseline_row_without_purl_matches_unassessed_package_by_name_and_version(
+    monkeypatch, tmp_path
+):
+    """Fails if a missing PURL on either side blocks a name and version match."""
+    row = {"id": "CVE-2026-3333", "package": "broken", "version": "2.0"}
+    baseline = _write_baseline(tmp_path / "baseline.json", [row])
+    assessment = _incomplete(_unassessable("broken", "2.0", None))
+
+    _, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--baseline", str(baseline)],
+        assessment=assessment,
+    )
+
+    assert report["baseline"]["not_reassessed_vulnerabilities"] == ["CVE-2026-3333"]
+    assert report["baseline"]["removed_vulnerabilities"] == []
+
+
+def test_not_reassessed_reasons_combine_every_entry_for_the_package(monkeypatch, tmp_path):
+    """Fails if only the first reason code of a package listed twice is kept."""
+    baseline = _write_baseline(tmp_path / "baseline.json", [_broken_baseline_row()])
+    assessment = _incomplete(
+        _unassessable("broken", "2.0", BROKEN_PURL, reason="version-comparison-error"),
+        _unassessable("broken", "2.0", BROKEN_PURL, reason="matcher-error", matcher="stock"),
+    )
+
+    _, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--baseline", str(baseline)],
+        assessment=assessment,
+    )
+
+    assert report["baseline"]["not_reassessed_reasons"] == {
+        "CVE-2026-3333": ["matcher-error", "version-comparison-error"]
+    }
+
+
+def test_indicative_reclassification_wins_over_not_reassessed(monkeypatch, tmp_path):
+    """Fails if a baseline vulnerability that is now indicative loses its reclassification."""
+    baseline = _write_baseline(
+        tmp_path / "baseline.json",
+        [
+            {"id": "CVE-2026-0002", "package": "widget", "version": "", "purl": VERSIONLESS_PURL},
+            _broken_baseline_row(),
+        ],
+    )
+    assessment = _incomplete(
+        _unassessable("widget", "", VERSIONLESS_PURL),
+        _unassessable("broken", "2.0", BROKEN_PURL),
+    )
+
+    _, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        _versionless_matches(),
+        ["--baseline", str(baseline)],
+        assessment=assessment,
+    )
+
+    assert report["baseline"]["reclassified_vulnerabilities"] == ["CVE-2026-0002"]
+    assert report["baseline"]["not_reassessed_vulnerabilities"] == ["CVE-2026-3333"]
+    assert report["baseline"]["removed_vulnerabilities"] == []
+
+
+def test_complete_scan_reports_a_vanished_vulnerability_as_removed(monkeypatch, tmp_path):
+    """Fails if a complete scan stops reporting removals or the text report gains a line."""
+    baseline = _write_baseline(tmp_path / "baseline.json", [_broken_baseline_row()])
+    args = ["--baseline", str(baseline)]
+
+    _, report = _json_run(monkeypatch, tmp_path, [_confirmed_match()], args)
+    text = _run(monkeypatch, tmp_path, [_confirmed_match()], ["--output", "text", *args])
+
+    assert report["baseline"]["removed_vulnerabilities"] == ["CVE-2026-3333"]
+    assert report["baseline"]["not_reassessed_vulnerabilities"] == []
+    assert report["baseline"]["not_reassessed_reasons"] == {}
+    assert "- Removed vulnerabilities: 1" in text.stdout
+    assert "Not reassessed" not in text.stdout
+
+
+def test_not_reassessed_does_not_hide_a_new_vulnerability_from_fail_on_new(monkeypatch, tmp_path):
+    """Fails if --fail-on-new stops gating once the scan is partial or counts not-reassessed."""
+    baseline = _write_baseline(tmp_path / "baseline.json", [_broken_baseline_row()])
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    result, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--baseline", str(baseline), "--fail-on-new", "high"],
+        assessment=assessment,
+    )
+
+    assert result.exit_code == 11, result.output
+    assert report["baseline"]["new_vulnerabilities"] == ["CVE-2026-1111"]
+    assert report["baseline"]["not_reassessed_vulnerabilities"] == ["CVE-2026-3333"]
+
+
+def test_text_report_states_which_vulnerabilities_were_not_reassessed(monkeypatch, tmp_path):
+    """Fails if the human report calls an unassessed vulnerability removed or says nothing."""
+    baseline = _write_baseline(tmp_path / "baseline.json", [_broken_baseline_row()])
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--output", "text", "--baseline", str(baseline)],
+        assessment=assessment,
+    )
+
+    assert "- Removed vulnerabilities: 0" in result.stdout
+    assert (
+        "- Not reassessed: package could not be assessed in this scan: 1 (CVE-2026-3333)"
+        in result.stdout
+    )
+
+
+def test_baseline_json_shape_lists_not_reassessed_beside_the_other_buckets(monkeypatch, tmp_path):
+    """Fails if the new fields are missing or the existing baseline fields change shape."""
+    baseline = _write_baseline(tmp_path / "baseline.json", [_broken_baseline_row()])
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    _, report = _json_run(
+        monkeypatch,
+        tmp_path,
+        [_confirmed_match()],
+        ["--baseline", str(baseline)],
+        assessment=assessment,
+    )
+
+    assert report["baseline"] == {
+        "new_vulnerabilities": ["CVE-2026-1111"],
+        "removed_vulnerabilities": [],
+        "reclassified_vulnerabilities": [],
+        "not_reassessed_vulnerabilities": ["CVE-2026-3333"],
+        "not_reassessed_reasons": {"CVE-2026-3333": ["version-comparison-error"]},
+        "new_occurrences": [
+            {
+                "id": "CVE-2026-1111",
+                "package": "jinja2",
+                "version": "3.1.3",
+                "purl": "pkg:pypi/jinja2@3.1.3",
+            }
+        ],
+    }
+    assert report["coverage"][0]["status"] == "partial"
+    assert "unassessed_packages" not in report["coverage"][0]

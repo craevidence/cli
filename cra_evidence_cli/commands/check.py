@@ -35,6 +35,7 @@ from cra_evidence_cli.local.enrich import (
 from cra_evidence_cli.local.models import (
     CoverageSource,
     LocalCheckResult,
+    UnassessedPackage,
     identifier_coverage,
     partition_by_applicability,
     summarize_findings,
@@ -535,11 +536,13 @@ def _run_local_check_on_sbom(
     sources_consulted: set[str] = set()
     scanner = GrypeLocalScanner()
     findings = []
+    unassessed: list[UnassessedPackage] = []
     engine = "none"
     if scanner.is_available():
         try:
             findings, source = scanner.scan_sbom(sbom_path)
             coverage.append(source)
+            unassessed = source.unassessed_packages
             sources_consulted.add("grype")
             engine = "grype-local"
             if source.status == "partial":
@@ -661,7 +664,11 @@ def _run_local_check_on_sbom(
         provenance=provenance,
         attributions=_attributions(sources_consulted),
         sources_consulted=sorted(sources_consulted),
-        baseline=_baseline_delta(baseline, findings, indicative_findings) if baseline else None,
+        baseline=(
+            _baseline_delta(baseline, findings, indicative_findings, unassessed)
+            if baseline
+            else None
+        ),
         suppressions=suppressions,
         identifier_coverage=id_coverage,
         indicative_findings=indicative_findings,
@@ -771,7 +778,10 @@ def _format_syft_version(version: str | None) -> str:
 
 
 def _baseline_delta(
-    path: Path | None, findings: list[Any], indicative: list[Any] | None = None
+    path: Path | None,
+    findings: list[Any],
+    indicative: list[Any] | None = None,
+    unassessed: list[UnassessedPackage] | None = None,
 ) -> dict[str, Any] | None:
     if not path:
         return None
@@ -827,11 +837,30 @@ def _baseline_delta(
         for item in absent
         if any(_baseline_matches(finding, item) for finding in indicative or [])
     ]
-    removed = [item for item in absent if item not in reclassified]
+    # A package the engine could not assess contributes no findings, so a
+    # baseline vulnerability on it is unknown, not fixed.
+    not_reassessed: dict[str, set[str]] = {}
+    removed = []
+    for item in absent:
+        if item in reclassified:
+            continue
+        reasons = {
+            package.reason
+            for package in unassessed or []
+            if _same_package(package.name, package.version, package.purl, item)
+        }
+        if reasons:
+            not_reassessed.setdefault(item["id"], set()).update(reasons)
+        else:
+            removed.append(item)
     return {
         "new_vulnerabilities": sorted({finding.id for finding in new_findings}),
         "removed_vulnerabilities": sorted({item["id"] for item in removed}),
         "reclassified_vulnerabilities": sorted({item["id"] for item in reclassified}),
+        "not_reassessed_vulnerabilities": sorted(not_reassessed),
+        "not_reassessed_reasons": {
+            key: sorted(not_reassessed[key]) for key in sorted(not_reassessed)
+        },
         "new_occurrences": [_baseline_occurrence(finding) for finding in new_findings],
     }
 
@@ -848,9 +877,7 @@ def _baseline_occurrence(finding: Any) -> dict[str, Any]:
 def _baseline_matches(finding: Any, item: dict[str, Any]) -> bool:
     if "package" not in item:
         return finding.id.upper() == item["id"].upper()
-    if finding.package != item["package"] or finding.version != item["version"]:
-        return False
-    if finding.purl and item.get("purl") and finding.purl != item["purl"]:
+    if not _same_package(finding.package, finding.version, finding.purl, item):
         return False
     current_ids = {value.upper() for value in (finding.id, *finding.aliases, *finding.cve_aliases)}
     previous_ids = {
@@ -858,6 +885,12 @@ def _baseline_matches(finding: Any, item: dict[str, Any]) -> bool:
         for value in (item["id"], *item.get("aliases", []), *item.get("cve_aliases", []))
     }
     return bool(current_ids & previous_ids)
+
+
+def _same_package(name: Any, version: Any, purl: Any, item: dict[str, Any]) -> bool:
+    if "package" not in item or name != item["package"] or version != item["version"]:
+        return False
+    return not (purl and item.get("purl") and purl != item["purl"])
 
 
 def _attributions(sources: set[str]) -> list[str]:

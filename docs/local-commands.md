@@ -57,6 +57,14 @@ Notes:
   (see below) is reported under `reclassified_vulnerabilities` as "reclassified: version could
   not be confirmed". It is not counted as removed or fixed and it is not new, so `--fail-on-new`
   ignores it. A baseline written before indicative candidates existed keeps working.
+- When Grype returns an incomplete assessment, the packages it could not assess have no
+  findings in the current scan. A vulnerability that `--baseline` lists, that is absent from the
+  current findings, and whose package matches one of those packages (same name and version, and
+  the same PURL when both reports have one) is reported under `not_reassessed_vulnerabilities`,
+  with the engine's reason codes per vulnerability under `not_reassessed_reasons`, and in the text
+  report as "Not reassessed: package could not be assessed in this scan". It is not counted as
+  removed or fixed and it is not new, so `--fail-on-new` ignores it. Baseline rows that list only
+  an ID, without a package, cannot be matched and keep being reported as removed.
 - `--deny-license` reads the per-component licenses already parsed from the SBOM, e.g.
   `--deny-license AGPL-3.0-only,GPL-3.0-only`.
 - `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`.

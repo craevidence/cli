@@ -16,7 +16,12 @@ from cra_evidence_cli.engine import (
     inspect_engine,
 )
 from cra_evidence_cli.exceptions import ScanEngineUnavailable
-from cra_evidence_cli.local.models import CoverageSource, Finding, normalize_severity
+from cra_evidence_cli.local.models import (
+    CoverageSource,
+    Finding,
+    UnassessedPackage,
+    normalize_severity,
+)
 from cra_evidence_cli.local.version_applicability import classify_occurrence
 
 
@@ -145,8 +150,9 @@ class GrypeLocalScanner:
             message = "scanner returned malformed match data"
             raise ScanEngineUnavailable(message) from exc
         partial_detail = None
+        unassessed: list[UnassessedPackage] = []
         if result.returncode == 1:
-            partial_detail = _incomplete_detail(document.get("assessment"))
+            partial_detail, unassessed = _incomplete_assessment(document.get("assessment"))
         elif document.get("assessment") is not None:
             message = "scanner returned an assessment with a successful exit"
             raise ScanEngineUnavailable(message)
@@ -156,6 +162,7 @@ class GrypeLocalScanner:
             "partial" if partial_detail is not None else "present",
             as_of=metadata.get("built"),
             detail=partial_detail or f"schema={metadata.get('schema_version') or 'unknown'}",
+            unassessed_packages=unassessed,
         )
 
     def _db_mtime_offline(self) -> str | None:
@@ -180,7 +187,7 @@ def parse_grype_output(raw: str) -> list[Finding]:
     return findings
 
 
-def _incomplete_detail(assessment: Any) -> str:
+def _incomplete_assessment(assessment: Any) -> tuple[str, list[UnassessedPackage]]:
     message = "scanner did not return an actionable incomplete assessment"
     if not isinstance(assessment, dict) or assessment.get("status") != "incomplete":
         raise ScanEngineUnavailable(message)
@@ -188,6 +195,7 @@ def _incomplete_detail(assessment: Any) -> str:
     if not isinstance(packages, list) or not packages:
         raise ScanEngineUnavailable(message)
     details = []
+    unassessed = []
     for entry in packages:
         if not isinstance(entry, dict):
             raise ScanEngineUnavailable(message)
@@ -211,7 +219,15 @@ def _incomplete_detail(assessment: Any) -> str:
         version = package.get("version")
         label = f"{identity}@{version}" if identity == package.get("name") and version else identity
         details.append(f"{label} ({matcher}: {reason})")
-    return "Incomplete vulnerability assessment: " + "; ".join(details)
+        unassessed.append(
+            UnassessedPackage(
+                name=package.get("name"),
+                version=package.get("version"),
+                purl=package.get("purl"),
+                reason=reason,
+            )
+        )
+    return "Incomplete vulnerability assessment: " + "; ".join(details), unassessed
 
 
 def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
