@@ -91,6 +91,14 @@ def _has_unescaped_wildcard(value: str) -> bool:
     return False
 
 
+def _is_placeholder_after_epoch(value: str) -> bool:
+    """True for a placeholder, or an empty version, behind one numeric epoch prefix."""
+    head, separator, rest = value.partition(":")
+    if separator and head.isascii() and head.isdigit():
+        return not rest or rest.lower() in _PLACEHOLDER_VERSIONS
+    return value.lower() in _PLACEHOLDER_VERSIONS
+
+
 def is_concrete_version(value: object) -> bool:
     """Return True only when ``value`` is a concrete shipped version.
 
@@ -99,7 +107,9 @@ def is_concrete_version(value: object) -> bool:
     2. it is not CPE ANY (``*``) or CPE NA (``-``);
     3. it contains no unescaped wildcard character (``*`` or ``?``);
     4. it is not a case-insensitive placeholder (``unknown``, ``NA``, ``N/A``,
-       or ``NOASSERTION``, which SPDX writes when no version is asserted).
+       or ``NOASSERTION``, which SPDX writes when no version is asserted), with
+       or without one numeric epoch prefix in front of it (``1:unknown``). An
+       epoch with nothing after it (``2:``) is not a version either.
 
     ``0`` is concrete. No SemVer canonicalization is applied. Callers pass the
     logical (unbound or decoded) version, so CPE binding escapes are already gone.
@@ -113,7 +123,7 @@ def is_concrete_version(value: object) -> bool:
         return False
     if _has_unescaped_wildcard(trimmed):
         return False
-    return trimmed.lower() not in _PLACEHOLDER_VERSIONS
+    return not _is_placeholder_after_epoch(trimmed)
 
 
 def canonical_conflict_version(value: str) -> str:

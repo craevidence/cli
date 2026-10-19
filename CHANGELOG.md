@@ -30,7 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   output.
 - A component version of `NOASSERTION`, which SPDX writes when no version is
   asserted, is treated like `unknown`: matches that rest on it are indicative
-  candidates, not confirmed findings.
+  candidates, not confirmed findings. The same applies when a numeric epoch
+  precedes the placeholder (`1:unknown`, `0:NOASSERTION`) or nothing follows the
+  epoch (`2:`); a real epoch version such as `1:1.0-1` is unchanged.
 
 ### Fixed
 

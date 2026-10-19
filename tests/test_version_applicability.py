@@ -79,6 +79,32 @@ def test_is_concrete_version_rejects_non_strings(value):
     assert is_concrete_version(value) is False
 
 
+@pytest.mark.parametrize(
+    "value",
+    ["1:UNKNOWN", "0:noassertion", "2:", "10:N/A", "01:na", " 1:Unknown ", "2: "],
+)
+def test_is_concrete_version_rejects_placeholder_or_empty_behind_epoch(value):
+    """Fails if the whole value is compared with the placeholders, so an epoch hides one."""
+    assert is_concrete_version(value) is False
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "a:UNKNOWN",
+        ":UNKNOWN",
+        "1.0:UNKNOWN",
+        "1:2:UNKNOWN",
+        "\u0660:UNKNOWN",
+        "1:1.0-1",
+        "0:3.79.0-17.el9_1",
+    ],
+)
+def test_is_concrete_version_keeps_non_epoch_prefixes_and_real_epoch_versions(value):
+    """Fails if any prefix before a colon is stripped, or a real epoch version is rejected."""
+    assert is_concrete_version(value) is True
+
+
 # --- parse_cpe_version ---------------------------------------------------
 
 

@@ -398,6 +398,82 @@
       "expected": {
         "error": "InvalidPurlEpoch"
       }
+    },
+    {
+      "id": "epoch_unknown_component_is_not_a_declaration",
+      "component_version": "1:UNKNOWN",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "zero_epoch_noassertion_component_is_not_a_declaration",
+      "component_version": "0:noassertion",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "empty_epoch_component_is_not_a_declaration",
+      "component_version": "2:",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "non_numeric_prefix_placeholder_is_a_declaration",
+      "component_version": "a:UNKNOWN",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "indicative",
+        "reason": "version_conflict"
+      }
     }
   ]
 }
