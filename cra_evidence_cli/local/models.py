@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from cra_evidence_cli.local.disclaimer import advisory_block
+from cra_evidence_cli.local.inventory_coverage import InventoryCoverage
 from cra_evidence_cli.local.version_applicability import (
     REASON_UNVERSIONED,
     REASON_VERSION_CONFLICT,
@@ -270,6 +271,7 @@ class LocalCheckResult:
     identifier_coverage: dict[str, Any] | None = None
     indicative_findings: list[Finding] = field(default_factory=list)
     unassessed_packages: list[UnassessedPackage] | None = None
+    inventory_coverage: InventoryCoverage | None = None
 
     def to_dict(self, exit_code: int = 0) -> dict[str, Any]:
         summary = summarize_findings(self.findings)
@@ -308,6 +310,9 @@ class LocalCheckResult:
             "attributions": self.attributions,
             "baseline": self.baseline,
             "unassessed_packages": unassessed_report(self.unassessed_packages),
+            "inventory_coverage": (
+                None if self.inventory_coverage is None else self.inventory_coverage.to_dict()
+            ),
             "exit_note": exit_note,
             "advisory": advisory_block(),
         }

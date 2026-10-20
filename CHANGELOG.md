@@ -22,6 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release even though a vulnerability scan problem blocks the release, with a
   reason of 10 to 2000 characters recorded with it. The output says whether the
   server recorded it.
+- `check` shows the inventory coverage statement of CRA Evidence engine SBOMs: the files
+  whose packages may be missing from the SBOM, such as dependency manifests with no lock file
+  the engine reads or whose lock file does not contain every declared dependency, with the
+  reason for each. Totals are coverage-gap entries, not distinct files. Text and Markdown
+  reports add an "Inventory coverage" section, the JSON report an `inventory_coverage` object
+  and SARIF tool execution notifications. A directory where no package was resolved names
+  those manifests in its error. Findings, gates and exit codes are unchanged.
 - `check` lists the packages the scan engine could not check. Packages without a
   version or a package ecosystem, or whose operating-system release has no entry
   in the vulnerability database, appear under "Not checked for vulnerabilities";

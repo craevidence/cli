@@ -237,6 +237,7 @@ def test_existing_json_fields_are_unchanged_by_the_new_object(monkeypatch, tmp_p
         "identifier_coverage",
         "indicative_findings",
         "indicative_summary",
+        "inventory_coverage",
         "provenance",
         "schema_version",
         "sources_consulted",

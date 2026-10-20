@@ -32,6 +32,12 @@ from cra_evidence_cli.local.enrich import (
     fetch_epss_scores,
     fetch_kev_catalog,
 )
+from cra_evidence_cli.local.inventory_coverage import (
+    STATUS_REPORTED,
+    STATUS_UNINTERPRETABLE,
+    declared_unresolved_summary,
+    read_inventory_coverage,
+)
 from cra_evidence_cli.local.models import (
     CoverageSource,
     LocalCheckResult,
@@ -508,6 +514,14 @@ def _run_local_check_on_sbom(
 ) -> LocalCheckResult:
     if generated_sbom is not None and target_type == "directory":
         if generated_sbom.component_count == 0:
+            declared = _generated_declared_unresolved(generated_sbom.file_path)
+            if declared is not None:
+                msg = (
+                    f"No packages were resolved under {target_path}. {declared} "
+                    "Pass an SBOM with --sbom or an image with --image to check "
+                    "the installed packages instead."
+                )
+                raise SBOMGenerationError(msg)
             msg = (
                 f"No dependency manifests or SBOM found under {target_path}. "
                 "check looks for package manifests and lockfiles (for example "
@@ -530,8 +544,22 @@ def _run_local_check_on_sbom(
             shutil.copyfile(generated_sbom.file_path, sbom_output)
             click.echo(f"Wrote generated SBOM copy to {sbom_output}", err=True)
 
-    components, _raw_sbom = load_sbom(sbom_path)
+    components, raw_sbom = load_sbom(sbom_path)
     id_coverage = identifier_coverage(components)
+    inventory = read_inventory_coverage(raw_sbom)
+    if inventory.status == STATUS_UNINTERPRETABLE:
+        click.echo(
+            "Warning: the SBOM inventory coverage statement could not be interpreted "
+            f"({inventory.detail}); it is not shown.",
+            err=True,
+        )
+    elif inventory.status == STATUS_REPORTED and inventory.total:
+        click.echo(
+            f"Warning: the SBOM generator reported {inventory.total} coverage-gap entries for "
+            "files whose packages may be missing from the SBOM; the vulnerability counts do "
+            "not cover them.",
+            err=True,
+        )
     coverage: list[CoverageSource] = []
     sources_consulted: set[str] = set()
     scanner = GrypeLocalScanner()
@@ -681,6 +709,7 @@ def _run_local_check_on_sbom(
         identifier_coverage=id_coverage,
         indicative_findings=indicative_findings,
         unassessed_packages=measured_unassessed,
+        inventory_coverage=inventory,
     )
     if strict and any(
         source.status in {"stale", "unavailable"}
@@ -693,6 +722,17 @@ def _run_local_check_on_sbom(
     ):
         result.provenance["strict_failure"] = "incomplete vulnerability assessment"
     return result
+
+
+def _generated_declared_unresolved(path: Path) -> str | None:
+    """The generator's own list of unresolved manifests in an SBOM without packages."""
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    return declared_unresolved_summary(read_inventory_coverage(data))
 
 
 SEVERITY_CODES = {"critical": 10, "high": 11, "medium": 12}

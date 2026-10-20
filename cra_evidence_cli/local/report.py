@@ -9,6 +9,7 @@ from urllib.parse import quote
 from rich.console import Console
 from rich.text import Text
 
+from cra_evidence_cli.local.inventory_coverage import CODE_DECLARED_UNRESOLVED, code_heading
 from cra_evidence_cli.local.models import ASSESSMENT_FAILED_REMEDY, LocalCheckResult
 from cra_evidence_cli.styles import (
     STYLE_BLOCKER,
@@ -88,6 +89,7 @@ def print_text_report(
     console.print(_summary_text(data["components"]["count"], summary, _indicative_total(data)))
     _print_identifier_coverage(console, data)
     _print_unassessed(console, data)
+    _print_inventory_coverage(console, data)
 
     console.print()
     console.print(Text("Top actions", style=STYLE_TITLE))
@@ -147,6 +149,7 @@ def _text(data: dict[str, Any], verbose: bool = False, exit_code: int = 0) -> st
     )
     lines.extend(_identifier_coverage_lines(data))
     lines.extend(_unassessed_lines(data))
+    lines.extend(_inventory_coverage_lines(data))
     lines.extend(
         [
             "",
@@ -551,8 +554,110 @@ def _print_unassessed(console: Console, data: dict[str, Any]) -> None:
             console.print(line, markup=False)
 
 
+_INVENTORY_SHOWN = 10
+
+
+def _inventory_groups(coverage: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
+    groups: dict[str, list[dict[str, Any]]] = {code: [] for code in sorted(coverage["counts"])}
+    for entry in coverage["entries"]:
+        groups.setdefault(entry["code"], []).append(entry)
+    return groups
+
+
+def _inventory_coverage_lines(data: dict[str, Any]) -> list[str]:
+    """Files the SBOM generator reported as not resolved or not fully read.
+
+    Shown when the SBOM's coverage statement names any, or cannot be interpreted.
+    An absent statement, as in SBOMs from other generators, prints nothing.
+    """
+    coverage = data.get("inventory_coverage")
+    if not coverage:
+        return []
+    if coverage["status"] == "uninterpretable":
+        return [
+            "",
+            "Inventory coverage: could not be interpreted",
+            f"The SBOM's inventory coverage statement is not shown: {coverage['detail']}.",
+        ]
+    total = sum(coverage["counts"].values())
+    if coverage["status"] != "reported" or not total:
+        return []
+    lines = [
+        "",
+        f"Inventory coverage: incomplete, {total} coverage-gap entries reported by the SBOM "
+        "generator",
+        "Packages from these files may be missing from the SBOM, so the vulnerability "
+        "counts above do not cover them. Exit codes are unchanged.",
+    ]
+    for code, entries in _inventory_groups(coverage).items():
+        count = coverage["counts"].get(code, 0)
+        lines.append(f"- {code_heading(code)} ({code}): {count}")
+        for entry in entries[:_INVENTORY_SHOWN]:
+            lines.append(f"  - {entry['path']}: {entry['reason']}")
+        hidden = count - min(len(entries), _INVENTORY_SHOWN)
+        if hidden > 0:
+            lines.append(f"  - ... and {hidden} more; see --output json")
+    return lines
+
+
+def _print_inventory_coverage(console: Console, data: dict[str, Any]) -> None:
+    lines = _inventory_coverage_lines(data)
+    for index, line in enumerate(lines):
+        if not line:
+            console.print()
+        elif index and not lines[index - 1]:
+            console.print(Text(line, style=STYLE_TITLE))
+        else:
+            console.print(line, markup=False)
+
+
+def _inventory_notifications(data: dict[str, Any], sbom_uri: str) -> list[dict[str, Any]]:
+    coverage = data.get("inventory_coverage")
+    if not coverage:
+        return []
+    location = [{"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}]
+    if coverage["status"] == "uninterpretable":
+        return [
+            {
+                "level": "warning",
+                "descriptor": {"id": "craevidence/inventory-coverage/uninterpretable"},
+                "message": {
+                    "text": "The SBOM inventory coverage statement could not be interpreted: "
+                    f"{coverage['detail']}."
+                },
+                "locations": location,
+            }
+        ]
+    if coverage["status"] != "reported":
+        return []
+    notifications = []
+    for code, entries in _inventory_groups(coverage).items():
+        count = coverage["counts"].get(code, 0)
+        if not count:
+            continue
+        # Only a dependency manifest is reported at most once; other codes can count a file
+        # once per reporting component.
+        unit = (
+            "dependency manifest(s)" if code == CODE_DECLARED_UNRESOLVED else "coverage-gap entries"
+        )
+        notifications.append(
+            {
+                "level": "warning",
+                "descriptor": {"id": f"craevidence/inventory-coverage/{code}"},
+                "message": {
+                    "text": f"{code_heading(code)} ({code}): {count} {unit} reported by the "
+                    "SBOM generator. Packages from these files may be missing from the SBOM."
+                },
+                "locations": location,
+                "properties": {"entries": entries, "count": count},
+            }
+        )
+    return notifications
+
+
 def _sarif_invocations(data: dict[str, Any], sbom_uri: str) -> list[dict[str, Any]]:
-    """Packages the engine did not check, as tool execution notifications.
+    """Packages the engine did not check, and files the SBOM generator reported, as
+    tool execution notifications.
 
     They describe the run, not the analysed SBOM, so they are never results.
     """
@@ -568,12 +673,11 @@ def _sarif_invocations(data: dict[str, Any], sbom_uri: str) -> list[dict[str, An
                     "level": level,
                     "descriptor": {"id": f"craevidence/{prefix}/{reason}"},
                     "message": {"text": text},
-                    "locations": [
-                        {"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}
-                    ],
+                    "locations": [{"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}],
                     "properties": {"packages": group["entries"]},
                 }
             )
+    notifications.extend(_inventory_notifications(data, sbom_uri))
     if not notifications:
         return []
     return [
@@ -638,6 +742,7 @@ def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
                     "attributions": data["attributions"],
                     "vexSuppressions": data.get("suppressions") or [],
                     "indicativeCandidates": data.get("indicative_findings") or [],
+                    "inventoryCoverage": data.get("inventory_coverage"),
                     "advisory": data["advisory"],
                 },
             }

@@ -89,6 +89,29 @@ Notes:
     at level `error`), never `results`. `executionSuccessful` is `false` when an
     assessment-failed notification is present. A run with nothing to report has no `invocations`.
   - GitHub step summary: a table for each group. GitHub and GitLab annotations: none.
+- Inventory coverage: SBOMs from the CRA Evidence engine carry a statement that names the
+  files whose packages may be missing from the SBOM: dependency manifests whose declared
+  dependencies were not shown to be resolved to packages (for example a `package.json`,
+  `pyproject.toml`, `Cargo.toml`, `Gemfile`, `composer.json`, `build.gradle` or `.csproj` with
+  no lock file the engine reads, or whose lock file does not contain every declared dependency,
+  a `packages.config` or `obj/project.assets.json`, or a `setup.py` whose `install_requires` is
+  not a list of exact `==` pins), package sources a cataloger could not
+  fully read, and sources not fully inspected because of a size or analysis limit. `check`
+  reads it from generated SBOMs and from `--sbom` files alike. It never changes findings,
+  gates or the exit code, `--strict` included, and it is never a claim that the inventory is
+  complete. SBOMs from other generators carry no statement.
+  - Text and Markdown: an "Inventory coverage" section with each file and its reason, up to ten
+    per reason. JSON: the top-level `inventory_coverage` object with `status` (`reported`,
+    `absent` or `uninterpretable`), `state`, `counts` (coverage-gap entries per reason code),
+    `listed`, `omitted` (entries the engine counted but did not list), `entries` (`path`,
+    `code`, `by`, `reason`) and `deliberate_omissions`. An entry is one file, reason code and
+    reporting component, so one file can have more than one entry; a dependency manifest has at
+    most one. SARIF: one `craevidence/inventory-coverage/<code>` notification per reason at level
+    `warning`, with the entries under `properties.entries`, never `results`.
+  - A statement this CLI cannot interpret is reported as such, on stderr and in the report.
+  - A directory where the engine resolved no package but found such manifests fails with
+    exit 1 as before, and the message names the manifests.
+  - `eol-check`, `egress-check` and `draft` do not show the statement.
 - `--deny-license` reads the per-component licenses already parsed from the SBOM, e.g.
   `--deny-license AGPL-3.0-only,GPL-3.0-only`.
 - `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`.
