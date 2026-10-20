@@ -98,7 +98,8 @@ Notes:
 - Indicative candidates: for every Grype match, `check` applies the `concrete-v1` version policy.
   A match is confirmed when at least one match detail carries a concrete version and the
   component's declarations (version, PURL, declared CPEs, searched versions) agree. A component
-  with an empty, wildcard or placeholder version yields reason `unversioned`; declarations that
+  with an empty, wildcard or placeholder version (`*`, `-`, `unknown`, `NA`, `N/A`,
+  `NOASSERTION`, also behind a numeric epoch such as `1:-`) yields reason `unversioned`; declarations that
   contradict each other yield `version_conflict`. Such matches are indicative candidates, not
   confirmed vulnerabilities. They are listed apart from the findings:
   - JSON: the top-level `indicative_findings` array (each entry has `quality_reason` and

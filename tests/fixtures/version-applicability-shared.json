@@ -474,6 +474,139 @@
         "status": "indicative",
         "reason": "version_conflict"
       }
+    },
+    {
+      "id": "epoch_dash_component_is_not_a_declaration",
+      "component_version": "1:-",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "epoch_star_component_is_not_a_declaration",
+      "component_version": "1:*",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "zero_epoch_dash_component_is_not_a_declaration",
+      "component_version": "0:-",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "confirmed",
+        "reason": null
+      }
+    },
+    {
+      "id": "epoch_release_dash_component_is_a_declaration",
+      "component_version": "1:1.0-1",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "indicative",
+        "reason": "version_conflict"
+      }
+    },
+    {
+      "id": "zero_component_is_a_declaration",
+      "component_version": "0",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "indicative",
+        "reason": "version_conflict"
+      }
+    },
+    {
+      "id": "unknown_with_release_suffix_is_a_declaration",
+      "component_version": "unknown-1",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "indicative",
+        "reason": "version_conflict"
+      }
+    },
+    {
+      "id": "noassertion_with_release_suffix_is_a_declaration",
+      "component_version": "NOASSERTION-1",
+      "purl": "pkg:pypi/widget@1.0",
+      "match_details": [
+        {
+          "type": "exact-direct-match",
+          "searchedBy": {
+            "package": {
+              "version": "1.0"
+            }
+          }
+        }
+      ],
+      "expected": {
+        "status": "indicative",
+        "reason": "version_conflict"
+      }
     }
   ]
 }

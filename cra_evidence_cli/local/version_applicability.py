@@ -95,7 +95,7 @@ def _is_placeholder_after_epoch(value: str) -> bool:
     """True for a placeholder, or an empty version, behind one numeric epoch prefix."""
     head, separator, rest = value.partition(":")
     if separator and head.isascii() and head.isdigit():
-        return not rest or rest.lower() in _PLACEHOLDER_VERSIONS
+        return not rest or rest in (_WFN_ANY, _WFN_NA) or rest.lower() in _PLACEHOLDER_VERSIONS
     return value.lower() in _PLACEHOLDER_VERSIONS
 
 
@@ -109,7 +109,9 @@ def is_concrete_version(value: object) -> bool:
     4. it is not a case-insensitive placeholder (``unknown``, ``NA``, ``N/A``,
        or ``NOASSERTION``, which SPDX writes when no version is asserted), with
        or without one numeric epoch prefix in front of it (``1:unknown``). An
-       epoch with nothing after it (``2:``) is not a version either.
+       epoch with nothing after it (``2:``) is not a version either; nor are ``*``
+       and ``-`` behind an epoch (``1:-``, ``1:*``). No other prefix or substring
+       is stripped.
 
     ``0`` is concrete. No SemVer canonicalization is applied. Callers pass the
     logical (unbound or decoded) version, so CPE binding escapes are already gone.

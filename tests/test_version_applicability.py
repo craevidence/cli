@@ -81,7 +81,20 @@ def test_is_concrete_version_rejects_non_strings(value):
 
 @pytest.mark.parametrize(
     "value",
-    ["1:UNKNOWN", "0:noassertion", "2:", "10:N/A", "01:na", " 1:Unknown ", "2: "],
+    [
+        "1:UNKNOWN",
+        "0:noassertion",
+        "2:",
+        "10:N/A",
+        "01:na",
+        " 1:Unknown ",
+        "2: ",
+        "1:-",
+        "1:*",
+        "0:-",
+        "01:*",
+        " 1:- ",
+    ],
 )
 def test_is_concrete_version_rejects_placeholder_or_empty_behind_epoch(value):
     """Fails if the whole value is compared with the placeholders, so an epoch hides one."""
@@ -98,6 +111,14 @@ def test_is_concrete_version_rejects_placeholder_or_empty_behind_epoch(value):
         "\u0660:UNKNOWN",
         "1:1.0-1",
         "0:3.79.0-17.el9_1",
+        "1:-1",
+        "a:-",
+        "1:2:-",
+        "\u0660:-",
+        "unknown-1",
+        "NOASSERTION-1",
+        "1.0-1",
+        "0",
     ],
 )
 def test_is_concrete_version_keeps_non_epoch_prefixes_and_real_epoch_versions(value):

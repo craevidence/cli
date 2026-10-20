@@ -106,6 +106,13 @@ totals, the known-exploited count or EPSS, and it raises no annotation. Give the
 SBOM component its exact version to confirm it. Match details in a shape the
 policy does not recognise are treated like other malformed Grype output.
 
+The `concrete-v1` input policy treats `*`, `-`, `unknown`, `NA`, `N/A` and
+`NOASSERTION` (any case) as placeholders that name no concrete version. The same holds
+behind one numeric epoch: `1:-`, `1:*` and `1:unknown` are not concrete. `1:1.0-1`, `0`,
+`unknown-1`, `NOASSERTION-1` and `1.0-1` stay concrete, and no other prefix or substring
+is stripped. This is a conservative input policy of this CLI, not a statement about how
+any package ecosystem names its releases.
+
 SBOM license expressions are preserved as written. `--deny-license` compares
 complete license strings without evaluating `AND`, `OR`, or `WITH` expressions.
 

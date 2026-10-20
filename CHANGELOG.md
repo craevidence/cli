@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `check` no longer treats a version of `-` behind a numeric epoch (`1:-`) as a
+  concrete version. Like `*`, `-` and `unknown`, it names no version, with or without
+  the epoch. Versions such as `1:1.0-1`, `0` and `unknown-1` stay concrete.
 - The Dockerfile no longer defaults the scan engine image to a private registry
   address that outside users cannot pull. The registry host has no default: pass
   `--build-arg GRYPE_ENGINE_REGISTRY=<registry>` for the pinned digest, or
