@@ -18,6 +18,12 @@ from cra_evidence_cli.ci_detect import merge_ci_metadata
 from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.commands.scan import wait_for_scan_completion
 from cra_evidence_cli.config import validate_config
+from cra_evidence_cli.coverage_gaps import (
+    enforce_coverage_gaps,
+    print_coverage_gaps,
+    read_coverage_gaps,
+    summary_coverage_gaps,
+)
 from cra_evidence_cli.display import humanize_field_path, humanize_identifier
 from cra_evidence_cli.exceptions import (
     APIError,
@@ -381,6 +387,13 @@ def format_output(data: dict, output_format: str, verbose: bool = False) -> None
 
     # CRA Compliance section - shown when the response includes CRA feedback
     _print_cra_compliance_section(data, verbose)
+
+    release_gaps = read_coverage_gaps(data.get("release_coverage_gaps"))
+    if release_gaps.state != "absent":
+        console.print()
+        print_coverage_gaps(
+            console, release_gaps, heading="[bold]Recorded with the release:[/bold]"
+        )
 
     # Warnings (non-fatal notices from the server)
     warnings = data.get("warnings") or []
@@ -757,7 +770,9 @@ def _check_assessment_incomplete(vulnerability_summary: dict, fail_on: str) -> N
         raise AssessmentIncomplete(fail_on)
 
 
-def check_vulnerability_threshold(vulnerability_summary: dict, fail_on: str) -> None:
+def check_vulnerability_threshold(
+    vulnerability_summary: dict, fail_on: str, fail_on_coverage_gaps: bool = False
+) -> None:
     """Check vulnerability counts against threshold and raise if exceeded."""
     _check_applicability_pending(vulnerability_summary, fail_on)
     _check_assessment_incomplete(vulnerability_summary, fail_on)
@@ -781,6 +796,9 @@ def check_vulnerability_threshold(vulnerability_summary: dict, fail_on: str) -> 
     if low > 0 and fail_on == "low":
         msg = "low"
         raise VulnerabilityThresholdExceeded(msg, low, exit_code=13)
+
+    if fail_on_coverage_gaps:
+        enforce_coverage_gaps(vulnerability_summary, fail_on)
 
 
 def _resolve_signature_inputs(
@@ -962,6 +980,16 @@ def _resolve_signature_inputs(
     help=(
         "Fail if vulnerabilities of this severity or higher are found. "
         "Requires --scan."
+    ),
+)
+@click.option(
+    "--fail-on-coverage-gaps",
+    "fail_on_coverage_gaps",
+    is_flag=True,
+    default=False,
+    help=(
+        "With --fail-on, also exit 30 when packages could not be checked for "
+        "vulnerabilities (coverage gaps), or when the server does not report them."
     ),
 )
 @click.option(
@@ -1166,6 +1194,7 @@ def upload_sbom(
     create_version: bool,
     scan: bool,
     fail_on: str | None,
+    fail_on_coverage_gaps: bool,
     scan_timeout: int,
     # CRA classification
     category: str | None,
@@ -1320,6 +1349,9 @@ def upload_sbom(
         raise click.UsageError(
             msg
         )
+    if fail_on_coverage_gaps and not fail_on:
+        msg = "--fail-on-coverage-gaps requires --fail-on."
+        raise click.UsageError(msg)
 
     try:
         validate_config(config)
@@ -1588,7 +1620,10 @@ def upload_sbom(
                 vuln_summary = wait_for_scan_completion(
                     client, product, version_number, scan_timeout
                 )
-                check_vulnerability_threshold(vuln_summary, fail_on)
+                print_coverage_gaps(diagnostic_console, summary_coverage_gaps(vuln_summary))
+                check_vulnerability_threshold(
+                    vuln_summary, fail_on, fail_on_coverage_gaps=fail_on_coverage_gaps
+                )
 
     except CRAEvidenceError as e:
         diagnostic_console.print(f"[red]Error:[/red] {clarify_upload_error(str(e))}")

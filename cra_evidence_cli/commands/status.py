@@ -15,6 +15,11 @@ from rich.table import Table
 
 from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.config import validate_config
+from cra_evidence_cli.coverage_gaps import (
+    enforce_coverage_gaps,
+    print_coverage_gaps,
+    summary_coverage_gaps,
+)
 from cra_evidence_cli.display import humanize_identifier
 from cra_evidence_cli.exceptions import (
     ApplicabilityInconclusive,
@@ -40,6 +45,7 @@ def check_fail_on(
     cra_status: str,
     cra_floor_status: str | None = None,
     release_policy_status: str | None = None,
+    fail_on_coverage_gaps: bool = False,
 ) -> None:
     """
     Check whether vulnerability counts or CRA status exceed the fail-on threshold.
@@ -50,6 +56,9 @@ def check_fail_on(
         cra_status: CRA status string (e.g. "ready", "incomplete")
         cra_floor_status: CRA legal-floor verdict, if supplied
         release_policy_status: Release-policy verdict, if supplied
+        fail_on_coverage_gaps: Also fail (exit 30) unless the server reported
+            that no package was left unchecked; checked only after every other
+            check passed, so it never replaces another exit
 
     Raises:
         VulnerabilityThresholdExceeded: If the vulnerability threshold is exceeded
@@ -103,10 +112,11 @@ def check_fail_on(
             raise CRANonCompliantError(floor)
         if policy != "ready":
             raise ReleasePolicyNotMetError(policy)
-        return
-
-    if cra_status != "ready":
+    elif cra_status != "ready":
         raise CRANonCompliantError(cra_status)
+
+    if fail_on_coverage_gaps:
+        enforce_coverage_gaps(vulnerability_summary, fail_on)
 
 
 # The API metric counts validated declared identifiers. Scanner queries inferred
@@ -278,6 +288,28 @@ def _add_package_matching_coverage_rows(table: Table, coverage: dict) -> None:
 
     if reason_code:
         table.add_row("", f"[dim](reason_code: {escape(str(reason_code))})[/dim]")
+
+
+def _print_coverage_sections(data: dict, verbose: bool) -> None:
+    gaps = summary_coverage_gaps(data.get("vulnerability_summary"))
+    if gaps.state != "absent":
+        console.print()
+        print_coverage_gaps(console, gaps)
+    scan_coverage = data.get("scan_coverage")
+    if not verbose or not isinstance(scan_coverage, list):
+        return
+    items = [item for item in scan_coverage if isinstance(item, dict)]
+    if not items:
+        return
+    console.print()
+    console.print("[bold]Assessment coverage per SBOM[/bold]")
+    for item in items:
+        name = item.get("filename") or item.get("sbom_id") or "SBOM"
+        line = f"  {escape(str(name))}: {escape(str(item.get('state', 'unknown')))}"
+        total = item.get("total_gaps")
+        if isinstance(total, int) and not isinstance(total, bool) and total > 0:
+            line += f" ({total} package(s) not checked)"
+        console.print(line, soft_wrap=True)
 
 
 def format_status_output(data: dict, output_format: str, verbose: bool = False) -> None:
@@ -468,6 +500,7 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
         if artifact.get("gemara_source_download_url") and artifact.get("id")
     ]
     console.print(table)
+    _print_coverage_sections(data, verbose)
     # Surface blocking reasons when the version is not CRA-ready.
     _cra = data.get("cra_status")
     _missing = data.get("cra_missing_items") or []
@@ -558,12 +591,23 @@ def format_status_output(data: dict, output_format: str, verbose: bool = False) 
         "or if CRA status is not ready. Choices: critical, high, medium, low, none."
     ),
 )
+@click.option(
+    "--fail-on-coverage-gaps",
+    "fail_on_coverage_gaps",
+    is_flag=True,
+    default=False,
+    help=(
+        "With --fail-on, also exit 30 when packages could not be checked for "
+        "vulnerabilities (coverage gaps), or when the server does not report them."
+    ),
+)
 @click.pass_context
 def get_status(
     ctx: click.Context,
     product: str,
     version_number: str,
     fail_on: str,
+    fail_on_coverage_gaps: bool,
 ) -> None:
     """
     Get CRA compliance status for a version.
@@ -572,6 +616,10 @@ def get_status(
     document checklist information. Use the global --output json option before
     the command for machine-readable output.
     """
+    if fail_on_coverage_gaps and fail_on == "none":
+        msg = "--fail-on-coverage-gaps requires --fail-on critical, high, medium or low."
+        raise click.UsageError(msg)
+
     config = ctx.obj["config"]
     output_format = config.output_format
 
@@ -601,6 +649,7 @@ def get_status(
                 cra_status,
                 cra_floor_status=data.get("cra_floor_status"),
                 release_policy_status=data.get("release_policy_status"),
+                fail_on_coverage_gaps=fail_on_coverage_gaps,
             )
 
     except CRAEvidenceError as e:
@@ -736,6 +785,9 @@ def wait_ready(
                 console.print(
                     f"  [{int(elapsed):>4}s] [bold green]{gate_label}: READY[/bold green] "
                     f"- readiness gate passed."
+                )
+                print_coverage_gaps(
+                    console, summary_coverage_gaps(data.get("vulnerability_summary"))
                 )
                 sys.exit(0)
 

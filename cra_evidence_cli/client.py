@@ -1741,6 +1741,7 @@ class CRAEvidenceClient:
         version: str,
         state: str,
         superseded_by: str | None = None,
+        release_anyway_reason: str | None = None,
     ) -> dict[str, Any]:
         """
         Set release state for a version.
@@ -1751,6 +1752,9 @@ class CRAEvidenceClient:
             state: Release state (draft, pending_review, approved, released,
                 deprecated, end_of_life)
             superseded_by: Version number of the successor version (optional)
+            release_anyway_reason: When set, the request asks to release even
+                though a vulnerability scan problem blocks the release, and
+                sends this reason to be recorded with it
         """
         await self._ensure_access_token()
 
@@ -1762,6 +1766,9 @@ class CRAEvidenceClient:
             }
             if superseded_by:
                 form_data["superseded_by"] = superseded_by
+            if release_anyway_reason is not None:
+                form_data["release_anyway"] = "true"
+                form_data["release_anyway_reason"] = release_anyway_reason
 
             try:
                 response = await client.post(

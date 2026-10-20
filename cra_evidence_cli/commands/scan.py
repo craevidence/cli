@@ -13,6 +13,11 @@ from rich.table import Table
 
 from cra_evidence_cli.client import CRAEvidenceClient
 from cra_evidence_cli.config import validate_config
+from cra_evidence_cli.coverage_gaps import (
+    enforce_coverage_gaps,
+    print_coverage_gaps,
+    summary_coverage_gaps,
+)
 from cra_evidence_cli.exceptions import (
     APIError,
     ApplicabilityInconclusive,
@@ -87,11 +92,13 @@ def format_scan_output(data: dict, output_format: str) -> None:
 def check_vulnerability_threshold(
     data: dict,
     fail_on: str | None,
+    fail_on_coverage_gaps: bool = False,
 ) -> None:
-    if not fail_on or not data.get("vulnerabilities"):
+    if not fail_on:
         return
-
-    vulns = data["vulnerabilities"]
+    vulns = data.get("vulnerabilities") or {}
+    if not vulns and not fail_on_coverage_gaps:
+        return
 
     # Applicability gate first: when the server could not verify which findings
     # apply to the shipped version, a zero count is not a no-vulnerabilities
@@ -120,6 +127,9 @@ def check_vulnerability_threshold(
     if medium > 0 and fail_on == "medium":
         msg = "medium"
         raise VulnerabilityThresholdExceeded(msg, medium, exit_code=12)
+
+    if fail_on_coverage_gaps:
+        enforce_coverage_gaps(vulns, fail_on)
 
 
 def wait_for_scan_completion(
@@ -216,6 +226,16 @@ def wait_for_scan_completion(
         "the status endpoint until the scan completes or the timeout elapses."
     ),
 )
+@click.option(
+    "--fail-on-coverage-gaps",
+    "fail_on_coverage_gaps",
+    is_flag=True,
+    default=False,
+    help=(
+        "With --fail-on, also exit 30 when packages could not be checked for "
+        "vulnerabilities (coverage gaps), or when the server does not report them."
+    ),
+)
 @click.pass_context
 def scan(
     ctx: click.Context,
@@ -224,6 +244,7 @@ def scan(
     component: str | None,
     fail_on: str | None,
     scan_timeout: int,
+    fail_on_coverage_gaps: bool,
 ) -> None:
     """
     Trigger vulnerability scan for a version.
@@ -239,8 +260,14 @@ def scan(
     - 10: Critical vulnerabilities found (with --fail-on critical)
     - 11: High vulnerabilities found (with --fail-on high)
     - 12: Medium vulnerabilities found (with --fail-on medium)
+    - 30: Assessment incomplete or applicability not verified (with --fail-on);
+      with --fail-on-coverage-gaps also coverage gaps, or none reported
 
     """
+    if fail_on_coverage_gaps and not fail_on:
+        msg = "--fail-on-coverage-gaps requires --fail-on."
+        raise click.UsageError(msg)
+
     config = ctx.obj["config"]
     output_format = config.output_format
 
@@ -288,8 +315,14 @@ def scan(
             vuln_summary = wait_for_scan_completion(
                 client, product, version_number, scan_timeout
             )
+            print_coverage_gaps(
+                err_console if output_format == "json" else console,
+                summary_coverage_gaps(vuln_summary),
+            )
             check_vulnerability_threshold(
-                {"vulnerabilities": vuln_summary}, fail_on
+                {"vulnerabilities": vuln_summary},
+                fail_on,
+                fail_on_coverage_gaps=fail_on_coverage_gaps,
             )
 
     except CRAEvidenceError as e:

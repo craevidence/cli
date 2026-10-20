@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `status`, `wait-ready`, `scan --fail-on`, `upload-sbom --scan --fail-on` and
+  `release` show the coverage gaps CRA Evidence reports: packages a vulnerability
+  scan could not check, with the count per reason in plain language and the next
+  step for each. Nothing is shown when the server does not report them. JSON
+  output passes the new fields through unchanged. Exit codes are unchanged.
+- `--fail-on-coverage-gaps` on `status`, `scan` and `upload-sbom`, with
+  `--fail-on`: exit 30 when coverage gaps are reported, or when the server does
+  not report coverage gaps, only after every other `--fail-on` check passes, so
+  an existing exit code always takes precedence. Off by default.
+- `release --release-anyway --reason TEXT` with `--state released`: asks to
+  release even though a vulnerability scan problem blocks the release, with a
+  reason of 10 to 2000 characters recorded with it. The output says whether the
+  server recorded it.
 - `check` lists the packages the scan engine could not check. Packages without a
   version or a package ecosystem, or whose operating-system release has no entry
   in the vulnerability database, appear under "Not checked for vulnerabilities";

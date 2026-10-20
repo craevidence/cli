@@ -118,6 +118,18 @@ class AssessmentIncomplete(CRAEvidenceError):
         self.fail_on = fail_on
 
 
+class CoverageGapsFound(CRAEvidenceError):
+    """Raised by --fail-on-coverage-gaps when packages could not be checked for
+    vulnerabilities, or when the server did not report whether any could not.
+
+    Exit code 30, the inconclusive-result code: the severity threshold cannot be
+    certified for packages that were not checked.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, exit_code=30)
+
+
 class KevGateExceeded(CRAEvidenceError):
     """Raised when the known-exploited vulnerability gate is exceeded."""
 

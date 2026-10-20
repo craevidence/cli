@@ -283,6 +283,7 @@ craevidence upload-sbom
   [--external-url <url>]
   [--release-state draft|pending_review|approved|released|deprecated|end_of_life]
   [--no-inherit]             # Do not inherit compliance artifacts from previous version
+  [--fail-on-coverage-gaps]  # With --fail-on: exit 30 on coverage gaps, or when none are reported
 ```
 
 **`--fail-on` requires `--scan`.** Using `--fail-on` without `--scan` is a usage
@@ -303,11 +304,18 @@ Exit codes when `--fail-on` is set:
 |------|---------|
 | 0 | No threshold exceeded |
 | 3 | Scan failed, scan disabled, or scan timed out |
-| 30 | Assessment incomplete or vulnerability applicability is unverified |
+| 30 | Assessment incomplete or vulnerability applicability is unverified; with `--fail-on-coverage-gaps`, also coverage gaps reported or not reported |
 | 10 | Critical vulnerabilities found |
 | 11 | High vulnerabilities found |
 | 12 | Medium vulnerabilities found |
 | 13 | Low vulnerabilities found |
+
+After the scan completes, the coverage gaps the server reports are shown (on
+stderr with `--output json`). See [Coverage gaps](#coverage-gaps).
+
+If the upload response includes `release_coverage_gaps` (an upload with
+`--release-state released`), text output lists them under "Recorded with the
+release".
 
 `--release-state` on upload is a lifecycle shortcut. It is not a CRA-readiness
 gate and does not prove the version is compliant. CRA Evidence applies the same
@@ -743,6 +751,7 @@ craevidence status
   --product <slug-or-id>
   --version <version-number>
   [--fail-on critical|high|medium|low|none]  # default: none
+  [--fail-on-coverage-gaps]  # With --fail-on: exit 30 on coverage gaps, or when none are reported
 ```
 
 When `--fail-on` is set to anything other than `none`, the command also gates
@@ -754,6 +763,11 @@ on CRA readiness. Exit codes:
 | 10-13 | Vulnerability threshold exceeded (critical/high/medium/low) |
 | 20 | CRA legal floor not met (CRA status is not `ready`) |
 | 24 | CRA legal floor met but release policy not met |
+| 30 | Assessment incomplete or vulnerability applicability is unverified; with `--fail-on-coverage-gaps`, also coverage gaps reported or not reported |
+
+Text output shows the coverage gaps the server reports after the summary table.
+With `-v` it also lists the assessment coverage of each current SBOM
+(`scan_coverage`). See [Coverage gaps](#coverage-gaps).
 
 Exit 24 applies when the server returns a `release_policy_status` field that is
 not `ready` while `cra_floor_status` is `ready`. This means the product passes
@@ -987,7 +1001,8 @@ During polling, each non-ready response prints a progress line to stdout showing
 elapsed time and the current status. The gate label is "Policy Status" when the
 server returns a `release_policy_status` field, or "CRA Status" otherwise.
 On success, the command prints which gate passed (Policy Status or CRA Status)
-before exiting 0. On timeout, the command exits 1.
+and the coverage gaps the server reports, before exiting 0. Coverage gaps do not
+change the exit code. On timeout, the command exits 1.
 
 ## `release`
 
@@ -1003,10 +1018,22 @@ craevidence release
   --version <version-number>
   --state draft|pending_review|approved|released|deprecated|end_of_life
   [--superseded-by <version>]  # Record successor version; only valid with deprecated/end_of_life
+  [--release-anyway --reason <text>]  # Only with --state released; reason of 10 to 2000 characters
 ```
 
 `--superseded-by` may only be used when `--state` is `deprecated` or
 `end_of_life`; passing it with any other state is a usage error (exit 2).
+
+`--release-anyway --reason <text>` asks to release even though a vulnerability
+scan problem blocks the release. It sends the form fields `release_anyway` and
+`release_anyway_reason`. It covers vulnerability scan problems only; every other
+release check still applies. The CLI rejects, with exit 2, `--release-anyway`
+without `--state released`, `--release-anyway` without a reason of 10 to 2000
+characters (leading and trailing spaces are not counted), and `--reason` without
+`--release-anyway`. CRA Evidence decides whether the release goes ahead. Text
+output reports `release_anyway_recorded`: recorded, not needed because no scan
+problem blocked the release, or not confirmed by the server. When the response
+includes `coverage_gaps`, they are listed under "Recorded with the release".
 
 When `--state deprecated` is used with `--superseded-by`, the old version is
 also archived (marked as replaced by the successor). Archiving does not occur
@@ -1023,6 +1050,7 @@ craevidence scan
   [--component <slug>]              # Multi-repo: scan the SBOM attributed to this component
   [--fail-on critical|high|medium]  # Exit non-zero if vulnerabilities at or above this level are found
   [--scan-timeout <seconds>]        # Max seconds to wait for scan completion (default: 300, min: 1)
+  [--fail-on-coverage-gaps]         # With --fail-on: exit 30 on coverage gaps, or when none are reported
 ```
 
 `--component` takes a `ProductComponent` slug. When set, the scan targets
@@ -1045,6 +1073,41 @@ Exit codes:
 | 10 | Critical vulnerabilities found |
 | 11 | High vulnerabilities found |
 | 12 | Medium vulnerabilities found |
+| 30 | Assessment incomplete or vulnerability applicability is unverified; with `--fail-on-coverage-gaps`, also coverage gaps reported or not reported |
+
+After the scan completes, the coverage gaps the server reports are shown (on
+stderr with `--output json`). See [Coverage gaps](#coverage-gaps).
+
+## Coverage gaps
+
+A coverage gap is a package a vulnerability scan could not check: the SBOM has no
+version or no supported package type for it, or the advisory data has no entry for
+its operating-system release. The vulnerability counts do not cover these
+packages. CRA Evidence reports them in `vulnerability_summary.coverage_gaps` of
+`GET /ci/status` (`state` `none` or `gaps`, `total`, `counts_by_reason`,
+`remedy`), per SBOM in `scan_coverage`, and in `coverage_gaps` of the
+release-state response.
+
+Text output lists the total, the count per reason and the next step for each:
+
+| Reason code | Shown as |
+|---|---|
+| `unknown-package-version` | no version in the SBOM |
+| `no-package-ecosystem` | no package type the scanner supports |
+| `distro-release-not-in-db` | operating-system release not in the advisory data |
+
+Any other reason code is shown as sent. When the server reports `none`, the
+output says "Coverage gaps: none reported." When the server does not send the
+field, nothing is shown. A field that cannot be read is reported as such.
+
+Coverage gaps do not change any exit code by default. With
+`--fail-on-coverage-gaps` and `--fail-on`, `status`, `scan` and `upload-sbom`
+exit 30 when gaps are reported, when the field is missing, or when it cannot be
+read. The check runs only when every other `--fail-on` check passes: the
+applicability and incomplete-assessment checks (also exit 30, with their own
+messages), the severity thresholds (10 to 13) and, on `status`, the CRA
+legal-floor and release-policy checks (20 and 24) keep their exit codes.
+Without `--fail-on`, `--fail-on-coverage-gaps` is a usage error (exit 2).
 
 ## `export`
 

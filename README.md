@@ -221,6 +221,20 @@ craevidence status --product my-product --version 1.0.0
 `upload-sbom` takes an SBOM you already have with `--file`, or generates one
 from `--image` or `--source`. See [Generating an SBOM](#generating-an-sbom).
 
+When CRA Evidence reports coverage gaps, packages a vulnerability scan could not
+check because the SBOM has no version or no supported package type for them, or
+because the advisory data has no entry for their operating-system release,
+`status`, `wait-ready`, `scan --fail-on`, `upload-sbom --scan --fail-on` and
+`release` show the count per reason and the next step for each. The vulnerability
+counts do not cover those packages. Coverage gaps do not change any exit code by
+default. `--fail-on-coverage-gaps` (with `--fail-on` on `status`, `scan` and
+`upload-sbom`) exits 30 when gaps are reported, or when the server does not report
+them, only after every other `--fail-on` check passes, so existing exit codes keep
+precedence. Nothing is shown when the server does not report coverage gaps.
+`release --state released --release-anyway --reason TEXT` asks to release even
+though a vulnerability scan problem blocks the release; the reason (10 to 2000
+characters) is recorded with it.
+
 For manufacturer products, create the version in the web app first. Version
 creation for those products requires a signed-in person; API keys and OIDC
 cannot create them. Existing versions can still be used by the CLI.
@@ -352,7 +366,7 @@ private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.
 | 27 | Code-check findings at or above the configured --fail-on level. |
 | 28 | Risk assessment review is still pending for the version (`ra status --fail-on unreviewed`, or `ra review --non-interactive` with unresolved review items). |
 | 29 | Code-check parser coverage is degraded while an explicit --fail-on gate is enabled. This takes precedence over exit 27 because the result is incomplete. |
-| 30 | The --fail-on gate cannot certify the severity threshold because the result is inconclusive: either vulnerability applicability was not verified for the version, or the vulnerability assessment is incomplete because some packages were not assessed. The message names which. Verify or resolve the affected findings, or re-run the scan once the server reports it complete. |
+| 30 | The --fail-on gate cannot certify the severity threshold because the result is inconclusive: either vulnerability applicability was not verified for the version, or the vulnerability assessment is incomplete because some packages were not assessed. With `--fail-on-coverage-gaps`, also when packages could not be checked (coverage gaps), or when the server does not report coverage gaps. The message names which. Verify or resolve the affected findings, or re-run the scan once the server reports it complete. |
 
 Exit 0 != compliance. Local output is a snapshot for review and CI policy, not
 a legal conclusion.
