@@ -35,9 +35,16 @@ The CLI Docker image is published to multiple registries:
 ### Building the Docker image from source
 
 The published Dockerfile defaults to Docker Hardened Images (DHI) from `dhi.io`
-and a digest-pinned CRA Evidence engine artifact. A source build requires read
-access to a supported engine image with `/grype`, `/LICENSE`, and `/NOTICE`.
-Stock Grype is not a compatible substitute.
+and a digest-pinned CRA Evidence engine artifact. The engine artifact is not
+published in a public registry, so the Dockerfile has no default location for
+it: a build without `GRYPE_ENGINE_REGISTRY` or `GRYPE_ENGINE_IMAGE` fails at the
+engine stage. A source build requires read access to a supported engine image
+with `/grype`, `/LICENSE`, and `/NOTICE`. Stock Grype is not a compatible
+substitute.
+
+Pass the registry that holds the pinned engine digest with
+`--build-arg GRYPE_ENGINE_REGISTRY=<registry>`, or a full image reference with
+`--build-arg GRYPE_ENGINE_IMAGE=<image>@sha256:...`.
 
 If you have a supported engine image but do not have DHI registry access, pass
 public Python base images and the engine image via build-args:

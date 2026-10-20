@@ -344,13 +344,22 @@ def test_all_engine_image_pins_use_the_dockerfile_digest():
         encoding="utf-8"
     )
     dockerfile_text = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
-    digest_pattern = r"craevidence/grype-engine@(sha256:[a-f0-9]{64})"
+    digest_pattern = r"ENGINE_DIGEST(?:=|: )(sha256:[a-f0-9]{64})"
     dockerfile_digests = re.findall(digest_pattern, dockerfile_text)
     workflow_digests = re.findall(digest_pattern, workflow_text)
 
     assert len(dockerfile_digests) == 1
     assert len(workflow_digests) == 4
     assert set(workflow_digests) == set(dockerfile_digests)
+
+
+def test_engine_image_has_no_private_registry_default():
+    for relative in ("Dockerfile", ".github/workflows/ci.yml"):
+        text = (REPO_ROOT / relative).read_text(encoding="utf-8")
+        assert not re.search(r"\d{12}\.dkr\.", text), relative
+
+    dockerfile_text = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert re.search(r"^ARG GRYPE_ENGINE_REGISTRY$", dockerfile_text, re.M)
 
 
 def test_v4_release_docs_use_the_v4_major_tag_before_release():

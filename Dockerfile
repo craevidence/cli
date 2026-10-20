@@ -49,10 +49,15 @@
 #     --build-arg SECURITY_HARDENED=false \
 #     --build-arg SECURITY_NO_SHELL=false \
 #     --build-arg SECURITY_NO_PACKAGE_MANAGER=false .
-# Scan engine: grype fork with improvements. The default is the digest-pinned
-# engine artifact. An override must provide the same supported CRA Evidence
-# engine contract, including /grype, /LICENSE and /NOTICE.
-ARG GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+# Scan engine: grype fork with improvements. The engine artifact is not published
+# in a public registry, so the registry host has no default: pass
+# --build-arg GRYPE_ENGINE_REGISTRY=<registry> to use the pinned digest from a
+# registry that holds it, or --build-arg GRYPE_ENGINE_IMAGE=<image>@sha256:...
+# for another location. An image must provide the supported CRA Evidence engine
+# contract, including /grype, /LICENSE and /NOTICE.
+ARG GRYPE_ENGINE_REGISTRY
+ARG GRYPE_ENGINE_DIGEST=sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+ARG GRYPE_ENGINE_IMAGE=${GRYPE_ENGINE_REGISTRY}/craevidence/grype-engine@${GRYPE_ENGINE_DIGEST}
 
 ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:c73dad82bf13f79fc2677318eb95c4a76c5920635d1177a2618da621c8953fbd
 # Declared here (before the first FROM) because Docker only resolves ARGs in

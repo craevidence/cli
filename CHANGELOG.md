@@ -44,6 +44,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Dockerfile no longer defaults the scan engine image to a private registry
+  address that outside users cannot pull. The registry host has no default: pass
+  `--build-arg GRYPE_ENGINE_REGISTRY=<registry>` for the pinned digest, or
+  `--build-arg GRYPE_ENGINE_IMAGE=<image>@sha256:...`. The pinned digest moves to
+  `ARG GRYPE_ENGINE_DIGEST`, and the release workflow takes the registry from its
+  engine login.
 - `check --strict` text and Markdown reports no longer say a blocking threshold was
   exceeded when the run failed because the vulnerability assessment is incomplete.
   The closing line now names that cause. The JSON `exit_note` and the exit code are

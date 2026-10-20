@@ -226,9 +226,11 @@ jobs:
       - name: Extract the promoted engine payload
         if: steps.ecr-login.outcome == 'success'
         env:
-          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+          ENGINE_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          ENGINE_DIGEST: sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
         run: |
           set -euo pipefail
+          ENGINE_IMAGE="${ENGINE_REGISTRY}/craevidence/grype-engine@${ENGINE_DIGEST}"
           payload="${RUNNER_TEMP}/craevidence-promoted-engine"
           mkdir -p "${payload}"
           docker pull "${ENGINE_IMAGE}" >/dev/null
@@ -304,7 +306,7 @@ jobs:
       - name: Build CLI Docker image
         if: steps.ecr-login.outcome == 'success'
         env:
-          ENGINE_ARG: --build-arg GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+          ENGINE_ARG: --build-arg GRYPE_ENGINE_REGISTRY=${{ steps.ecr-login.outputs.registry }} --build-arg GRYPE_ENGINE_DIGEST=sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
         run: |
           if [ "${{ steps.dhi-login.outcome }}" = "success" ]; then
             docker build ${ENGINE_ARG} -t craevidence:${{ steps.version.outputs.version }} .
@@ -791,6 +793,7 @@ jobs:
           role-to-assume: ${{ secrets.AWS_ECR_ENGINE_ROLE_ARN }}
           aws-region: eu-west-1
       - name: Login to Amazon ECR for the engine pull
+        id: ecr-login
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd  # v2.1.7
 
       # The Docker Hub destination is pinned to the exact published
@@ -876,11 +879,11 @@ jobs:
       - name: Bind the release image engine to the release source
         if: steps.existing.outputs.digest == ''
         env:
-          ENGINE_IMAGE: 636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+          ENGINE_DIGEST: sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
         run: |
           set -euo pipefail
-          expected=$(sed -n 's|^ARG GRYPE_ENGINE_IMAGE=.*@\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
-          actual="${ENGINE_IMAGE##*@}"
+          expected=$(sed -n 's|^ARG GRYPE_ENGINE_DIGEST=\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
+          actual="${ENGINE_DIGEST}"
           if [ -z "${expected}" ] || [ "$(printf '%s\n' "${expected}" | wc -l)" -ne 1 ]; then
             echo "::error::release Dockerfile does not contain exactly one digest-pinned engine image"
             exit 1
@@ -904,7 +907,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            GRYPE_ENGINE_IMAGE=636143320258.dkr.ecr.eu-west-1.amazonaws.com/craevidence/grype-engine@sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+            GRYPE_ENGINE_REGISTRY=${{ steps.ecr-login.outputs.registry }}
+            GRYPE_ENGINE_DIGEST=sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
           tags: |
             ghcr.io/${{ github.repository_owner }}/craevidence:${{ needs.validate-release.outputs.version }}
 
@@ -1262,7 +1266,7 @@ jobs:
           set -euo pipefail
           test -f engine/SHA256SUMS
           test -f engine/IMAGE_DIGEST
-          expected=$(sed -n 's|^ARG GRYPE_ENGINE_IMAGE=.*@\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
+          expected=$(sed -n 's|^ARG GRYPE_ENGINE_DIGEST=\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
           actual=$(cat engine/IMAGE_DIGEST)
           if [ -z "${expected}" ] || [ "$(printf '%s\n' "${expected}" | wc -l)" -ne 1 ]; then
             echo "::error::release Dockerfile does not contain exactly one digest-pinned engine image"
