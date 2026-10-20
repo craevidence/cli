@@ -19,6 +19,7 @@ from cra_evidence_cli.exceptions import ScanEngineUnavailable
 from cra_evidence_cli.local.models import (
     CoverageSource,
     Finding,
+    SearchedDistro,
     UnassessedPackage,
     normalize_severity,
 )
@@ -219,15 +220,91 @@ def _incomplete_assessment(assessment: Any) -> tuple[str, list[UnassessedPackage
         version = package.get("version")
         label = f"{identity}@{version}" if identity == package.get("name") and version else identity
         details.append(f"{label} ({matcher}: {reason})")
+        searched, searched_ok = _searched_distros(entry, reason)
+        candidate_count, candidate_ids, candidates_ok = _candidates(entry, reason)
         unassessed.append(
             UnassessedPackage(
                 name=package.get("name"),
                 version=package.get("version"),
                 purl=package.get("purl"),
                 reason=reason,
+                matcher=matcher,
+                searched_distros=searched,
+                candidate_count=candidate_count,
+                candidate_ids=candidate_ids,
+                malformed_detail=not (searched_ok and candidates_ok),
             )
         )
     return "Incomplete vulnerability assessment: " + "; ".join(details), unassessed
+
+
+_MAX_CANDIDATE_IDS = 20
+_SEARCHED_DISTRO_TEXT_KEYS = ("name", "version", "label", "channel")
+
+
+def _searched_distros(
+    entry: dict[str, Any], reason: str
+) -> tuple[tuple[SearchedDistro, ...], bool]:
+    """Searched operating-system scopes and whether the engine data was well-formed.
+
+    These details only explain an entry, so malformed data is dropped from the
+    report instead of rejecting the scan.
+    """
+    if "searchedDistros" not in entry:
+        return (), True
+    value = entry["searchedDistros"]
+    if (
+        reason != "distro-release-not-in-db"
+        or not isinstance(value, list)
+        or not value
+        or any(
+            not isinstance(item, dict)
+            or any(not isinstance(item.get(k), str) for k in _SEARCHED_DISTRO_TEXT_KEYS)
+            or not item["name"].strip()
+            or not isinstance(item.get("exact"), bool)
+            for item in value
+        )
+    ):
+        return (), False
+    return tuple(
+        SearchedDistro(
+            name=item["name"],
+            version=item["version"],
+            label=item["label"],
+            channel=item["channel"],
+            exact=item["exact"],
+        )
+        for item in value
+    ), True
+
+
+def _candidates(
+    entry: dict[str, Any], reason: str
+) -> tuple[int | None, tuple[str, ...] | None, bool]:
+    """Candidate vulnerability count and IDs, or None when not computed.
+
+    The engine writes both keys together, only for an unknown package version, with
+    at most 20 IDs. Anything else is malformed and reported as not computed, never
+    as a count of 0.
+    """
+    has_count = "candidateVulnerabilityCount" in entry
+    has_ids = "candidateVulnerabilityIds" in entry
+    if not has_count and not has_ids:
+        return None, None, True
+    count = entry.get("candidateVulnerabilityCount")
+    ids = entry.get("candidateVulnerabilityIds")
+    if (
+        not (has_count and has_ids)
+        or reason != "unknown-package-version"
+        or type(count) is not int
+        or count < 0
+        or not isinstance(ids, list)
+        or len(ids) > _MAX_CANDIDATE_IDS
+        or len(ids) > count
+        or any(not isinstance(item, str) or not item.strip() for item in ids)
+    ):
+        return None, None, False
+    return count, tuple(ids), True
 
 
 def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:

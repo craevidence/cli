@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `check` lists the packages the scan engine could not check. Packages without a
+  version or a package ecosystem, or whose operating-system release has no entry
+  in the vulnerability database, appear under "Not checked for vulnerabilities";
+  scanner failures and unrecognised reason codes appear under "Assessment failed".
+  Each reason shows its package count, up to five packages and the next step in the
+  text, Markdown and GitHub step summary reports. The JSON report adds an
+  `unassessed_packages` object (`null` when the local engine did not run) and SARIF
+  reports them as tool execution notifications, not results. Exit codes are unchanged.
 - `AGENTS.md`: contribution rules for people and coding agents (command interfaces,
   honest network claims, commit conventions, release gates and the root layout).
   `CLAUDE.md` imports it so Claude Code loads the same rules.

@@ -19,6 +19,7 @@ from typing import Any
 
 from ..ci_detect import detect_ci_environment
 from .models import LocalCheckResult
+from .report import package_count, unassessed_groups, unassessed_package_label
 
 # Severities treated as "error" level for GitHub annotations.
 _GITHUB_ERROR_SEVERITIES = {"critical", "high"}
@@ -161,13 +162,52 @@ def _indicative_summary_lines(result: LocalCheckResult) -> list[str]:
     return lines
 
 
+def _unassessed_summary_lines(result: LocalCheckResult) -> list[str]:
+    """Markdown sections for packages the engine did not check."""
+    data = result.to_dict()
+    report = data.get("unassessed_packages")
+    if not report:
+        return []
+    lines: list[str] = []
+    for category, heading in (
+        ("not_checked", "Not checked for vulnerabilities"),
+        ("assessment_failed", "Assessment failed"),
+    ):
+        total = report[category]["total_packages"]
+        if not total:
+            continue
+        lines.extend(
+            [
+                "",
+                f"#### {heading}: {package_count(total)}",
+                "",
+                "The vulnerability counts above do not cover these packages.",
+            ]
+        )
+        lines.extend(
+            ["", "| Reason | Packages | Names | What to do |", "| --- | --- | --- | --- |"]
+        )
+        for reason, group in unassessed_groups(data, category).items():
+            packages = list(group["packages"])
+            names = ", ".join(unassessed_package_label(key) for key in packages[:5])
+            if len(packages) > 5:
+                names += f", and {len(packages) - 5} more in the JSON report"
+            action = " ".join(group["remedies"])
+            lines.append(
+                f"| {_markdown_cell(reason)} | {len(packages)} | {_markdown_cell(names)} "
+                f"| {_markdown_cell(action)} |"
+            )
+    return lines
+
+
 def github_step_summary(result: LocalCheckResult) -> str:
     """Render a GitHub-flavored markdown table of findings, or a no-findings notice.
 
-    Indicative candidates follow in a separate section and are not counted.
+    Indicative candidates and packages the engine did not check follow in
+    separate sections and are not counted.
     """
     findings = _findings(result)
-    indicative_lines = _indicative_summary_lines(result)
+    indicative_lines = [*_indicative_summary_lines(result), *_unassessed_summary_lines(result)]
     if not findings:
         return "\n".join(
             [

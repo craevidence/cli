@@ -1221,9 +1221,15 @@ def test_exit_one_keeps_the_identity_and_reason_of_each_unassessed_package(monke
 
     assert coverage.unassessed_packages == [
         UnassessedPackage(
-            "broken-package", "2.0", "pkg:pypi/broken-package@2.0", "version-comparison-error"
+            "broken-package",
+            "2.0",
+            "pkg:pypi/broken-package@2.0",
+            "version-comparison-error",
+            "python",
         ),
-        UnassessedPackage("another-package", "3.0", None, "unknown-package-version"),
+        UnassessedPackage(
+            "another-package", "3.0", None, "unknown-package-version", "go-module-matcher"
+        ),
     ]
     assert "unassessed_packages" not in coverage.to_dict()
 

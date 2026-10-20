@@ -84,6 +84,15 @@ replacing them with OSV results. `--strict` rejects an incomplete Grype
 assessment. Without `--strict`, configured finding gates still apply, and exit
 0 does not mean every package was assessed.
 
+The reports list the packages Grype could not check, grouped by reason with the
+next step for each. "Not checked for vulnerabilities" covers packages whose SBOM
+entry has no version or no package ecosystem, and packages whose operating-system
+release has no entry in the vulnerability database. "Assessment failed" covers
+packages the scanner tried and failed to check, and any reason code this CLI
+does not recognise. The vulnerability counts do not cover either group. The JSON
+report carries them in `unassessed_packages` and SARIF as tool execution
+notifications, not results. Exit codes do not change.
+
 Grype returns match-all candidates for a component without a version, and
 candidates whose version evidence conflicts, for example a declared CPE at 1.10
 on a component shipped as 1.20. `check` applies the `concrete-v1` policy to each

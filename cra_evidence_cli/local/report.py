@@ -9,7 +9,7 @@ from urllib.parse import quote
 from rich.console import Console
 from rich.text import Text
 
-from cra_evidence_cli.local.models import LocalCheckResult
+from cra_evidence_cli.local.models import ASSESSMENT_FAILED_REMEDY, LocalCheckResult
 from cra_evidence_cli.styles import (
     STYLE_BLOCKER,
     STYLE_LABEL,
@@ -87,6 +87,7 @@ def print_text_report(
     console.print(Text("Summary", style=STYLE_TITLE))
     console.print(_summary_text(data["components"]["count"], summary, _indicative_total(data)))
     _print_identifier_coverage(console, data)
+    _print_unassessed(console, data)
 
     console.print()
     console.print(Text("Top actions", style=STYLE_TITLE))
@@ -145,6 +146,7 @@ def _text(data: dict[str, Any], verbose: bool = False, exit_code: int = 0) -> st
         ]
     )
     lines.extend(_identifier_coverage_lines(data))
+    lines.extend(_unassessed_lines(data))
     lines.extend(
         [
             "",
@@ -445,6 +447,143 @@ def _exit_line(data: dict[str, Any], exit_code: int) -> str:
     return data["exit_note"]
 
 
+_UNASSESSED_SHOWN = 5
+_UNASSESSED_REASON_LABELS = {
+    "unknown-package-version": "Package version unknown",
+    "no-package-ecosystem": "Package ecosystem unknown",
+    "distro-release-not-in-db": "Operating-system release not in the vulnerability database",
+    "matcher-error": "Matcher error",
+    "version-comparison-error": "Version comparison error",
+    "matcher-panic": "Matcher stopped unexpectedly",
+}
+_UNASSESSED_SECTIONS = (
+    ("not_checked", "Not checked for vulnerabilities", "warning", "not-checked"),
+    ("assessment_failed", "Assessment failed", "error", "assessment-failed"),
+)
+
+
+def _unassessed_reason_label(reason: str) -> str:
+    return _UNASSESSED_REASON_LABELS.get(reason, "Unrecognised reason")
+
+
+def unassessed_groups(data: dict[str, Any], category: str) -> dict[str, dict[str, Any]]:
+    """Entries of one category grouped by reason code, in reason order.
+
+    Each group holds its entries, its distinct packages (with the matchers that
+    reported each) and its distinct remedies.
+    """
+    report = data.get("unassessed_packages") or {}
+    groups: dict[str, dict[str, Any]] = {}
+    for entry in report.get("entries") or []:
+        if entry["category"] != category:
+            continue
+        group = groups.setdefault(
+            entry["reason"], {"entries": [], "packages": {}, "remedies": []}
+        )
+        group["entries"].append(entry)
+        key = (entry["name"] or "", entry["version"] or "", entry["purl"] or "")
+        matchers = group["packages"].setdefault(key, [])
+        if entry["matcher"] not in matchers:
+            matchers.append(entry["matcher"])
+        if entry["remedy"] not in group["remedies"]:
+            group["remedies"].append(entry["remedy"])
+    return dict(sorted(groups.items()))
+
+
+def package_count(count: int) -> str:
+    return f"{count} package" if count == 1 else f"{count} packages"
+
+
+def unassessed_package_label(key: tuple[str, str, str]) -> str:
+    name, version, purl = key
+    return f"{name or purl} {version or '(no version)'}"
+
+
+def _unassessed_lines(data: dict[str, Any]) -> list[str]:
+    """Packages the engine did not check, with the next step for each reason.
+
+    Shown whenever the engine reported any, because the vulnerability counts do
+    not cover them.
+    """
+    report = data.get("unassessed_packages")
+    if not report:
+        return []
+    lines: list[str] = []
+    for category, heading, _, _ in _UNASSESSED_SECTIONS:
+        total = report[category]["total_packages"]
+        if not total:
+            continue
+        lines.extend(
+            [
+                "",
+                f"{heading}: {package_count(total)}",
+                "The vulnerability counts above do not cover these packages.",
+            ]
+        )
+        if category == "assessment_failed":
+            lines.append(ASSESSMENT_FAILED_REMEDY)
+        for reason, group in unassessed_groups(data, category).items():
+            packages = group["packages"]
+            lines.append(
+                f"- {_unassessed_reason_label(reason)} ({reason}): {package_count(len(packages))}"
+            )
+            if category == "not_checked":
+                lines.extend(f"  {remedy}" for remedy in group["remedies"])
+            for key, matchers in list(packages.items())[:_UNASSESSED_SHOWN]:
+                lines.append(
+                    f"  - {unassessed_package_label(key)} (matcher: {', '.join(matchers)})"
+                )
+            if len(packages) > _UNASSESSED_SHOWN:
+                lines.append(
+                    f"  - ... and {len(packages) - _UNASSESSED_SHOWN} more; see --output json"
+                )
+    return lines
+
+
+def _print_unassessed(console: Console, data: dict[str, Any]) -> None:
+    lines = _unassessed_lines(data)
+    for index, line in enumerate(lines):
+        if not line:
+            console.print()
+        elif index and not lines[index - 1]:
+            console.print(Text(line, style=STYLE_TITLE))
+        else:
+            console.print(line, markup=False)
+
+
+def _sarif_invocations(data: dict[str, Any], sbom_uri: str) -> list[dict[str, Any]]:
+    """Packages the engine did not check, as tool execution notifications.
+
+    They describe the run, not the analysed SBOM, so they are never results.
+    """
+    notifications = []
+    for category, heading, level, prefix in _UNASSESSED_SECTIONS:
+        for reason, group in unassessed_groups(data, category).items():
+            text = (
+                f"{heading}, {_unassessed_reason_label(reason)} ({reason}): "
+                f"{package_count(len(group['packages']))}. {' '.join(group['remedies'])}"
+            )
+            notifications.append(
+                {
+                    "level": level,
+                    "descriptor": {"id": f"craevidence/{prefix}/{reason}"},
+                    "message": {"text": text},
+                    "locations": [
+                        {"physicalLocation": {"artifactLocation": {"uri": sbom_uri}}}
+                    ],
+                    "properties": {"packages": group["entries"]},
+                }
+            )
+    if not notifications:
+        return []
+    return [
+        {
+            "executionSuccessful": all(item["level"] != "error" for item in notifications),
+            "toolExecutionNotifications": notifications,
+        }
+    ]
+
+
 def _identifier_coverage_lines(data: dict[str, Any]) -> list[str]:
     """Plain-text lines for identifier field presence when it is measured.
 
@@ -487,29 +626,31 @@ def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
                 "properties": finding,
             }
         )
+    run: dict[str, Any] = {
+        "tool": {
+            "driver": {
+                "name": "craevidence local check",
+                "informationUri": "https://craevidence.com",
+                "properties": {
+                    "coverage": data["coverage"],
+                    "identifierCoverage": data.get("identifier_coverage"),
+                    "provenance": data["provenance"],
+                    "attributions": data["attributions"],
+                    "vexSuppressions": data.get("suppressions") or [],
+                    "indicativeCandidates": data.get("indicative_findings") or [],
+                    "advisory": data["advisory"],
+                },
+            }
+        },
+        "results": results,
+    }
+    invocations = _sarif_invocations(data, sbom_uri)
+    if invocations:
+        run["invocations"] = invocations
     return {
         "version": "2.1.0",
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
-        "runs": [
-            {
-                "tool": {
-                    "driver": {
-                        "name": "craevidence local check",
-                        "informationUri": "https://craevidence.com",
-                        "properties": {
-                            "coverage": data["coverage"],
-                            "identifierCoverage": data.get("identifier_coverage"),
-                            "provenance": data["provenance"],
-                            "attributions": data["attributions"],
-                            "vexSuppressions": data.get("suppressions") or [],
-                            "indicativeCandidates": data.get("indicative_findings") or [],
-                            "advisory": data["advisory"],
-                        },
-                    }
-                },
-                "results": results,
-            }
-        ],
+        "runs": [run],
     }
 
 

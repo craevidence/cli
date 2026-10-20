@@ -99,11 +99,141 @@ class Finding:
 
 
 @dataclass(frozen=True)
+class SearchedDistro:
+    """One operating-system scope the engine searched for a package."""
+
+    name: str
+    version: str = ""
+    label: str = ""
+    channel: str = ""
+    exact: bool = False
+
+    def display(self) -> str:
+        text = " ".join(part for part in (self.name, self.version or self.label) if part)
+        return f"{text} ({self.channel} channel)" if self.channel else text
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "version": self.version,
+            "label": self.label,
+            "channel": self.channel,
+            "exact": self.exact,
+        }
+
+
+@dataclass(frozen=True)
 class UnassessedPackage:
     name: str | None
     version: str | None
     purl: str | None
     reason: str
+    matcher: str = ""
+    searched_distros: tuple[SearchedDistro, ...] = ()
+    candidate_count: int | None = None
+    candidate_ids: tuple[str, ...] | None = None
+    malformed_detail: bool = False
+
+
+# Reason codes for packages the engine did not check because the SBOM data or the
+# vulnerability database lacked what the search needs. Every other code, including
+# one this CLI does not know, means the assessment failed.
+NOT_CHECKED_REASONS = (
+    "unknown-package-version",
+    "no-package-ecosystem",
+    "distro-release-not-in-db",
+)
+ASSESSMENT_FAILED_REMEDY = (
+    "The scanner could not check these packages. Scan again; if it persists, report it."
+)
+_NOT_CHECKED_REMEDIES = {
+    "unknown-package-version": (
+        "Add the resolved version (for example, generate the SBOM from the lock file "
+        "or build output) and scan again."
+    ),
+    "no-package-ecosystem": (
+        "Give the package a typed purl (pkg:type/name@version) or a CPE and scan again."
+    ),
+}
+
+
+def unassessed_category(reason: str) -> str:
+    return "not_checked" if reason in NOT_CHECKED_REASONS else "assessment_failed"
+
+
+def unassessed_remedy(package: UnassessedPackage) -> str:
+    if package.reason == "distro-release-not-in-db":
+        scopes = [scope.display() for scope in package.searched_distros]
+        if len(scopes) > 1:
+            scope_text = f"scopes {', '.join(scopes)}"
+        elif scopes:
+            scope_text = f"scope {scopes[0]}"
+        else:
+            scope_text = "scope"
+        return (
+            f"The vulnerability database has no entry for the requested operating-system "
+            f"{scope_text}. Either the advisory data does not cover that release, or the "
+            "operating-system identity in the SBOM is not the intended one."
+        )
+    return _NOT_CHECKED_REMEDIES.get(package.reason, ASSESSMENT_FAILED_REMEDY)
+
+
+def unassessed_report(packages: list[UnassessedPackage] | None) -> dict[str, Any] | None:
+    """Packages the engine did not check, grouped by category and reason code.
+
+    None means no engine assessment was made, so nothing was measured. Counts are
+    distinct packages, not engine entries: one package reported by two matchers
+    counts once.
+    """
+    if packages is None:
+        return None
+
+    def key(package: UnassessedPackage) -> tuple[str, str, str]:
+        return (package.name or "", package.version or "", package.purl or "")
+
+    categories: dict[str, dict[str, set[tuple[str, str, str]]]] = {
+        "not_checked": {},
+        "assessment_failed": {},
+    }
+    for package in packages:
+        reasons = categories[unassessed_category(package.reason)]
+        reasons.setdefault(package.reason, set()).add(key(package))
+    entries = sorted(
+        packages,
+        key=lambda p: (
+            unassessed_category(p.reason) != "not_checked",
+            p.reason,
+            *key(p),
+            p.matcher,
+        ),
+    )
+    return {
+        "total_packages": len({key(package) for package in packages}),
+        **{
+            category: {
+                "total_packages": len(set().union(*reasons.values())),
+                "by_reason": {reason: len(keys) for reason, keys in sorted(reasons.items())},
+            }
+            for category, reasons in categories.items()
+        },
+        "entries": [
+            {
+                "name": package.name,
+                "version": package.version,
+                "purl": package.purl,
+                "matcher": package.matcher,
+                "reason": package.reason,
+                "category": unassessed_category(package.reason),
+                "remedy": unassessed_remedy(package),
+                "searched_distros": [scope.to_dict() for scope in package.searched_distros],
+                "candidate_vulnerability_count": package.candidate_count,
+                "candidate_vulnerability_ids": (
+                    None if package.candidate_ids is None else list(package.candidate_ids)
+                ),
+            }
+            for package in entries
+        ],
+    }
 
 
 @dataclass
@@ -139,6 +269,7 @@ class LocalCheckResult:
     suppressions: list[dict[str, Any]] = field(default_factory=list)
     identifier_coverage: dict[str, Any] | None = None
     indicative_findings: list[Finding] = field(default_factory=list)
+    unassessed_packages: list[UnassessedPackage] | None = None
 
     def to_dict(self, exit_code: int = 0) -> dict[str, Any]:
         summary = summarize_findings(self.findings)
@@ -176,6 +307,7 @@ class LocalCheckResult:
             "sources_consulted": self.sources_consulted,
             "attributions": self.attributions,
             "baseline": self.baseline,
+            "unassessed_packages": unassessed_report(self.unassessed_packages),
             "exit_note": exit_note,
             "advisory": advisory_block(),
         }

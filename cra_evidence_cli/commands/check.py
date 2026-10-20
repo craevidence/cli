@@ -537,18 +537,26 @@ def _run_local_check_on_sbom(
     scanner = GrypeLocalScanner()
     findings = []
     unassessed: list[UnassessedPackage] = []
+    measured_unassessed: list[UnassessedPackage] | None = None
     engine = "none"
     if scanner.is_available():
         try:
             findings, source = scanner.scan_sbom(sbom_path)
             coverage.append(source)
             unassessed = source.unassessed_packages
+            measured_unassessed = unassessed
             sources_consulted.add("grype")
             engine = "grype-local"
             if source.status == "partial":
                 click.echo(
                     "Warning: Grype returned an incomplete vulnerability assessment; "
                     "valid findings are retained.",
+                    err=True,
+                )
+            if any(package.malformed_detail for package in unassessed):
+                click.echo(
+                    "Warning: the scan engine returned malformed details for packages it "
+                    "could not check; those details are not shown.",
                     err=True,
                 )
         except ScanEngineUnavailable as exc:
@@ -672,6 +680,7 @@ def _run_local_check_on_sbom(
         suppressions=suppressions,
         identifier_coverage=id_coverage,
         indicative_findings=indicative_findings,
+        unassessed_packages=measured_unassessed,
     )
     if strict and any(
         source.status in {"stale", "unavailable"}

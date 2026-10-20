@@ -65,6 +65,30 @@ Notes:
   report as "Not reassessed: package could not be assessed in this scan". It is not counted as
   removed or fixed and it is not new, so `--fail-on-new` ignores it. Baseline rows that list only
   an ID, without a package, cannot be matched and keep being reported as removed.
+- Packages Grype could not check: when Grype returns an incomplete assessment, every report
+  lists the packages it named, grouped by reason code, with the next step for each reason.
+  The vulnerability counts do not cover these packages, and the lists never change the exit code.
+  - Not checked for vulnerabilities: `unknown-package-version` (add the resolved version),
+    `no-package-ecosystem` (give the package a typed purl or a CPE) and
+    `distro-release-not-in-db` (the vulnerability database has no entry for the requested
+    operating-system scope, which the report names).
+  - Assessment failed: `matcher-error`, `version-comparison-error`, `matcher-panic` and any
+    reason code this CLI does not recognise. Scan again; if it persists, report it.
+  - Text and Markdown: a section for each group after the summary, up to five packages per
+    reason. `--strict` runs that exit 15 for this reason say so in the closing line.
+  - JSON: the top-level `unassessed_packages` object, `null` when the local engine did not run
+    (for example on the OSV.dev fallback) and zero counts with no entries when it found nothing
+    to report. It holds `total_packages`, `not_checked` and `assessment_failed` (each with
+    `total_packages` and `by_reason`, counted as distinct packages), and every engine entry
+    under `entries` (`name`, `version`, `purl`, `matcher`, `reason`, `category`, `remedy`,
+    `searched_distros`, `candidate_vulnerability_count`, `candidate_vulnerability_ids`). The
+    candidate fields are `null` when the engine did not report them. Malformed engine details
+    are left out with one stderr warning; the package stays listed.
+  - SARIF: `runs[0].invocations[0].toolExecutionNotifications`, one notification per reason
+    (`craevidence/not-checked/<reason>` at level `warning`, `craevidence/assessment-failed/<reason>`
+    at level `error`), never `results`. `executionSuccessful` is `false` when an
+    assessment-failed notification is present. A run with nothing to report has no `invocations`.
+  - GitHub step summary: a table for each group. GitHub and GitLab annotations: none.
 - `--deny-license` reads the per-component licenses already parsed from the SBOM, e.g.
   `--deny-license AGPL-3.0-only,GPL-3.0-only`.
 - `--sbom-quality` / `--fail-on-score` require the optional `sbomqs` binary on `PATH`.
