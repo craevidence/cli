@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `check --strict` text and Markdown reports no longer say a blocking threshold was
+  exceeded when the run failed because the vulnerability assessment is incomplete.
+  The closing line now names that cause. The JSON `exit_note` and the exit code are
+  unchanged.
 - `check --baseline` no longer reports a baseline vulnerability as removed when its
   package could not be assessed in the current scan. When the engine returns an
   incomplete assessment, a baseline vulnerability that is absent from the current

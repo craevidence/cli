@@ -65,8 +65,8 @@ def render(
         sbom_uri = _resolve_sarif_sbom_uri(result)
         return json.dumps(_sarif(data, sbom_uri=sbom_uri), indent=2, sort_keys=True)
     if output_format == "markdown":
-        return _markdown(data, verbose)
-    return _text(data, verbose)
+        return _markdown(data, verbose, exit_code)
+    return _text(data, verbose, exit_code)
 
 
 def print_text_report(
@@ -123,10 +123,10 @@ def print_text_report(
         )
 
     console.print()
-    console.print(Text(data["exit_note"], style=STYLE_MUTED))
+    console.print(Text(_exit_line(data, exit_code), style=STYLE_MUTED))
 
 
-def _text(data: dict[str, Any], verbose: bool = False) -> str:
+def _text(data: dict[str, Any], verbose: bool = False, exit_code: int = 0) -> str:
     summary = data["summary"]
     lines = ["Local SBOM Check"]
     if verbose:
@@ -213,12 +213,12 @@ def _text(data: dict[str, Any], verbose: bool = False) -> str:
                 ),
             ]
         )
-    lines.extend(["", data["exit_note"]])
+    lines.extend(["", _exit_line(data, exit_code)])
     return "\n".join(lines)
 
 
-def _markdown(data: dict[str, Any], verbose: bool = False) -> str:
-    text = _text(data, verbose)
+def _markdown(data: dict[str, Any], verbose: bool = False, exit_code: int = 0) -> str:
+    text = _text(data, verbose, exit_code)
     return "# " + text.replace("\n\n", "\n\n## ")
 
 
@@ -430,6 +430,19 @@ def _not_reassessed_lines(baseline: dict[str, Any]) -> list[str]:
     shown = ", ".join(not_reassessed[:5]) + ("..." if len(not_reassessed) > 5 else "")
     text = "package could not be assessed in this scan"
     return [f"- Not reassessed: {text}: {len(not_reassessed)} ({shown})"]
+
+
+def _exit_line(data: dict[str, Any], exit_code: int) -> str:
+    # The JSON exit_note keeps its wording; the human report names the real cause.
+    if (
+        exit_code == 15
+        and data["provenance"].get("strict_failure") == "incomplete vulnerability assessment"
+    ):
+        return (
+            "Exit 15: strict mode failed because the vulnerability assessment is incomplete, "
+            "not because a blocking threshold was exceeded."
+        )
+    return data["exit_note"]
 
 
 def _identifier_coverage_lines(data: dict[str, Any]) -> list[str]:

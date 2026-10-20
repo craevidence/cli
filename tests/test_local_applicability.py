@@ -5,6 +5,7 @@ candidates whose version evidence conflicts. These tests drive engine-shaped JSO
 through the parser, the ``check`` command and every report format.
 """
 
+import io
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ from types import SimpleNamespace
 import click
 import pytest
 from click.testing import CliRunner
+from rich.console import Console
 
 from cra_evidence_cli.cli import cli
 from cra_evidence_cli.commands import check as check_module
@@ -25,6 +27,7 @@ from cra_evidence_cli.local.models import (
     LocalCheckResult,
     UnassessedPackage,
 )
+from cra_evidence_cli.local.report import print_text_report, render
 from cra_evidence_cli.local.scanner import parse_grype_output
 
 TODAY = datetime.now(UTC).date().isoformat()
@@ -418,6 +421,58 @@ def test_partial_assessment_and_strict_behaviour_are_unchanged(
     assert report["coverage"][0]["status"] == "partial"
     assert len(report["indicative_findings"]) == 2
     assert ("strict_failure" in report["provenance"]) is strict
+
+
+_STRICT_INCOMPLETE_LINE = (
+    "Exit 15: strict mode failed because the vulnerability assessment is incomplete, "
+    "not because a blocking threshold was exceeded."
+)
+_THRESHOLD_LINE = "configured blocking threshold exceeded in this local snapshot."
+
+
+@pytest.mark.parametrize("output", ["text", "markdown"])
+def test_strict_closing_line_names_the_incomplete_assessment(monkeypatch, tmp_path, output):
+    """Fails if a strict failure caused by an incomplete scan blames a blocking threshold."""
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    result = _run(
+        monkeypatch, tmp_path, [], ["--output", output, "--strict"], assessment=assessment
+    )
+
+    assert result.exit_code == 15, result.output
+    assert result.stdout.rstrip().endswith(_STRICT_INCOMPLETE_LINE)
+    assert _THRESHOLD_LINE not in result.stdout
+
+
+def test_strict_incomplete_json_exit_note_is_unchanged(monkeypatch, tmp_path):
+    """Fails if the fix to the human-readable line also rewrites the JSON exit_note."""
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+
+    _, report = _json_run(monkeypatch, tmp_path, [], ["--strict"], assessment=assessment)
+
+    assert report["exit_note"] == f"Exit 15: {_THRESHOLD_LINE}"
+
+
+def test_terminal_closing_line_names_the_incomplete_assessment():
+    """Fails if the interactive terminal report keeps the threshold wording."""
+    result = _result_with()
+    result.provenance = {"strict_failure": "incomplete vulnerability assessment"}
+    buffer = io.StringIO()
+
+    print_text_report(Console(file=buffer, width=400, color_system=None), result, exit_code=15)
+
+    assert _STRICT_INCOMPLETE_LINE in buffer.getvalue()
+
+
+def test_closing_line_for_other_exits_is_unchanged():
+    """Fails if the new line is used for an exit that the incomplete scan did not cause."""
+    result = _result_with()
+    result.provenance = {"strict_failure": "incomplete vulnerability assessment"}
+
+    assert render(result, "text", exit_code=10).endswith(f"Exit 10: {_THRESHOLD_LINE}")
+    assert render(result, "text", exit_code=0).endswith(
+        "Exit 0 means no configured blocking findings in this local snapshot."
+    )
 
 
 # --- report formats ---------------------------------------------------------
