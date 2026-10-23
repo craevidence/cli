@@ -6,11 +6,21 @@ import json
 import random
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
 from cra_evidence_cli.local.models import Component, CoverageSource, Finding, normalize_severity
+from cra_evidence_cli.local.version_applicability import (
+    REASON_VERSION_CONFLICT,
+    InvalidPurlEpoch,
+    canonical_rpm_conflict_version,
+    effective_purl_version,
+    is_concrete_version,
+    is_rpm_purl,
+    parse_purl_version,
+    purl_version_token,
+)
 
 OSV_QUERYBATCH_URL = "https://api.osv.dev/v1/querybatch"
 OSV_VULN_URL = "https://api.osv.dev/v1/vulns"
@@ -30,8 +40,34 @@ class OSVClient:
         self,
         components: list[Component],
     ) -> tuple[list[Finding], CoverageSource]:
-        queries = [self._query_for(component) for component in components if component.purl]
+        queries = []
+        conflicts = 0
+        invalid_epochs = 0
+        for component in components:
+            if not component.purl:
+                continue
+            try:
+                query = self._query_for(component)
+            except InvalidPurlEpoch:
+                invalid_epochs += 1
+                continue
+            queries.append(query)
+            conflicts += "_applicability_evidence" in query
+
+        details = []
+        if conflicts:
+            details.append(
+                f"{conflicts} component occurrence(s) have conflicting explicit and PURL versions; "
+                "PURL-query candidates, if any, are indicative"
+            )
+        if invalid_epochs:
+            details.append(
+                f"{invalid_epochs} component occurrence(s) skipped locally: "
+                "invalid or ambiguous RPM PURL epoch"
+            )
         if not queries:
+            if details:
+                return [], CoverageSource("osv.dev", "partial", detail="; ".join(details))
             return [], CoverageSource("osv.dev", "skipped", detail="No component PURLs found")
 
         findings: list[Finding] = []
@@ -50,8 +86,9 @@ class OSVClient:
             msg = f"OSV.dev request failed: {exc}"
             raise OSVClientError(msg) from exc
         if skipped:
-            detail = f"{skipped} component(s) skipped: OSV.dev rejected the identifier"
-            return findings, CoverageSource("osv.dev", "partial", detail=detail)
+            details.append(f"{skipped} component(s) skipped: OSV.dev rejected the identifier")
+        if details:
+            return findings, CoverageSource("osv.dev", "partial", detail="; ".join(details))
         return findings, CoverageSource("osv.dev", "present")
 
     def _query_batch(
@@ -82,12 +119,29 @@ class OSVClient:
         return self._parse_results(queries, data.get("results")), 0
 
     def _query_for(self, component: Component) -> dict[str, Any]:
-        return {
+        query = {
             "package": {"purl": component.purl},
             "version": component.version or "",
             "_component_name": component.name,
             "_component_purl": component.purl,
         }
+        version = effective_purl_version(component.purl)
+        if is_concrete_version(component.version) and is_concrete_version(version):
+            canonical = canonical_rpm_conflict_version if is_rpm_purl(component.purl) else str.strip
+            concrete_versions = sorted(
+                {canonical(cast(str, component.version)), canonical(cast(str, version))}
+            )
+            if len(concrete_versions) > 1:
+                evidence = {
+                    "component_version": component.version,
+                    "purl": component.purl,
+                    "purl_version": parse_purl_version(component.purl),
+                    "concrete_versions": concrete_versions,
+                }
+                if version != evidence["purl_version"]:
+                    evidence["effective_purl_version"] = version
+                query["_applicability_evidence"] = evidence
+        return query
 
     def _api_query(self, query: dict[str, Any]) -> dict[str, Any]:
         """Build the OSV payload for one query, dropping internal bookkeeping.
@@ -99,7 +153,7 @@ class OSVClient:
         purl = query.get("_component_purl") or query["package"].get("purl") or ""
         api: dict[str, Any] = {"package": {"purl": purl}}
         version = query.get("version")
-        if version and "@" not in purl:
+        if version and purl_version_token(purl) is None:
             api["version"] = version
         return api
 
@@ -232,6 +286,10 @@ class OSVClient:
                         ],
                         known_exploited=None,
                         source="osv",
+                        indicative_reason=(
+                            REASON_VERSION_CONFLICT if "_applicability_evidence" in query else None
+                        ),
+                        applicability_evidence=query.get("_applicability_evidence"),
                     )
                 )
         return findings

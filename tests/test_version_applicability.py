@@ -21,6 +21,7 @@ from cra_evidence_cli.local.version_applicability import (
     is_concrete_version,
     parse_cpe_version,
     parse_purl_version,
+    purl_version_token,
 )
 
 
@@ -650,3 +651,29 @@ def test_result_is_dataclass_shape():
         "package_versions",
         "concrete_versions",
     }
+
+
+@pytest.mark.parametrize(
+    ("purl", "token", "decoded"),
+    [
+        (None, None, None),
+        ("pkg:pypi/a?origin=user@host", None, None),
+        ("pkg:pypi/a#path/@release", None, None),
+        ("pkg:npm/%40scope/name", None, None),
+        ("pkg:npm/@scope/name", None, None),
+        ("pkg:generic/a@release/1", "release/1", "release/1"),
+        ("pkg:npm/@scope/name@release/1", "release/1", "release/1"),
+        ("pkg:npm/%40scope/name@1", "1", "1"),
+        ("pkg:npm/@scope/name@1?origin=a@b#c@d", "1", "1"),
+        ("pkg:pypi/a@", "", None),
+        ("pkg:pypi/a@unknown", "unknown", "unknown"),
+        ("pkg:pypi/a@*", "*", "*"),
+        ("pkg:deb/a@1%2Bfix", "1%2Bfix", "1+fix"),
+        ("pkg:deb/a@1%252Bfix", "1%252Bfix", "1%2Bfix"),
+    ],
+)
+def test_purl_version_boundaries_preserve_presence_and_decode_once(purl, token, decoded):
+    """Catch first/any-@ extraction, lost empty presence and repeated decoding."""
+    assert purl_version_token(purl) == token
+    assert parse_purl_version(purl) == decoded
+    assert effective_purl_version(purl) == decoded

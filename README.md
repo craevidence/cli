@@ -113,6 +113,15 @@ behind one numeric epoch: `1:-`, `1:*` and `1:unknown` are not concrete. `1:1.0-
 is stripped. This is a conservative input policy of this CLI, not a statement about how
 any package ecosystem names its releases.
 
+When OSV.dev is used, a concrete component version that disagrees with its PURL
+version makes that occurrence's results indicative, using `version_conflict`.
+The original PURL is queried unchanged. OSV coverage is partial even if that query
+returns no advisories, and reports show the affected occurrence count. Invalid or
+ambiguous RPM epoch declarations are skipped locally and counted separately from
+identifiers rejected by OSV. Other occurrences continue to be queried. Versions
+are compared as trimmed text, with RPM epoch handling only for RPM PURLs. OSV
+partial coverage alone does not fail `--strict`; other configured gates still apply.
+
 SBOM license expressions are preserved as written. `--deny-license` compares
 complete license strings without evaluating `AND`, `OR`, or `WITH` expressions.
 

@@ -139,7 +139,10 @@ Notes:
   count or EPSS, and the KEV and EPSS lookups skip them. A match with an unknown match-detail
   type, no match details, or a `cpe-match` without valid CPE evidence is malformed engine output:
   it takes the same path as other malformed Grype output (OSV.dev fallback, and `--strict`
-  exits 15). The OSV.dev fallback does not classify matches.
+  exits 15). The OSV.dev fallback compares the component version with its PURL version.
+  When both name concrete but different versions, that occurrence's returned results are
+  indicative with `version_conflict`, and OSV coverage is partial even if no advisories
+  are returned. OSV partial coverage alone does not fail `--strict`.
 - Each finding's exploit probability is shown inline when available and used to
   rank the "Top actions".
 - `--vex` consumes an [OpenVEX](https://openvex.dev/) (or CSAF VEX) document and suppresses a

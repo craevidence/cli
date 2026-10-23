@@ -70,6 +70,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and labels the local modification date separately.
 - JSON output from `validate` now exits 1 when the server reports an invalid SBOM,
   matching text output. The returned JSON payload is unchanged.
+- `check` keeps OSV.dev candidates indicative when a concrete component version
+  conflicts with its PURL version. Coverage is partial even without advisories;
+  reports show separate counts for conflicting occurrences, locally invalid RPM
+  epochs and OSV identifier rejections. Queries keep their original PURLs, and
+  OSV partial coverage alone does not change strict-mode exit behavior.
+- PURL version extraction distinguishes a release from `@` in a namespace,
+  qualifier or subpath and preserves one version carrier in OSV requests.
+
 - `check` no longer treats a version of `-` behind a numeric epoch (`1:-`) as a
   concrete version. Like `*`, `-` and `unknown`, it names no version, with or without
   the epoch. Versions such as `1:1.0-1`, `0` and `unknown-1` stay concrete.

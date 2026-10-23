@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -44,7 +45,8 @@ def test_api_query_unversioned_purl_keeps_version() -> None:
     assert api == {"package": {"purl": "pkg:pypi/urllib3"}, "version": "1.0"}
 
 
-def test_query_batch_skips_a_single_bad_purl(monkeypatch) -> None:
+@pytest.mark.parametrize("version", ["1", "2"])
+def test_query_batch_skips_a_single_bad_purl(monkeypatch, version) -> None:
     # OSV 400s a whole batch if any identifier is malformed. One bad purl must
     # not drop the others: the good ones still resolve, the bad one is skipped
     # and counted, and coverage is reported as partial (not a silent pass).
@@ -62,9 +64,9 @@ def test_query_batch_skips_a_single_bad_purl(monkeypatch) -> None:
     monkeypatch.setattr(OSVClient, "_post_with_retries", fake_post)
     monkeypatch.setattr(OSVClient, "_get_with_retries", lambda self, http_client, url: {})
     components = [
-        Component(name="good1", version="1", purl="pkg:pypi/good1@1"),
-        Component(name="bad", version="1", purl="pkg:generic/bad@1"),
-        Component(name="good2", version="1", purl="pkg:pypi/good2@1"),
+        Component(name="good1", version=version, purl="pkg:pypi/good1@1"),
+        Component(name="bad", version=version, purl="pkg:generic/bad@1"),
+        Component(name="good2", version=version, purl="pkg:pypi/good2@1"),
     ]
     findings, coverage = client.query_components(components)
     found = {finding.id for finding in findings}
@@ -72,7 +74,15 @@ def test_query_batch_skips_a_single_bad_purl(monkeypatch) -> None:
     assert any("good2" in fid for fid in found)
     assert not any("bad" in fid for fid in found)
     assert coverage.status == "partial"
-    assert "1 component" in (coverage.detail or "")
+    rejection = "1 component(s) skipped: OSV.dev rejected the identifier"
+    expected = rejection
+    if version == "2":
+        expected = (
+            "3 component occurrence(s) have conflicting explicit and PURL versions; "
+            "PURL-query candidates, if any, are indicative; " + rejection
+        )
+    assert coverage.detail == expected
+    assert [finding.is_indicative for finding in findings] == [version == "2"] * 2
 
 
 def _run_osv_with_mock_transport(
@@ -309,9 +319,19 @@ def test_severity_from_osv_cvss_vector_buckets() -> None:
     )
 
 
-def test_fail_on_high_gate_trips_via_osv_path(monkeypatch, tmp_path) -> None:
-    # With Grype absent, the OSV path must yield real severities so that
-    # --fail-on high exits 11 instead of silently passing on "unknown".
+@pytest.mark.parametrize(
+    ("versions", "empty", "exit_code", "confirmed", "indicative"),
+    [
+        (["1.0"], False, 11, 1, 0),
+        (["2.0"], False, 0, 0, 1),
+        (["2.0", "1.0"], False, 11, 1, 1),
+        (["2.0"], True, 0, 0, 0),
+    ],
+)
+def test_osv_applicability_controls_high_gate(
+    monkeypatch, tmp_path, versions, empty, exit_code, confirmed, indicative
+) -> None:
+    """Catch candidate enrichment/gating, global demotion and OSV-partial strict failure."""
     monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
     monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
 
@@ -329,19 +349,27 @@ def test_fail_on_high_gate_trips_via_osv_path(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         OSVClient,
         "_post_with_retries",
-        lambda self, http_client, payload: {"results": [{"vulns": [{"id": "GHSA-aaaa"}]}]},
+        lambda self, http_client, payload: {
+            "results": [
+                {"vulns": [] if empty else [{"id": "GHSA-aaaa"}]}
+                for query in payload["queries"]
+            ]
+        },
     )
     monkeypatch.setattr(OSVClient, "_get_with_retries", _fake_get([]))
+    today = datetime.now(UTC).date().isoformat()
     monkeypatch.setattr(
         check_module,
         "fetch_kev_catalog",
-        lambda: (set(), CoverageSource("cisa-kev", "present", as_of="2026-06-10")),
+        lambda: ({"CVE-2024-0001"}, CoverageSource("cisa-kev", "present", as_of=today)),
     )
-    monkeypatch.setattr(
-        check_module,
-        "fetch_epss_scores",
-        lambda cves: ({}, CoverageSource("first-epss", "present", as_of="2026-06-10")),
-    )
+    epss_queries = []
+
+    def fake_epss(cves):
+        epss_queries.append(cves)
+        return {"CVE-2024-0001": 0.9}, CoverageSource("first-epss", "present", as_of=today)
+
+    monkeypatch.setattr(check_module, "fetch_epss_scores", fake_epss)
     sbom = tmp_path / "sbom.json"
     sbom.write_text(
         json.dumps(
@@ -352,20 +380,30 @@ def test_fail_on_high_gate_trips_via_osv_path(monkeypatch, tmp_path) -> None:
                     {
                         "type": "library",
                         "name": "acme",
-                        "version": "1.0",
+                        "version": version,
                         "purl": "pkg:pypi/acme@1.0",
                     }
+                    for version in versions
                 ],
             }
         )
     )
     result = CliRunner().invoke(
-        cli, ["--output", "json", "check", "--sbom", str(sbom), "--fail-on", "high"]
+        cli, ["--output", "json", "check", "--sbom", str(sbom), "--fail-on", "high", "--strict"]
     )
-    assert result.exit_code == 11
+    assert result.exit_code == exit_code, result.output
     payload = json.loads(result.stdout)
-    assert payload["findings"][0]["severity"] == "high"
-    assert payload["findings"][0]["cve_aliases"] == ["CVE-2024-0001"]
+    assert payload["summary"]["total"] == confirmed
+    assert payload["summary"]["known_exploited"] == confirmed
+    assert [f["severity"] for f in payload["findings"]] == ["high"] * confirmed
+    assert [f["cve_aliases"] for f in payload["findings"]] == [["CVE-2024-0001"]] * confirmed
+    assert epss_queries == [{"CVE-2024-0001"} if confirmed else set()]
+    candidates = payload["indicative_findings"]
+    assert [f["quality_reason"] for f in candidates] == ["version_conflict"] * indicative
+    assert [f["version"] for f in candidates] == ["2.0"] * indicative
+    assert all("known_exploited" not in f and "epss_probability" not in f for f in candidates)
+    osv = next(source for source in payload["coverage"] if source["source"] == "osv.dev")
+    assert osv["status"] == ("partial" if "2.0" in versions else "present")
 
 
 def _obj() -> dict:
@@ -406,3 +444,144 @@ def test_draft_vex_no_notice_when_grype_used(monkeypatch) -> None:
     result = CliRunner().invoke(draft, ["vex"], obj=_obj())
     assert result.exit_code == 0, result.output
     assert "OSV.dev over the network" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("purl", "has_version"),
+    [
+        ("pkg:pypi/a?origin=user@host", False),
+        ("pkg:pypi/a#path/@release", False),
+        ("pkg:npm/%40scope/name", False),
+        ("pkg:npm/@scope/name", False),
+        ("pkg:generic/a@release/1", True),
+        ("pkg:npm/@scope/name@release/1", True),
+        ("pkg:npm/%40scope/name@1", True),
+        ("pkg:npm/@scope/name@1?origin=a@b#c@d", True),
+        ("pkg:pypi/a@", True),
+        ("pkg:pypi/a@unknown", True),
+        ("pkg:pypi/a@*", True),
+    ],
+)
+def test_api_query_uses_structural_version_presence(purl, has_version):
+    """Catch any-@ detection and a second carrier for empty or placeholder tokens."""
+    client = OSVClient()
+    query = client._query_for(Component(name="a", version="1", purl=purl))
+    expected = {"package": {"purl": purl}}
+    if not has_version:
+        expected["version"] = "1"
+    assert client._api_query(query) == expected
+
+
+@pytest.mark.parametrize(
+    ("version", "purl", "conflict"),
+    [
+        (" 1 ", "pkg:pypi/a@1", False),
+        ("1", "pkg:pypi/a@1?epoch=2", False),
+        ("0:1", "pkg:pypi/a@1", True),
+        ("1.0", "pkg:pypi/a@1.0.0", True),
+        ("v1", "pkg:pypi/a@1", True),
+        ("1", "pkg:generic/a@release/1", True),
+        ("1+fix", "pkg:deb/a@1%2Bfix", False),
+        ("1+fix", "pkg:deb/a@1%252Bfix", True),
+        ("2:1-1", "pkg:rpm/a@1-1?epoch=0002", False),
+        ("0002:1-1", "pkg:rpm/a@2%3A1-1", False),
+        ("0:1-1", "pkg:rpm/a@1-1?epoch=000", False),
+        ("1-1", "pkg:rpm/a@1-1?epoch=2", True),
+        ("unknown", "pkg:pypi/a@1", False),
+        ("1", "pkg:pypi/a@unknown", False),
+        ("1", "pkg:pypi/a@*", False),
+        ("1", "pkg:pypi/a@", False),
+        (None, "pkg:pypi/a@1", False),
+    ],
+)
+def test_osv_conflict_comparison_is_opaque_except_rpm_epochs(version, purl, conflict):
+    """Catch generic epoch stripping, SemVer equivalence and repeated decoding."""
+    client = OSVClient()
+    query = client._query_for(Component(name="a", version=version, purl=purl))
+    finding = client._parse_results([query], [{"vulns": [{"id": "OSV-a"}]}])[0]
+    assert finding.indicative_reason == ("version_conflict" if conflict else None)
+    assert finding.version == (version or "")
+    assert client._api_query(query) == {"package": {"purl": purl}}
+
+
+def test_osv_rpm_conflict_preserves_both_version_declarations():
+    """Catch evidence that silently substitutes an effective epoch for the original release."""
+    client = OSVClient()
+    purl = "pkg:rpm/a@1-1?epoch=2"
+    query = client._query_for(Component(name="a", version="1-1", purl=purl))
+    finding = client._parse_results([query], [{"vulns": [{"id": "OSV-a"}]}])[0]
+    assert finding.applicability_evidence == {
+        "component_version": "1-1",
+        "purl": purl,
+        "purl_version": "1-1",
+        "effective_purl_version": "2:1-1",
+        "concrete_versions": ["1-1", "2:1-1"],
+    }
+
+
+@pytest.mark.parametrize("ids", [[], ["GHSA-aaaa", "PYSEC-2024-1"]])
+def test_osv_conflict_is_per_occurrence_even_without_results(monkeypatch, ids):
+    """Catch global PURL/ID demotion and counting advisories instead of occurrences."""
+    purl = "pkg:pypi/acme@1.0"
+    requests = []
+
+    def fake_post(self, http_client, payload):
+        requests.append(payload)
+        return {"results": [{"vulns": [{"id": value} for value in ids]}] * 2}
+
+    monkeypatch.setattr(OSVClient, "_post_with_retries", fake_post)
+    details = []
+    monkeypatch.setattr(OSVClient, "_get_with_retries", _fake_get(details))
+    findings, coverage = OSVClient().query_components(
+        [
+            Component(name="conflict", version="2.0", purl=purl),
+            Component(name="agrees", version="1.0", purl=purl),
+        ]
+    )
+    assert requests == [{"queries": [{"package": {"purl": purl}}] * 2}]
+    assert [f.is_indicative for f in findings] == [True] * len(ids) + [False] * len(ids)
+    assert [f.version for f in findings] == ["2.0"] * len(ids) + ["1.0"] * len(ids)
+    assert [f.applicability_evidence for f in findings[: len(ids)]] == [
+        {
+            "component_version": "2.0",
+            "purl": purl,
+            "purl_version": "1.0",
+            "concrete_versions": ["1.0", "2.0"],
+        }
+    ] * len(ids)
+    assert [f.severity for f in findings] == ["high", "critical"] * (2 if ids else 0)
+    assert details == ids
+    assert coverage.status == "partial"
+    assert coverage.detail == (
+        "1 component occurrence(s) have conflicting explicit and PURL versions; "
+        "PURL-query candidates, if any, are indicative"
+    )
+
+
+@pytest.mark.parametrize("include_valid", [False, True])
+def test_invalid_rpm_epochs_are_local_skips_without_losing_siblings(monkeypatch, include_valid):
+    """Catch whole-batch abort, server-rejection mislabeling and HTTP for all-invalid input."""
+    requests = []
+
+    def fake_post(self, http_client, payload):
+        requests.append(payload)
+        return {"results": [{"vulns": [{"id": "GHSA-aaaa"}]}]}
+
+    monkeypatch.setattr(OSVClient, "_post_with_retries", fake_post)
+    monkeypatch.setattr(OSVClient, "_get_with_retries", _fake_get([]))
+    components = [
+        Component(name="a", version="1", purl="pkg:rpm/a@1?epoch="),
+        Component(name="b", version="1", purl="pkg:rpm/b@1?epoch=1&epoch=1"),
+        Component(name="c", version="1", purl="pkg:rpm/c@2%3A1?epoch=3"),
+    ]
+    if include_valid:
+        components.append(Component(name="valid", version="1", purl="pkg:pypi/valid@1"))
+    findings, coverage = OSVClient().query_components(components)
+    assert [f.id for f in findings] == (["GHSA-aaaa"] if include_valid else [])
+    assert requests == (
+        [{"queries": [{"package": {"purl": "pkg:pypi/valid@1"}}]}] if include_valid else []
+    )
+    assert coverage.status == "partial"
+    assert coverage.detail == (
+        "3 component occurrence(s) skipped locally: invalid or ambiguous RPM PURL epoch"
+    )

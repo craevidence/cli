@@ -9,7 +9,13 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
-from cra_evidence_cli.local.models import Component, Finding, LocalCheckResult, identifier_coverage
+from cra_evidence_cli.local.models import (
+    Component,
+    CoverageSource,
+    Finding,
+    LocalCheckResult,
+    identifier_coverage,
+)
 from cra_evidence_cli.local.report import print_text_report, render
 
 
@@ -480,3 +486,26 @@ def test_identifier_coverage_does_not_change_exit_note() -> None:
     for result in (complete, incomplete):
         assert "Exit 0 means no configured blocking findings" in render(result, "text", exit_code=0)
         assert "Exit 10:" in render(result, "text", exit_code=10)
+
+
+@pytest.mark.parametrize("status", ["present", "partial"])
+@pytest.mark.parametrize("detail", [None, "1 component occurrence(s) have conflicting versions"])
+def test_osv_partial_coverage_is_visible_without_findings(status, detail):
+    """Catch findings-only or verbose-only disclosure and partial warnings on complete coverage."""
+    result = _result()
+    result.coverage = [CoverageSource("osv.dev", status, detail=detail)]
+    prefix = "OSV.dev coverage is partial."
+    expected = prefix + (f" {detail}" if detail else "")
+    for output_format in ("text", "markdown"):
+        rendered = render(result, output_format)
+        assert rendered.count(prefix) == (1 if status == "partial" else 0)
+        assert (expected in rendered) is (status == "partial")
+    out = StringIO()
+    print_text_report(Console(file=out, width=240, color_system=None), result)
+    assert out.getvalue().count(prefix) == (1 if status == "partial" else 0)
+    assert (expected in out.getvalue()) is (status == "partial")
+    data = json.loads(render(result, "json"))
+    sarif = json.loads(render(result, "sarif"))["runs"][0]
+    assert data["coverage"] == [result.coverage[0].to_dict()]
+    assert sarif["tool"]["driver"]["properties"]["coverage"] == data["coverage"]
+    assert sarif["results"] == []

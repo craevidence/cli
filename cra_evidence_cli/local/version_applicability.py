@@ -210,6 +210,17 @@ def parse_cpe_version(cpe: object) -> str | None:
     return None
 
 
+def purl_version_token(purl: object) -> str | None:
+    """Return the raw version token, preserving present-empty versus absent."""
+    if not isinstance(purl, str):
+        return None
+    path = purl.split("#", 1)[0].split("?", 1)[0]
+    delimiter = path.rfind("@")
+    if delimiter < 0 or (delimiter > 0 and path[delimiter - 1] == "/"):
+        return None
+    return path[delimiter + 1 :]
+
+
 def parse_purl_version(purl: object) -> str | None:
     """Return the version of a package URL (the ``@version`` segment), else None.
 
@@ -219,15 +230,8 @@ def parse_purl_version(purl: object) -> str | None:
     while the component and searched package versions are plain strings, so
     decoding is required to compare them without a false conflict.
     """
-    if not isinstance(purl, str) or "@" not in purl:
-        return None
-    after = purl.split("@", 1)[1]
-    for delimiter in ("?", "#"):
-        if delimiter in after:
-            after = after.split(delimiter, 1)[0]
-    if not after:
-        return None
-    return unquote(after)
+    token = purl_version_token(purl)
+    return unquote(token) if token else None
 
 
 def is_rpm_purl(purl: object) -> bool:
@@ -256,9 +260,7 @@ def effective_purl_version(purl: object) -> str | None:
     version = parse_purl_version(purl)
     if not is_rpm_purl(purl):
         return version
-    before_query, _, query = purl.split("#", 1)[0].partition("?")
-    token = before_query.split("@", 1)[1] if "@" in before_query else ""
-    version = unquote(token) if token else None
+    _, _, query = purl.split("#", 1)[0].partition("?")
     epochs = [
         unquote(value)
         for qualifier in query.split("&")

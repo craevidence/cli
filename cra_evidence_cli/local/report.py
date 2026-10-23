@@ -88,6 +88,8 @@ def print_text_report(
     console.print(Text("Summary", style=STYLE_TITLE))
     console.print(_summary_text(data["components"]["count"], summary, _indicative_total(data)))
     _print_identifier_coverage(console, data)
+    for line in _osv_partial_lines(data):
+        console.print(line, style=STYLE_MUTED, markup=False)
     _print_unassessed(console, data)
     _print_inventory_coverage(console, data)
 
@@ -148,6 +150,7 @@ def _text(data: dict[str, Any], verbose: bool = False, exit_code: int = 0) -> st
         ]
     )
     lines.extend(_identifier_coverage_lines(data))
+    lines.extend(_osv_partial_lines(data))
     lines.extend(_unassessed_lines(data))
     lines.extend(_inventory_coverage_lines(data))
     lines.extend(
@@ -781,3 +784,11 @@ def _top_actions(data: dict[str, Any]) -> list[str]:
             f"- {finding['package']} {finding.get('version') or ''}{mark_text}:{fixed_text}"
         )
     return actions
+
+
+def _osv_partial_lines(data: dict[str, Any]) -> list[str]:
+    for source in data["coverage"]:
+        if source["source"] == "osv.dev" and source["status"] == "partial":
+            detail = source["detail"]
+            return ["OSV.dev coverage is partial." + (f" {detail}" if detail else "")]
+    return []
