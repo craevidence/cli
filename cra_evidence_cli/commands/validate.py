@@ -39,13 +39,15 @@ def validate_sbom_command(
         client = CRAEvidenceClient(config)
 
         result = asyncio.run(client.validate_sbom(sbom_path))
+        valid = result.get("valid", False)
 
         if config.output_format == "json":
             console.print_json(json.dumps(result, indent=2))
+            if not valid:
+                sys.exit(1)
             return
 
         # Text output
-        valid = result.get("valid", False)
         if valid:
             console.print("[bold green]Valid[/bold green]")
         else:

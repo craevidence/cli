@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
+import pytest
 from click.testing import CliRunner
 
 from cra_evidence_cli.cli import cli
@@ -54,3 +56,37 @@ def test_invalid_sbom_output_shows_detected_identity_and_next_step(tmp_path):
     assert "Detected: cyclonedx 1.6 xml" in result.output
     assert "Accepted versions: 1.6, 1.7" in result.output
     assert "Next step: Correct the reported fields and retry." in result.output
+
+
+@pytest.mark.parametrize(("valid", "expected_exit_code"), [(False, 1), (True, 0)])
+def test_json_validation_exit_status_follows_validity_without_changing_payload(
+    tmp_path, valid, expected_exit_code
+):
+    # Catches an early success return and an unconditional failure in JSON mode.
+    sbom = tmp_path / "bom.json"
+    sbom.write_text("{}")
+    payload = {
+        "valid": valid,
+        "format": "cyclonedx",
+        "serialization": "json",
+        "spec_version": "1.7",
+        "warnings": [],
+        "errors": [] if valid else ["Component name is missing."],
+    }
+
+    with (
+        patch("cra_evidence_cli.commands.validate.CRAEvidenceClient") as client_class,
+        patch(
+            "cra_evidence_cli.commands.validate.asyncio.run",
+            return_value=payload,
+        ),
+    ):
+        client_class.return_value = MagicMock()
+        result = CliRunner().invoke(
+            cli,
+            ["--output", "json", "validate", "--sbom", str(sbom)],
+            env=BASE_ENV,
+        )
+
+    assert result.exit_code == expected_exit_code
+    assert json.loads(result.stdout) == payload
