@@ -50,12 +50,17 @@ Run the full local gate on the release commit; every check must pass, and the
 scan checks must be re-run immediately before the push because the
 vulnerability database and base image digests move daily:
 
+Set `GRYPE_ENGINE_REGISTRY` to the authenticated registry host that holds the
+engine digest pinned in `Dockerfile`.
+
 ```sh
 ./.venv/bin/python -m pytest -q
 ./.venv/bin/ruff check .
 actionlint .github/workflows/*.yml
 bash scripts/check-dhi-base.sh --strict
-docker build -t craevidence:release-check .
+docker build \
+  --build-arg GRYPE_ENGINE_REGISTRY="${GRYPE_ENGINE_REGISTRY:?Set GRYPE_ENGINE_REGISTRY to the engine registry host}" \
+  -t craevidence:release-check .
 bash scripts/check-image-gate.sh craevidence:release-check
 ./.venv/bin/python scripts/check_dist.py
 ./.venv/bin/python scripts/check_dist.py \
