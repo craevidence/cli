@@ -139,8 +139,9 @@ Notes:
     means selected graph data could not be fully interpreted. Both states have
     null counts, groups and relationship state, plus a `limitation` with a fixed
     `code` and `location`. A late malformed entry withholds all provisional totals.
-    Missing, null, empty, blank, wrong-type and invalid-syntax values are distinct;
-    a pointer to an absent field names where it would have appeared.
+    For identifier values, missing, null, empty, blank, wrong-type and
+    invalid-syntax states are distinct. Non-list optional containers are
+    `invalid_type`. A pointer to an absent field names where it would have appeared.
   - No recorded observation remains null; older reports may omit the property.
     SARIF carries the same object in `runs[0].tool.driver.properties.sbomGraphObservations`,
     never as findings or execution notifications. Text, Markdown and terminal
