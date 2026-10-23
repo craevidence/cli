@@ -65,6 +65,11 @@ reports known vulnerability signals that can block CI when a threshold is met.
 Given a directory or an image, it generates the SBOM first. It does not require
 an account and does not upload your project to CRA Evidence.
 
+For supported SPDX 2.3 JSON documents, reports also identify repeated local
+SPDXIDs and relationship endpoints without a local definition. These scoped
+observations help repair the document; they do not validate the SBOM or change
+vulnerability findings and exit gates.
+
 ```bash
 craevidence check .
 craevidence check --image ghcr.io/acme/app:1.4.2

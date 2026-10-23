@@ -240,6 +240,8 @@ def test_existing_json_fields_are_unchanged_by_the_new_object(monkeypatch, tmp_p
         "inventory_coverage",
         "provenance",
         "schema_version",
+        "sbom_observations",
+        "sbom_graph_observations",
         "sources_consulted",
         "summary",
         "suppressions",

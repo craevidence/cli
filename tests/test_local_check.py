@@ -2190,3 +2190,75 @@ def test_check_gate_exit_code_unaffected_by_identifier_coverage(monkeypatch, tmp
     payload = json.loads(failing.stdout)
     # The gate outcome is unchanged; coverage is additive reporting only.
     assert payload["identifier_coverage"]["all_components_have_identifier_field"] is False
+
+
+@pytest.mark.parametrize(
+    ("extra", "expected_exit", "score_calls", "source_status"),
+    [
+        ([], 0, 0, "present"),
+        (["--fail-on", "critical"], 10, 0, "present"),
+        (["--strict"], 0, 0, "present"),
+        (["--strict"], 15, 0, "unavailable"),
+        (["--deny-license", "MIT"], 16, 0, "present"),
+        (["--sbom-quality"], 0, 2, "present"),
+        (["--fail-on-score", "60"], 14, 2, "present"),
+    ],
+)
+@pytest.mark.parametrize("graph_state", ["reported", "uninterpretable"])
+def test_sbom_observations_preserve_existing_reports_and_gates(
+    monkeypatch, tmp_path, extra, expected_exit, score_calls, source_status, graph_state
+):
+    """Catches new scoring, strictness, finding changes or discarded raw version states."""
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    monkeypatch.chdir(tmp_path)
+    _install_fake_scanner(monkeypatch, [_critical_finding()])
+    # Source freshness has separate tests; fixed fixture dates must not decide these gates.
+    monkeypatch.setattr(check_module, "mark_stale_sources", lambda coverage: None)
+    monkeypatch.setattr(
+        check_module, "fetch_kev_catalog",
+        lambda: (set(), CoverageSource("cisa-kev", source_status)),
+    )
+    calls = []
+
+    def score(path):
+        calls.append(path)
+        return SimpleNamespace(score_out_of_100=42.0, num_components=1, worst_features=[])
+
+    monkeypatch.setattr(check_module, "run_sbomqs", score)
+    sbom = tmp_path / "sbom.json"
+    sbom.write_text(json.dumps({
+        "spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
+        "packages": [{"SPDXID": "SPDXRef-A", "name": "acme", "licenseDeclared": "MIT"}],
+        "relationships": [{
+            "spdxElementId": "SPDXRef-A",
+            "relatedSpdxElement": "SPDXRef-B" if graph_state == "reported" else None,
+        }],
+    }))
+    reported = _run_check(["--sbom", str(sbom), *extra])
+    monkeypatch.setattr(check_module, "read_sbom_observations", lambda raw, components: None)
+    monkeypatch.setattr(check_module, "read_sbom_graph_observations", lambda raw: None)
+    unchanged = _run_check(["--sbom", str(sbom), *extra])
+
+    assert reported.exit_code == unchanged.exit_code == expected_exit
+    first, second = json.loads(reported.stdout), json.loads(unchanged.stdout)
+    observations = first.pop("sbom_observations")
+    assert second.pop("sbom_observations") is None
+    graph = first.pop("sbom_graph_observations")
+    assert second.pop("sbom_graph_observations") is None
+    assert graph["status"] == graph_state
+    if graph_state == "reported":
+        assert graph["unresolved_local_relationship_endpoints"] == {
+            "count": 1, "locations": ["/relationships/0/relatedSpdxElement"], "omitted": 0
+        }
+    else:
+        assert graph["unresolved_local_relationship_endpoints"] is None
+        assert graph["limitation"] == {
+            "code": "null", "location": "/relationships/0/relatedSpdxElement"
+        }
+    assert first == second
+    assert observations["version_fields"]["absent"] == {
+        "count": 1, "locations": ["/packages/0/versionInfo"], "omitted": 0
+    }
+    assert observations["identifier_fields"]["without_nonblank_identifier"]["count"] == 1
+    assert reported.stderr == unchanged.stderr
+    assert len(calls) == score_calls

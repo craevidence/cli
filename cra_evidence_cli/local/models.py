@@ -281,6 +281,8 @@ class LocalCheckResult:
     indicative_findings: list[Finding] = field(default_factory=list)
     unassessed_packages: list[UnassessedPackage] | None = None
     inventory_coverage: InventoryCoverage | None = None
+    sbom_observations: dict[str, Any] | None = None
+    sbom_graph_observations: dict[str, Any] | None = None
 
     def to_dict(self, exit_code: int = 0) -> dict[str, Any]:
         summary = summarize_findings(self.findings)
@@ -313,6 +315,8 @@ class LocalCheckResult:
             },
             "coverage": [source.to_dict() for source in self.coverage],
             "identifier_coverage": self.identifier_coverage,
+            "sbom_observations": self.sbom_observations,
+            "sbom_graph_observations": self.sbom_graph_observations,
             "suppressions": self.suppressions,
             "provenance": self.provenance,
             "sources_consulted": self.sources_consulted,

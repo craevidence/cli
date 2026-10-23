@@ -49,7 +49,12 @@ from cra_evidence_cli.local.models import (
 from cra_evidence_cli.local.osv import OSVClient, OSVClientError
 from cra_evidence_cli.local.policy import ignored_set, load_policy
 from cra_evidence_cli.local.report import print_text_report, render
-from cra_evidence_cli.local.sbom import SBOMParseError, load_sbom
+from cra_evidence_cli.local.sbom import (
+    SBOMParseError,
+    load_sbom,
+    read_sbom_graph_observations,
+    read_sbom_observations,
+)
 from cra_evidence_cli.local.scanner import GrypeLocalScanner
 from cra_evidence_cli.local.signal import assert_no_cra_pass, build_dimensions, mark_stale_sources
 from cra_evidence_cli.local.version_applicability import POLICY as APPLICABILITY_POLICY
@@ -546,6 +551,8 @@ def _run_local_check_on_sbom(
 
     components, raw_sbom = load_sbom(sbom_path)
     id_coverage = identifier_coverage(components)
+    observations = read_sbom_observations(raw_sbom, components)
+    graph_observations = read_sbom_graph_observations(raw_sbom)
     inventory = read_inventory_coverage(raw_sbom)
     if inventory.status == STATUS_UNINTERPRETABLE:
         click.echo(
@@ -710,6 +717,8 @@ def _run_local_check_on_sbom(
         indicative_findings=indicative_findings,
         unassessed_packages=measured_unassessed,
         inventory_coverage=inventory,
+        sbom_observations=observations,
+        sbom_graph_observations=graph_observations,
     )
     if strict and any(
         source.status in {"stale", "unavailable"}

@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `check` reports repeated local definition occurrences and unresolved local
+  relationship endpoint occurrences in supported SPDX 2.3 JSON documents. The
+  separate `sbom_graph_observations` object distinguishes measured counts from
+  unsupported or uninterpretable scope, with at most five locations per group.
+  Text and Markdown show actionable observations; SARIF includes the same object
+  as a driver property. Findings, gates and exit codes are unchanged.
+
+- `check` reports component version-field states and locations for components without a
+  nonblank PURL or CPE counted by the local identifier metric. JSON adds `sbom_observations`
+  to the existing v1 report; SARIF carries it as a driver property. Text and Markdown give
+  repair suggestions. Every format lists up to five locations per group with exact omitted
+  counts. The observations do not validate the full SBOM or establish completeness, and do
+  not change findings, gates, exit codes or the optional sbomqs score.
+
 - `status`, `wait-ready`, `scan --fail-on`, `upload-sbom --scan --fail-on` and
   `release` show the coverage gaps CRA Evidence reports: packages a vulnerability
   scan could not check, with the count per reason in plain language and the next

@@ -18,6 +18,11 @@ from cra_evidence_cli.cli import cli
 from cra_evidence_cli.commands import check as check_module
 from cra_evidence_cli.local.disclaimer import DISCLAIMER_MARKER
 from cra_evidence_cli.local.models import Finding, LocalCheckResult
+from cra_evidence_cli.local.sbom import (
+    load_sbom,
+    read_sbom_graph_observations,
+    read_sbom_observations,
+)
 
 
 def _write_sbom(path: Path) -> None:
@@ -99,20 +104,60 @@ def test_markdown_output_writes_markdown_summary(monkeypatch, tmp_path):
     assert DISCLAIMER_MARKER not in body.lower()
 
 
-def test_all_three_formats_written_in_one_run(monkeypatch, tmp_path):
+@pytest.mark.parametrize("graph_state", ["reported", "uninterpretable"])
+@pytest.mark.parametrize("gate", [False, True])
+def test_all_three_formats_written_in_one_run(monkeypatch, tmp_path, graph_state, gate):
+    """Catches dropped graph/field data on gate failure or a scan per output format."""
     js = tmp_path / "r.json"
     sarif = tmp_path / "r.sarif"
     md = tmp_path / "r.md"
+    fixed = _result(
+        [Finding(id="CVE-2025-0001", package="p", version="1", severity="critical")]
+        if gate else []
+    )
+    raw = {
+        "spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
+        "packages": [{"SPDXID": "SPDXRef-A", "name": "example"}],
+        "relationships": [{
+            "spdxElementId": "SPDXRef-A",
+            "relatedSpdxElement": "SPDXRef-B" if graph_state == "reported" else None,
+        }],
+    }
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps(raw))
+    fixed.components, raw = load_sbom(source)
+    fixed.sbom_observations = read_sbom_observations(raw, fixed.components)
+    fixed.sbom_graph_observations = read_sbom_graph_observations(raw)
+    calls = 0
+
+    def scan(**kwargs):
+        nonlocal calls
+        calls += 1
+        return fixed
+
+    args = ["--json-output", str(js), "--sarif-output", str(sarif), "--markdown-output", str(md)]
+    if gate:
+        args.extend(["--fail-on", "critical"])
     res = _invoke(
         monkeypatch,
         tmp_path,
-        ["--json-output", str(js), "--sarif-output", str(sarif), "--markdown-output", str(md)],
+        args,
+        run_check=scan,
     )
-    assert res.exit_code == 0, res.output
+    assert res.exit_code == (10 if gate else 0), res.output
+    assert calls == 1
     # Three distinct formats from a single scan.
     assert json.loads(js.read_text())["schema_version"] == "craevidence.local_check.v1"
     assert json.loads(sarif.read_text())["version"] == "2.1.0"
     assert md.read_text().startswith("# Local SBOM Check")
+    assert json.loads(js.read_text())["sbom_observations"] == fixed.sbom_observations
+    properties = json.loads(sarif.read_text())["runs"][0]["tool"]["driver"]["properties"]
+    assert properties["sbomObservations"] == fixed.sbom_observations
+    assert json.loads(js.read_text())["sbom_graph_observations"] == fixed.sbom_graph_observations
+    assert properties["sbomGraphObservations"] == fixed.sbom_graph_observations
+    assert fixed.sbom_graph_observations["status"] == graph_state
+    assert "Version field absent: 1 (/packages/0/versionInfo)" in md.read_text()
+    assert md.read_text().count("SPDX 2.3 graph observations") == 1
     # The default --output text summary still prints to stdout.
     assert "Local SBOM Check" in res.output
 

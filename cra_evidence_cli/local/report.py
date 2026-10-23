@@ -92,6 +92,8 @@ def print_text_report(
         console.print(line, style=STYLE_MUTED, markup=False)
     _print_unassessed(console, data)
     _print_inventory_coverage(console, data)
+    _print_sbom_observations(console, data, verbose)
+    _print_sbom_graph_observations(console, data, verbose)
 
     console.print()
     console.print(Text("Top actions", style=STYLE_TITLE))
@@ -153,6 +155,8 @@ def _text(data: dict[str, Any], verbose: bool = False, exit_code: int = 0) -> st
     lines.extend(_osv_partial_lines(data))
     lines.extend(_unassessed_lines(data))
     lines.extend(_inventory_coverage_lines(data))
+    lines.extend(_sbom_observation_lines(data, verbose))
+    lines.extend(_sbom_graph_observation_lines(data, verbose))
     lines.extend(
         [
             "",
@@ -770,6 +774,8 @@ def _sarif(data: dict[str, Any], sbom_uri: str = "sbom.json") -> dict[str, Any]:
                     "vexSuppressions": data.get("suppressions") or [],
                     "indicativeCandidates": data.get("indicative_findings") or [],
                     "inventoryCoverage": data.get("inventory_coverage"),
+                    "sbomObservations": data.get("sbom_observations"),
+                    "sbomGraphObservations": data.get("sbom_graph_observations"),
                     "advisory": data["advisory"],
                 },
             }
@@ -810,9 +816,133 @@ def _top_actions(data: dict[str, Any]) -> list[str]:
     return actions
 
 
+def _sbom_observation_lines(data: dict[str, Any], verbose: bool = False) -> list[str]:
+    observations = data.get("sbom_observations")
+    if observations is None:
+        return []
+    versions = observations["version_fields"]
+    identifiers = observations["identifier_fields"]["without_nonblank_identifier"]
+    labels = {
+        "absent": "Version field absent",
+        "null": "Version field explicitly null",
+        "blank": "Version field blank",
+        "invalid_type": "Version field is not a string",
+    }
+    groups = [(label, versions[state]) for state, label in labels.items()]
+    groups.append(("No nonblank PURL/CPE counted", identifiers))
+    lines = []
+    for label, group in groups:
+        if not group["count"]:
+            continue
+        locations = ", ".join(group["locations"])
+        if group["omitted"]:
+            locations += f"; {group['omitted']} more"
+        lines.append(f"{label}: {group['count']} ({locations}).")
+    if any(versions[state]["count"] for state in ("absent", "null", "blank")):
+        lines.append(
+            "Add the resolved component version from lock or build metadata when available."
+        )
+    if versions["invalid_type"]["count"]:
+        lines.append(
+            "Correct the field from authoritative package metadata; "
+            "do not stringify an object or guess a release."
+        )
+    if any(versions[state]["count"] for state in labels):
+        lines.append("A version in a PURL or CPE is assessed separately by the scanner.")
+    if identifiers["count"]:
+        lines.append(
+            "Review the component's identifier fields using authoritative package metadata."
+        )
+    if not lines:
+        if not verbose:
+            return []
+        count = observations["component_count"]
+        if count:
+            lines.append(
+                f"All {count} parsed components have nonblank version strings and "
+                "a nonblank PURL or CPE counted by this check."
+            )
+        else:
+            lines.append("Inspected 0 component entries.")
+    lines.append(
+        "These field observations do not establish inventory completeness or scanner coverage."
+    )
+    return ["", "SBOM observations", *lines]
+
+
+def _print_sbom_observations(
+    console: Console, data: dict[str, Any], verbose: bool = False
+) -> None:
+    lines = _sbom_observation_lines(data, verbose)
+    if not lines:
+        return
+    console.print()
+    console.print(Text(lines[1], style=STYLE_TITLE))
+    for line in lines[2:]:
+        console.print(line, markup=False)
+
+
 def _osv_partial_lines(data: dict[str, Any]) -> list[str]:
     for source in data["coverage"]:
         if source["source"] == "osv.dev" and source["status"] == "partial":
             detail = source["detail"]
             return ["OSV.dev coverage is partial." + (f" {detail}" if detail else "")]
     return []
+
+
+def _sbom_graph_observation_lines(data: dict[str, Any], verbose: bool = False) -> list[str]:
+    observations = data.get("sbom_graph_observations")
+    if observations is None:
+        return []
+    status = observations["status"]
+    lines = []
+    if status in {"not_assessed", "uninterpretable"}:
+        if status == "not_assessed" and not verbose:
+            return []
+        limitation = observations["limitation"]
+        label = "Not assessed" if status == "not_assessed" else "Could not interpret this scope"
+        lines.append(f"{label}: {limitation['code']} at {limitation['location']}.")
+    else:
+        groups = (
+            ("Repeated local definition occurrences", "repeated_local_identifiers",
+             "Assign distinct local SPDXIDs and update their references."),
+            (
+                "Unresolved local relationship endpoint occurrences",
+                "unresolved_local_relationship_endpoints",
+                "Correct the endpoint or supply its intended local definition.",
+            ),
+        )
+        for label, key, remedy in groups:
+            group = observations[key]
+            if not group["count"]:
+                continue
+            locations = ", ".join(group["locations"])
+            if group["omitted"]:
+                locations += f"; {group['omitted']} more"
+            lines.append(f"{label}: {group['count']} ({locations}).")
+            lines.append(remedy)
+        if not lines:
+            if not verbose:
+                return []
+            lines.append(
+                f"Inspected {observations['definition_occurrences']} local definition occurrences "
+                f"and {observations['local_relationship_endpoint_occurrences']} local relationship "
+                f"endpoint occurrences; relationships member {observations['relationships_state']}."
+            )
+    lines.append(
+        "These local definition and relationship endpoint observations do not validate the SBOM "
+        "or establish inventory completeness, dependency meaning or scanner coverage."
+    )
+    return ["", "SPDX 2.3 graph observations", *lines]
+
+
+def _print_sbom_graph_observations(
+    console: Console, data: dict[str, Any], verbose: bool = False
+) -> None:
+    lines = _sbom_graph_observation_lines(data, verbose)
+    if not lines:
+        return
+    console.print()
+    console.print(Text(lines[1], style=STYLE_TITLE))
+    for line in lines[2:]:
+        console.print(line, markup=False)

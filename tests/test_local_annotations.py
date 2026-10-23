@@ -7,6 +7,7 @@ import hashlib
 from cra_evidence_cli.ci_detect import CIMetadata
 from cra_evidence_cli.local import annotations
 from cra_evidence_cli.local.models import Finding, LocalCheckResult
+from cra_evidence_cli.local.sbom import read_sbom_graph_observations
 
 
 def _result(*, findings=None, provenance=None):
@@ -259,3 +260,23 @@ def test_resolve_mode_auto_no_provider():
         return CIMetadata(ci_provider=None)
 
     assert annotations.resolve_mode("auto", detect=detect) == "none"
+
+
+def test_graph_observations_do_not_create_annotations_or_summary_rows():
+    """Catches promotion of repeated-ID metadata into vulnerability output."""
+    result = _result(findings=[])
+    before = (
+        annotations.github_annotations(result),
+        annotations.gitlab_codequality(result),
+        annotations.github_step_summary(result),
+    )
+    result.sbom_graph_observations = read_sbom_graph_observations({
+        "spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
+        "packages": [{"SPDXID": "SPDXRef-A"}] * 2,
+    })
+    assert result.sbom_graph_observations["repeated_local_identifiers"]["count"] == 1
+    assert (
+        annotations.github_annotations(result),
+        annotations.gitlab_codequality(result),
+        annotations.github_step_summary(result),
+    ) == before

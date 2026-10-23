@@ -17,6 +17,11 @@ from cra_evidence_cli.local.models import (
     identifier_coverage,
 )
 from cra_evidence_cli.local.report import print_text_report, render
+from cra_evidence_cli.local.sbom import (
+    load_sbom,
+    read_sbom_graph_observations,
+    read_sbom_observations,
+)
 
 
 def _result() -> LocalCheckResult:
@@ -591,11 +596,110 @@ def test_identifier_coverage_does_not_change_exit_note() -> None:
         assert "Exit 10:" in render(result, "text", exit_code=10)
 
 
+def _observation_result() -> LocalCheckResult:
+    result = _result()
+    raw = {"components": [
+        *({"name": "same"} for _ in range(6)),
+        {"name": "null", "version": None},
+        {"name": "blank", "version": " "},
+        {"name": "typed", "version": {}},
+    ]}
+    result.components = [
+        Component(name=item["name"], version=item.get("version")) for item in raw["components"]
+    ]
+    result.sbom_observations = read_sbom_observations(raw, result.components)
+    return result
+
+
+@pytest.mark.parametrize("output", ["text", "markdown", "terminal"])
+def test_observation_reports_name_field_states_locations_and_remedies(output):
+    """Catches missing output paths, type/absence conflation or claiming a full listing."""
+    result = _observation_result()
+    if output == "terminal":
+        stream = StringIO()
+        print_text_report(Console(file=stream, width=200, color_system=None), result)
+        text = stream.getvalue()
+    else:
+        text = render(result, output)
+
+    assert "SBOM observations" in text
+    assert "Version field absent: 6" in text
+    assert "/components/4/version; 1 more" in text
+    assert "/components/5/version" not in text
+    assert "Version field explicitly null: 1 (/components/6/version)" in text
+    assert "Version field blank: 1 (/components/7/version)" in text
+    assert "Version field is not a string: 1 (/components/8/version)" in text
+    assert "authoritative package metadata" in text
+    assert "do not establish inventory completeness or scanner coverage" in text
+
+
+def test_observations_are_additive_json_and_sarif_properties_only():
+    """Catches changing v1 fields or emitting document observations as SARIF findings."""
+    result = _observation_result()
+    observations = result.sbom_observations
+    populated = json.loads(render(result, "json"))
+    sarif = json.loads(render(result, "sarif"))["runs"][0]
+    result.sbom_observations = None
+    previous = json.loads(render(result, "json"))
+
+    assert populated.pop("sbom_observations") == observations
+    assert previous.pop("sbom_observations") is None
+    assert populated == previous
+    assert populated["schema_version"] == "craevidence.local_check.v1"
+    assert sarif["tool"]["driver"]["properties"]["sbomObservations"] == observations
+    assert sarif["results"] == []
+    assert "invocations" not in sarif
+    assert "SBOM observations" not in render(result, "text", verbose=True)
+
+
+@pytest.mark.parametrize("count", [0, 1])
+def test_zero_observations_do_not_read_as_a_pass(count):
+    """Catches treating no observed field problems or an empty inventory as complete."""
+    result = _result()
+    item = {"name": "example", "version": "NOASSERTION", "purl": "pkg:generic/example"}
+    result.components = [Component(**item) for _ in range(count)]
+    result.sbom_observations = read_sbom_observations(
+        {"components": [item] * count}, result.components
+    )
+
+    assert "SBOM observations" not in render(result, "text")
+    verbose = render(result, "text", verbose=True)
+    assert "SBOM observations" in verbose
+    assert "do not establish inventory completeness or scanner coverage" in verbose
+    assert "Passed" not in verbose
+    expected = "Inspected 0 component entries." if count == 0 else "nonblank version strings"
+    assert expected in verbose
+
+
 @pytest.mark.parametrize("status", ["present", "partial"])
 @pytest.mark.parametrize("detail", [None, "1 component occurrence(s) have conflicting versions"])
-def test_osv_partial_coverage_is_visible_without_findings(status, detail):
+def test_osv_coverage_and_observations_are_visible_without_findings(tmp_path, status, detail):
     """Catch findings-only or verbose-only disclosure and partial warnings on complete coverage."""
+    raw = {
+        "spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
+        "packages": [{"SPDXID": "SPDXRef-A", "name": "example"}] * 2,
+        "relationships": [{"spdxElementId": "SPDXRef-A", "relatedSpdxElement": "SPDXRef-B"}],
+    }
+    source = tmp_path / "coexistence.json"
+    source.write_text(json.dumps(raw))
     result = _result()
+    result.components, raw = load_sbom(source)
+    result.sbom_observations = read_sbom_observations(raw, result.components)
+    result.sbom_graph_observations = read_sbom_graph_observations(raw)
+    assert result.sbom_graph_observations == {
+        "status": "reported", "scope": "spdx_2_3_local_definitions_and_relationship_endpoints",
+        "relationships_state": "present", "definition_occurrences": 3,
+        "local_relationship_endpoint_occurrences": 2,
+        "repeated_local_identifiers": {
+            "count": 1,
+            "locations": ["/packages/1/SPDXID"],
+            "omitted": 0,
+        },
+        "unresolved_local_relationship_endpoints": {
+            "count": 1, "locations": ["/relationships/0/relatedSpdxElement"], "omitted": 0,
+        },
+        "limitation": None,
+    }
     result.coverage = [CoverageSource("osv.dev", status, detail=detail)]
     prefix = "OSV.dev coverage is partial."
     expected = prefix + (f" {detail}" if detail else "")
@@ -603,12 +707,113 @@ def test_osv_partial_coverage_is_visible_without_findings(status, detail):
         rendered = render(result, output_format)
         assert rendered.count(prefix) == (1 if status == "partial" else 0)
         assert (expected in rendered) is (status == "partial")
+        assert rendered.count("SBOM observations") == 1
+        assert rendered.count("SPDX 2.3 graph observations") == 1
     out = StringIO()
     print_text_report(Console(file=out, width=240, color_system=None), result)
     assert out.getvalue().count(prefix) == (1 if status == "partial" else 0)
     assert (expected in out.getvalue()) is (status == "partial")
+    assert out.getvalue().count("SBOM observations") == 1
+    assert out.getvalue().count("SPDX 2.3 graph observations") == 1
     data = json.loads(render(result, "json"))
     sarif = json.loads(render(result, "sarif"))["runs"][0]
     assert data["coverage"] == [result.coverage[0].to_dict()]
+    assert data["sbom_observations"] == result.sbom_observations
     assert sarif["tool"]["driver"]["properties"]["coverage"] == data["coverage"]
+    assert sarif["tool"]["driver"]["properties"]["sbomObservations"] == data["sbom_observations"]
+    assert data["sbom_graph_observations"] == result.sbom_graph_observations
+    assert (
+        sarif["tool"]["driver"]["properties"]["sbomGraphObservations"]
+        == data["sbom_graph_observations"]
+    )
     assert sarif["results"] == []
+    assert "invocations" not in sarif
+
+
+@pytest.mark.parametrize("state", ["null", "not_assessed", "uninterpretable", "zero", "nonzero"])
+@pytest.mark.parametrize("verbose", [False, True])
+def test_graph_human_reporting_distinguishes_unmeasured_limits_and_zero(state, verbose):
+    """Catches unsupported warnings by default, hidden malformed scope and zero-as-valid claims."""
+    result = _result()
+    raw = {"spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT", "packages": []}
+    if state == "not_assessed":
+        raw["components"] = []
+    elif state == "uninterpretable":
+        raw["files"] = None
+    elif state == "nonzero":
+        raw["packages"] = [{"SPDXID": "SPDXRef-SecretName"}] * 7
+        raw["relationships"] = [
+            {"spdxElementId": "SPDXRef-SecretMissing", "relatedSpdxElement": "NONE"}
+        ] * 6
+    if state != "null":
+        result.sbom_graph_observations = read_sbom_graph_observations(raw)
+    shown = state in {"uninterpretable", "nonzero"} or (
+        verbose and state in {"not_assessed", "zero"}
+    )
+    stream = StringIO()
+    print_text_report(Console(file=stream, width=240, color_system=None), result, verbose=verbose)
+    outputs = [render(result, fmt, verbose=verbose) for fmt in ("text", "markdown")]
+    outputs.append(stream.getvalue())
+    for output in outputs:
+        assert output.count("SPDX 2.3 graph observations") == int(shown)
+        assert "SecretName" not in output
+        assert "SecretMissing" not in output
+        if shown:
+            assert "do not validate the SBOM" in output
+            assert "inventory completeness, dependency meaning or scanner coverage" in output
+        if state == "nonzero":
+            assert "Repeated local definition occurrences: 6" in output
+            assert "/packages/5/SPDXID; 1 more" in output
+            assert "/packages/6/SPDXID" not in output
+            assert "Unresolved local relationship endpoint occurrences: 6" in output
+            assert "Assign distinct local SPDXIDs" in output
+            assert "supply its intended local definition" in output
+        elif state == "uninterpretable":
+            assert "Could not interpret this scope: invalid_type at /files" in output
+        elif state == "zero" and verbose:
+            assert "Inspected 1 local definition occurrences and 0 local relationship" in output
+            assert "relationships member absent" in output
+        elif state == "not_assessed" and verbose:
+            assert "Not assessed: selected_component_shape at /components" in output
+    for fmt in ("json", "sarif"):
+        output = render(result, fmt)
+        assert "SecretName" not in output
+        assert "SecretMissing" not in output
+
+
+def test_graph_json_and_sarif_are_additive_and_unrecorded_stays_null(monkeypatch):
+    """Catches altered old fields, invented SARIF findings and default-zero coercion."""
+    result = _result()
+    before = json.loads(render(result, "json"))
+    before_sarif = json.loads(render(result, "sarif"))
+    assert before.pop("sbom_graph_observations") is None
+    assert (
+        before_sarif["runs"][0]["tool"]["driver"]["properties"].pop(
+            "sbomGraphObservations"
+        )
+        is None
+    )
+    result.sbom_graph_observations = read_sbom_graph_observations({"components": []})
+    after = json.loads(render(result, "json"))
+    after_sarif = json.loads(render(result, "sarif"))
+    assert after.pop("sbom_graph_observations") == result.sbom_graph_observations
+    assert after == before
+    assert (
+        after_sarif["runs"][0]["tool"]["driver"]["properties"].pop(
+            "sbomGraphObservations"
+        )
+        == result.sbom_graph_observations
+    )
+    assert after_sarif == before_sarif
+    assert after_sarif["runs"][0]["results"] == []
+    assert "invocations" not in after_sarif["runs"][0]
+    original = result.to_dict
+
+    def older_payload(exit_code=0):
+        data = original(exit_code=exit_code)
+        del data["sbom_graph_observations"]
+        return data
+
+    monkeypatch.setattr(result, "to_dict", older_payload)
+    assert "SPDX 2.3 graph observations" not in render(result, "text", verbose=True)
+    assert "SPDX 2.3 graph observations" not in render(result, "markdown", verbose=True)

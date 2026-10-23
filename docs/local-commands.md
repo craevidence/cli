@@ -89,6 +89,70 @@ Notes:
     at level `error`), never `results`. `executionSuccessful` is `false` when an
     assessment-failed notification is present. A run with nothing to report has no `invocations`.
   - GitHub step summary: a table for each group. GitHub and GitLab annotations: none.
+- SBOM observations: `check` reports absent, explicitly null, blank and non-string component
+  version fields, plus locations for components without a nonblank PURL or CPE counted by the
+  local identifier metric. It checks the parsed CycloneDX component occurrences (including nested
+  components) or SPDX 2 JSON packages; metadata root components and services are outside this scope.
+  A nonblank version such as `NOASSERTION` is still a string observation, not a concrete-version
+  determination. Scanner version assessment remains separate.
+  - JSON: the additive `sbom_observations` object in `craevidence.local_check.v1` has `status`
+    (`reported`), `scope` (`parsed_component_occurrences`), `component_count`, `version_fields`,
+    `identifier_fields` and `not_assessed`. `version_fields.nonblank_strings` is a count; its
+    `absent`, `null`, `blank` and `invalid_type` groups each have `count`, `locations` and `omitted`.
+    `identifier_fields.without_nonblank_identifier` has the same group shape. Each group lists
+    at most five document-relative JSON pointers, with exact counts for further occurrences in
+    `omitted`. An absent-field pointer names where that member would be. Identifier pointers name
+    component/package objects; they do not assert that raw identifier members are absent.
+    The groups can overlap and must not be summed as distinct affected components.
+  - Text and Markdown show nonzero groups with repair suggestions. Verbose output names the
+    inspected scope when there are no observations. SARIF carries the same bounded object in
+    `runs[0].tool.driver.properties.sbomObservations`, never as results or execution notifications.
+  - A null object means the producer did not record observations. Older reports may omit it.
+    Readers of v1 should tolerate absent optional fields and ignore unknown additive fields.
+  - These observations do not establish schema validity, identifier syntax, version meaning,
+    dependency-reference integrity, license accuracy, artifact binding or inventory completeness.
+    SPDX 3 `@graph` and XML are not supported by this local parser. Observations do not change
+    findings, sources, readiness dimensions, gates or exits, including `--strict`, and do not
+    require `--sbom-quality`. That option continues to run the optional sbomqs score.
+- SPDX 2.3 graph observations: after loading an explicitly declared SPDX 2.3 JSON
+  document, `check` counts repeated local definition occurrences and unresolved
+  local relationship endpoint occurrences. The definition universe is the document
+  plus `packages`, `files` and `snippets`; endpoints are the two fields of each
+  `relationships` entry. Software counts still describe parsed package occurrences.
+  - IDs are compared exactly, including case. Three definitions of one ID count as
+    two repeats. A reference to that repeated ID is present, not unresolved. Each
+    missing local endpoint occurrence counts, even if another reference names the
+    same missing ID. External `DocumentRef-...:SPDXRef-...` endpoints on either side
+    and right-hand `NONE`/`NOASSERTION` values are excluded from local lookup.
+  - JSON adds nullable `sbom_graph_observations` alongside the field observations.
+    Its fixed `scope` is `spdx_2_3_local_definitions_and_relationship_endpoints`.
+    A `reported` object contains `definition_occurrences`,
+    `local_relationship_endpoint_occurrences`, `relationships_state` (absent,
+    empty or present), `repeated_local_identifiers` and
+    `unresolved_local_relationship_endpoints`. Each group has `count`, at most
+    five `locations` as document-relative JSON pointers, and exact `omitted`.
+    `limitation` is null. Counts continue beyond the sample cap; raw IDs are not
+    copied into this object.
+  - `not_assessed` means the selected representation is outside this scope,
+    including CycloneDX-shaped input, missing/unsupported SPDX declarations and
+    simultaneous `bomFormat`, `@context` or `@graph` markers. `uninterpretable`
+    means selected graph data could not be fully interpreted. Both states have
+    null counts, groups and relationship state, plus a `limitation` with a fixed
+    `code` and `location`. A late malformed entry withholds all provisional totals.
+    Missing, null, empty, blank, wrong-type and invalid-syntax values are distinct;
+    a pointer to an absent field names where it would have appeared.
+  - No recorded observation remains null; older reports may omit the property.
+    SARIF carries the same object in `runs[0].tool.driver.properties.sbomGraphObservations`,
+    never as findings or execution notifications. Text, Markdown and terminal
+    output show nonzero groups and uninterpretable scope by default. Verbose output
+    also shows unsupported scope and measured zero counts. Zero is not a validity
+    or completeness result. Graph metadata adds no annotation, advisory/VEX
+    statement or GitHub step-summary row.
+  - This is not schema validation or a complete dependency-integrity check. Other
+    reference fields, external targets, relationship meaning, inventory completeness
+    and scanner coverage are not established. Existing format admission, sources,
+    scores, findings and gates remain unchanged. The local ID index uses memory
+    proportional to distinct definitions; it does not retain a second edge graph.
 - Inventory coverage: SBOMs from the CRA Evidence engine carry a statement that names the
   files whose packages may be missing from the SBOM: dependency manifests whose declared
   dependencies were not shown to be resolved to packages (for example a `package.json`,

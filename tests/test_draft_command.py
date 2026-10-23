@@ -12,6 +12,7 @@ from cra_evidence_cli.commands.draft import draft
 from cra_evidence_cli.config import CRAEvidenceConfig
 from cra_evidence_cli.local.disclaimer import DISCLAIMER_MARKER, DRAFT_WATERMARK
 from cra_evidence_cli.local.models import Finding, LocalCheckResult
+from cra_evidence_cli.local.sbom import read_sbom_graph_observations
 from cra_evidence_cli.local.vex import apply_vex, load_vex
 
 # Helpers
@@ -289,7 +290,12 @@ def test_vex_rejects_image_and_sbom_together(tmp_path: Path):
 
 
 def test_vex_zero_findings_produces_empty_statements(tmp_path: Path):
+    """Catches promoting graph observations into OpenVEX vulnerability statements."""
     fake_result = _make_result([])
+    fake_result.sbom_graph_observations = read_sbom_graph_observations({
+        "spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
+        "packages": [{"SPDXID": "SPDXRef-A"}] * 2,
+    })
 
     dummy = tmp_path / "sbom.json"
     dummy.write_text("{}", encoding="utf-8")
@@ -559,9 +565,14 @@ def test_advisory_review_marker_and_watermark(tmp_path: Path):
 
 
 def test_advisory_zero_findings_writes_nothing(tmp_path: Path):
+    """Catches creating a CSAF advisory from graph observations without vulnerabilities."""
     # A CSAF advisory requires at least one vulnerability, so with no findings the
     # command writes nothing rather than a schema-invalid empty document.
     fake_result = _make_result([])
+    fake_result.sbom_graph_observations = read_sbom_graph_observations({
+        "spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
+        "packages": [{"SPDXID": "SPDXRef-A"}] * 2,
+    })
     dummy = tmp_path / "sbom.json"
     dummy.write_text("{}", encoding="utf-8")
     out = tmp_path / "advisory.json"
@@ -582,7 +593,12 @@ def test_advisory_zero_findings_writes_nothing(tmp_path: Path):
 
 
 def test_vex_csaf_zero_findings_writes_nothing(tmp_path: Path):
+    """Catches creating a CSAF VEX document from graph observations alone."""
     fake_result = _make_result([])
+    fake_result.sbom_graph_observations = read_sbom_graph_observations({
+        "spdxVersion": "SPDX-2.3", "SPDXID": "SPDXRef-DOCUMENT",
+        "packages": [{"SPDXID": "SPDXRef-A"}] * 2,
+    })
     dummy = tmp_path / "sbom.json"
     dummy.write_text("{}", encoding="utf-8")
     out = tmp_path / "vex.json"
