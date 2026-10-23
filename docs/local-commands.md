@@ -249,8 +249,9 @@ craevidence db update [--cache-dir <dir>]
 ```
 
 - The cache directory resolves to `--cache-dir`, else `$GRYPE_DB_CACHE_DIR`, else
-  `~/.cache/grype/db`. On success the command prints the resolved cache path and the
-  database build date.
+  `~/.cache/grype/db`. On success the command prints the resolved cache path and a
+  database build date when Grype reports one. If it does not, the command labels the
+  local database modification date separately; that date is not a build date.
 - Requires Grype on `PATH`; if it is missing the command exits 15 with install guidance.
 - Concurrent runs are serialized with a file lock, so parallel CI jobs sharing a cache
   do not race on the download.
@@ -272,9 +273,14 @@ craevidence db status [--cache-dir <dir>]
 ```
 
 It reports the resolved cache path, whether Grype is installed, whether a local
-`vulnerability.db` is present, the DB build date from local metadata when
-available, the schema version, the local DB mtime date, and whether the cache
-appears stale.
+`vulnerability.db` is present, the DB build date from explicit local metadata, any
+archive capture date hint, the local DB modification date, the schema version, and
+whether the cache appears stale. Age uses the first truthy value in this order:
+explicit build date, archive capture date hint, then local modification date. It
+selects the value before parsing it, so an invalid selected date leaves status
+unknown instead of falling through. A date is stale only when its parsed age is
+more than 30 whole days. An archive capture hint and local modification date are
+not build dates, and neither proves that every database provider is current.
 
 ## `draft`
 

@@ -7,8 +7,11 @@ execution are replaced in every test that needs them.
 from __future__ import annotations
 
 import json
+import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from cra_evidence_cli.commands import db as db_module
@@ -32,6 +35,17 @@ def _engine_available() -> EngineInspection:
 
 def _engine_absent() -> EngineInspection:
     return EngineInspection(None, "the CRA Evidence engine is not installed")
+
+
+def _freeze_db_clock(monkeypatch, now: datetime) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return now.replace(tzinfo=None)
+            return now.astimezone(tz)
+
+    monkeypatch.setattr(db_module, "datetime", FrozenDateTime)
 
 
 # resolve_cache_dir
@@ -89,38 +103,114 @@ def test_db_update_happy_path(tmp_path, monkeypatch):
 
     monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
 
-    def fake_db_run(cmd, *args, **kwargs):
+    calls = []
+
+    def fake_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+
         class R:
             returncode = 0
             stdout = ""
             stderr = ""
 
-        # `grype db update` -> success, no output needed.
         if cmd[1:3] == ["db", "update"]:
+            return R()
+        if cmd[1:5] == ["db", "status", "--output", "json"]:
+            R.stdout = json.dumps(
+                {"built": built_date, "schemaVersion": "v6.1.4", "valid": True}
+            )
             return R()
         msg = f"unexpected command from db.py: {cmd}"
         raise AssertionError(msg)
 
-    def fake_status_run(cmd, *args, **kwargs):
-        class R:
-            returncode = 0
-            stdout = json.dumps(
-                {"built": built_date, "schemaVersion": "v6.1.4", "valid": True}
-            )
-            stderr = ""
+    monkeypatch.setattr(db_module.subprocess, "run", fake_run)
 
-        return R()
+    def fail_mtime(self):
+        msg = "mtime must not be read"
+        raise AssertionError(msg)
 
-    # db.py shells out via subprocess in commands.db; metadata via scanner.subprocess.
-    monkeypatch.setattr(db_module.subprocess, "run", fake_db_run)
-    monkeypatch.setattr(scanner_module.subprocess, "run", fake_status_run)
+    monkeypatch.setattr(scanner_module.GrypeLocalScanner, "_db_mtime_offline", fail_mtime)
 
     runner = CliRunner()
     result = runner.invoke(db, ["update", "--cache-dir", str(tmp_path)])
 
     assert result.exit_code == 0, result.output + result.stderr
     assert str(Path(tmp_path).resolve()) in result.stdout
-    assert built_date in result.stdout
+    assert f"DB build date: {built_date}" in result.stdout
+    assert "DB mtime date:" not in result.stdout
+    assert calls == [
+        ["/opt/bin/grype", "db", "update"],
+        ["/opt/bin/grype", "db", "status", "--output", "json"],
+    ]
+
+
+@pytest.mark.parametrize(
+    ("built", "mtime", "status_returncode", "expected_mtime"),
+    [
+        (None, "2026-07-15", 0, "2026-07-15"),
+        (None, None, 0, "unknown"),
+        ("", "2026-07-15", 0, "2026-07-15"),
+        ("", None, 0, "unknown"),
+        (None, "2026-07-15", 1, "2026-07-15"),
+    ],
+)
+def test_db_update_missing_build_labels_mtime_separately(
+    tmp_path, monkeypatch, built, mtime, status_returncode, expected_mtime
+):
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
+    calls = []
+
+    def fake_run(cmd, *args, **kwargs):
+        calls.append(cmd)
+
+        class R:
+            returncode = 0
+            stderr = ""
+
+        if cmd[1:3] == ["db", "update"]:
+            R.stdout = ""
+        elif cmd[1:5] == ["db", "status", "--output", "json"]:
+            R.returncode = status_returncode
+            stdout = json.dumps(
+                {"built": built, "schemaVersion": "v6.1.4", "valid": True}
+            )
+            R.stdout = stdout
+        else:
+            msg = f"unexpected command from db.py: {cmd}"
+            raise AssertionError(msg)
+        return R()
+
+    monkeypatch.setattr(db_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        scanner_module.GrypeLocalScanner,
+        "_db_mtime_offline",
+        lambda self: mtime,
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(db, ["update", "--cache-dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output + result.stderr
+    assert str(Path(tmp_path).resolve()) in result.stdout
+    assert "DB build date: unknown" in result.stdout
+    assert f"DB mtime date: {expected_mtime}" in result.stdout
+    assert calls == [
+        ["/opt/bin/grype", "db", "update"],
+        ["/opt/bin/grype", "db", "status", "--output", "json"],
+    ]
+
+
+def test_db_update_timeout_exits_15(tmp_path, monkeypatch):
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
+
+    def fake_run(cmd, *args, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, timeout=900)
+
+    monkeypatch.setattr(db_module.subprocess, "run", fake_run)
+    result = CliRunner().invoke(db, ["update", "--cache-dir", str(tmp_path)])
+
+    assert result.exit_code == 15
+    assert "timed out" in result.stderr
 
 
 def test_db_update_subprocess_failure_exits_15(tmp_path, monkeypatch):
@@ -176,9 +266,169 @@ def test_db_status_reads_local_cache_without_grype_status(tmp_path, monkeypatch)
     assert result.exit_code == 0, result.output
     assert "CRA Evidence engine available: yes" in result.output
     assert "Vulnerability DB present: yes" in result.output
-    assert "DB build date: 2026-06-14T01:05:09Z" in result.output
+    assert "DB build date: unknown" in result.output
+    assert "Archive capture date hint: 2026-06-14T01:05:09Z" in result.output
+    assert "Status age source: archive capture date hint" in result.output
     assert "DB version: 6.1.7" in result.output
     assert "Schema version: 6" in result.output
+
+
+@pytest.mark.parametrize(
+    (
+        "built",
+        "source",
+        "mtime",
+        "expected_build",
+        "expected_capture",
+        "age_source",
+        "status",
+    ),
+    [
+        (
+            None,
+            "vulnerability-db_v6.1.7_2026-06-14T01:05:09Z_1781597641.tar.zst",
+            "2026-07-15",
+            "unknown",
+            "2026-06-14T01:05:09Z",
+            "archive capture date hint",
+            "stale",
+        ),
+        (
+            "2026-06-16T01:05:09Z",
+            "vulnerability-db_v6.1.7_2026-06-14T01:05:09Z_1781597641.tar.zst",
+            "2026-07-15",
+            "2026-06-16T01:05:09Z",
+            "2026-06-14T01:05:09Z",
+            "metadata build date",
+            "current",
+        ),
+        (
+            "",
+            "vulnerability-db_v6.1.7_2026-06-14T01:05:09Z_1781597641.tar.zst",
+            "2026-07-15",
+            "unknown",
+            "2026-06-14T01:05:09Z",
+            "archive capture date hint",
+            "stale",
+        ),
+        (
+            123,
+            "vulnerability-db_v6.1.7_2026-06-14T01:05:09Z_1781597641.tar.zst",
+            "2026-07-15",
+            "unknown",
+            "2026-06-14T01:05:09Z",
+            "archive capture date hint",
+            "stale",
+        ),
+        (
+            "not-a-date",
+            "vulnerability-db_v6.1.7_2026-06-14T01:05:09Z_1781597641.tar.zst",
+            "2026-07-15",
+            "not-a-date",
+            "2026-06-14T01:05:09Z",
+            "metadata build date",
+            "unknown",
+        ),
+        (
+            None,
+            "vulnerability-db_v6.1.7_2026-06-14T01:05:09Z_without-numeric-epoch.tar.zst",
+            "2026-07-15",
+            "unknown",
+            "2026-06-14T01:05:09Z",
+            "archive capture date hint",
+            "stale",
+        ),
+        (
+            None,
+            "vulnerability-db_v6.1.7_2026-06-14T01:05:09Z",
+            "2026-07-15",
+            "unknown",
+            "2026-06-14T01:05:09Z",
+            "archive capture date hint",
+            "stale",
+        ),
+        (
+            None,
+            "vulnerability-db_v6.1.7_invalid_1781597641.tar.zst",
+            "2026-07-15",
+            "unknown",
+            "unknown",
+            "local DB mtime date",
+            "current",
+        ),
+        (
+            None,
+            "vulnerability-db_v6.1.7_2026-99-14T01:05:09Z_1781597641.tar.zst",
+            "2026-07-15",
+            "unknown",
+            "2026-99-14T01:05:09Z",
+            "archive capture date hint",
+            "unknown",
+        ),
+        (None, None, "2026-07-15", "unknown", "unknown", "local DB mtime date", "current"),
+        (None, 123, "2026-07-15", "unknown", "unknown", "local DB mtime date", "current"),
+        (None, None, None, "unknown", "unknown", "unknown", "unknown"),
+        (
+            "2026-06-16T00:00:00Z",
+            None,
+            "2026-07-15",
+            "2026-06-16T00:00:00Z",
+            "unknown",
+            "metadata build date",
+            "current",
+        ),
+        (
+            "2026-06-15T01:00:00Z",
+            None,
+            "2026-07-15",
+            "2026-06-15T01:00:00Z",
+            "unknown",
+            "metadata build date",
+            "current",
+        ),
+        (
+            "2026-06-15T00:00:00Z",
+            None,
+            "2026-07-15",
+            "2026-06-15T00:00:00Z",
+            "unknown",
+            "metadata build date",
+            "stale",
+        ),
+    ],
+)
+def test_db_status_labels_each_date_and_preserves_age_selection(
+    tmp_path,
+    monkeypatch,
+    built,
+    source,
+    mtime,
+    expected_build,
+    expected_capture,
+    age_source,
+    status,
+):
+    db_dir = tmp_path / "6"
+    db_dir.mkdir()
+    (db_dir / "vulnerability.db").write_bytes(b"db")
+    metadata = {"built": built, "source": source, "schemaVersion": "v6.1.7"}
+    (db_dir / "import.json").write_text(json.dumps(metadata), encoding="utf-8")
+    _freeze_db_clock(monkeypatch, datetime(2026, 7, 16, tzinfo=UTC))
+    monkeypatch.setattr(scanner_module, "inspect_engine", _engine_available)
+    monkeypatch.setattr(
+        scanner_module.GrypeLocalScanner,
+        "_db_mtime_offline",
+        lambda self: mtime,
+    )
+
+    result = CliRunner().invoke(db, ["status", "--cache-dir", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert f"DB build date: {expected_build}" in result.output
+    assert f"Archive capture date hint: {expected_capture}" in result.output
+    assert f"DB mtime date: {mtime or 'unknown'}" in result.output
+    assert f"Status age source: {age_source}" in result.output
+    assert f"Status: {status}" in result.output
 
 
 def test_db_status_missing_cache_reports_absent_db(tmp_path, monkeypatch):
@@ -189,6 +439,10 @@ def test_db_status_missing_cache_reports_absent_db(tmp_path, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "CRA Evidence engine available: no" in result.output
     assert "Vulnerability DB present: no" in result.output
+    assert "DB build date: unknown" in result.output
+    assert "Archive capture date hint: unknown" in result.output
+    assert "DB mtime date: unknown" in result.output
+    assert "Status age source: unknown" in result.output
     assert "Status: missing" in result.output
 
 

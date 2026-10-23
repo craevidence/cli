@@ -82,15 +82,11 @@ def _schema_version(raw: object) -> str:
 
 
 def _grype_db_info(metadata: dict[str, Any]) -> dict[str, str | None]:
-    """Pull the build date and schema version from grype's import.json.
-
-    Grype v6 records them inside the `source` download URL, for example
-    `vulnerability-db_v6.1.7_2026-06-16T01:05:09Z_...`. Older metadata may carry
-    explicit `built` / `schemaVersion` keys instead, so both are supported.
-    """
+    """Pull build, archive capture hint, and schema metadata from import.json."""
     built = metadata.get("built") if isinstance(metadata.get("built"), str) else None
     schema_raw: object = metadata.get("schemaVersion")
     version: str | None = None
+    capture: str | None = None
     source = metadata.get("source")
     if isinstance(source, str):
         match = re.search(
@@ -98,10 +94,15 @@ def _grype_db_info(metadata: dict[str, Any]) -> dict[str, str | None]:
         )
         if match:
             version = match.group(1)
-            built = built or match.group(2)
+            capture = match.group(2)
             if schema_raw is None:
                 schema_raw = version
-    return {"built": built, "version": version, "schema": _schema_version(schema_raw)}
+    return {
+        "built": built,
+        "capture": capture,
+        "version": version,
+        "schema": _schema_version(schema_raw),
+    }
 
 
 def _days_old(value: str | None) -> int | None:
@@ -131,8 +132,8 @@ def update(cache_dir_opt: str | None) -> None:
     """Download or refresh the local Grype vulnerability database.
 
     This is the only local-engine command permitted to make network calls to
-    fetch the vulnerability database. It runs `grype db update`, then prints the
-    resolved cache path and the database build date.
+    fetch the vulnerability database. It prints a build date when Grype reports
+    one and labels the local modification date separately when it does not.
     """
     cache_dir = _resolve_cache_dir_or_exit(cache_dir_opt)
     # The cache location is pinned for the grype child via the subprocess `env=`
@@ -172,15 +173,17 @@ def update(cache_dir_opt: str | None) -> None:
             )
             sys.exit(ScanEngineUnavailable().exit_code)
 
-    # Report honestly: just the cache path and the DB build date. No verdict.
+    # Keep a local modification date separate from the database build date.
     metadata = scanner.get_db_metadata()
-    if metadata and metadata.get("built"):
-        built = metadata["built"]
-    else:
-        built = scanner._db_mtime_offline() or "unknown"
+    built = metadata.get("built") if metadata else None
 
     click.echo(f"Grype DB cache: {cache_dir}")
-    click.echo(f"DB build date: {built}")
+    if built:
+        click.echo(f"DB build date: {built}")
+    else:
+        mtime = scanner._db_mtime_offline() or "unknown"
+        click.echo("DB build date: unknown")
+        click.echo(f"DB mtime date: {mtime}")
 
 
 @db.command("status")
@@ -200,8 +203,21 @@ def status(cache_dir_opt: str | None) -> None:
     metadata = _read_import_metadata(db_dir)
     info = _grype_db_info(metadata)
     built = info["built"]
+    capture = info["capture"]
     mtime = scanner._db_mtime_offline()
-    age_days = _days_old(built or mtime)
+    if built:
+        age_value = built
+        age_source = "metadata build date"
+    elif capture:
+        age_value = capture
+        age_source = "archive capture date hint"
+    elif mtime:
+        age_value = mtime
+        age_source = "local DB mtime date"
+    else:
+        age_value = None
+        age_source = "unknown"
+    age_days = _days_old(age_value)
     stale = age_days is not None and age_days > _DB_STALE_DAYS
     if not db_dir:
         status_value = "missing"
@@ -219,7 +235,9 @@ def status(cache_dir_opt: str | None) -> None:
     click.echo(f"Vulnerability DB present: {'yes' if db_dir else 'no'}")
     click.echo(f"DB path: {db_dir / 'vulnerability.db' if db_dir else 'not found'}")
     click.echo(f"DB build date: {built or 'unknown'}")
+    click.echo(f"Archive capture date hint: {capture or 'unknown'}")
     click.echo(f"DB mtime date: {mtime or 'unknown'}")
+    click.echo(f"Status age source: {age_source}")
     click.echo(f"DB version: {info['version'] or 'unknown'}")
     click.echo(f"Schema version: {info['schema']}")
     click.echo(f"Status: {status_value}")

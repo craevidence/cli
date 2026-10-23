@@ -64,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `db status` labels explicit database build metadata, the archive capture date
+  hint, and the local database modification date separately, and names the date
+  used for its existing age status. `db update` keeps a missing build date unknown
+  and labels the local modification date separately.
 - JSON output from `validate` now exits 1 when the server reports an invalid SBOM,
   matching text output. The returned JSON payload is unchanged.
 - `check` no longer treats a version of `-` behind a numeric epoch (`1:-`) as a
