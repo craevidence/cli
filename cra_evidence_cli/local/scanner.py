@@ -16,6 +16,7 @@ from cra_evidence_cli.engine import (
     inspect_engine,
 )
 from cra_evidence_cli.exceptions import ScanEngineUnavailable
+from cra_evidence_cli.local.enrich import _date_text
 from cra_evidence_cli.local.models import (
     CoverageSource,
     Finding,
@@ -336,6 +337,7 @@ def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
         aliases.discard(vuln_id)
         known_exploited_raw = vulnerability.get("knownExploited") or []
         fix = vulnerability.get("fix") or {}
+        epss_probability, epss_cve, epss_date = _first_epss(vulnerability.get("epss") or [])
         finding = Finding(
             id=vuln_id,
             package=str(artifact.get("name") or "unknown"),
@@ -346,7 +348,10 @@ def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
             purl=artifact.get("purl"),
             title=vulnerability.get("description"),
             references=_references(vulnerability.get("urls") or []),
-            epss_probability=_first_epss(vulnerability.get("epss") or []),
+            epss_probability=epss_probability,
+            epss_cve=epss_cve,
+            epss_date=epss_date,
+            epss_source="grype-db" if epss_probability is not None else None,
             known_exploited=True if known_exploited_raw else None,
             source="grype",
         )
@@ -373,15 +378,18 @@ def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
     return findings, data
 
 
-def _first_epss(items: list[Any]) -> float | None:
+def _first_epss(items: list[Any]) -> tuple[float | None, str | None, str | None]:
     for item in items:
         if not isinstance(item, dict):
             continue
         try:
-            return float(item["epss"])
+            probability = float(item["epss"])
         except (KeyError, TypeError, ValueError):
             continue
-    return None
+        raw_cve = item.get("cve")
+        cve = raw_cve.strip().upper() if isinstance(raw_cve, str) and raw_cve.strip() else None
+        return probability, cve, _date_text(item.get("date"))
+    return None, None, None
 
 
 def _references(items: list[Any]) -> list[str]:

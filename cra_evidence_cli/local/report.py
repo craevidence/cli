@@ -98,7 +98,7 @@ def print_text_report(
     actions = _top_action_records(data)
     if actions:
         for action in actions:
-            console.print(_action_text(action))
+            console.print(_action_text(action, data["coverage"]))
     else:
         console.print("- Keep the SBOM and vulnerability source snapshots current.")
 
@@ -273,7 +273,31 @@ def _top_action_records(data: dict[str, Any]) -> list[dict[str, Any]]:
     )[:3]
 
 
-def _action_text(finding: dict[str, Any]) -> Text:
+def _epss_label(finding: dict[str, Any], coverage: list[dict[str, Any]]) -> str | None:
+    refresh = next(
+        (source["status"] for source in coverage if source["source"] == "first-epss"), None
+    )
+    reason = None
+    if refresh == "unavailable":
+        reason = "FIRST refresh unavailable"
+    elif refresh in {"present", "stale", "unknown"}:
+        reason = "no matching FIRST row returned"
+    probability = finding.get("epss_probability")
+    if isinstance(probability, (int, float)):
+        label = (
+            f"EPSS {probability:.2f} (CVE: {finding.get('epss_cve') or 'unknown'}; "
+            f"date: {finding.get('epss_date') or 'unknown'}; "
+            f"source: {finding.get('epss_source') or 'unknown'}"
+        )
+        if finding.get("epss_source") == "grype-db" and finding["cve_aliases"] and reason:
+            label += f"; {reason}"
+        return label + ")"
+    if finding["cve_aliases"] and reason:
+        return f"EPSS unavailable ({reason})"
+    return None
+
+
+def _action_text(finding: dict[str, Any], coverage: list[dict[str, Any]]) -> Text:
     text = Text("- ")
     text.append(str(finding["package"]), style=STYLE_TITLE)
     version = finding.get("version")
@@ -282,9 +306,9 @@ def _action_text(finding: dict[str, Any]) -> Text:
     marks = []
     if finding.get("known_exploited") is True:
         marks.append(("known-exploited", STYLE_BLOCKER))
-    epss = finding.get("epss_probability")
-    if isinstance(epss, (int, float)):
-        marks.append((f"EPSS {epss:.2f}", STYLE_LABEL))
+    epss_label = _epss_label(finding, coverage)
+    if epss_label:
+        marks.append((epss_label, STYLE_LABEL))
     if marks:
         text.append(" [")
         for index, (label, style) in enumerate(marks):
@@ -776,9 +800,9 @@ def _top_actions(data: dict[str, Any]) -> list[str]:
         marks = []
         if finding.get("known_exploited") is True:
             marks.append("known-exploited")
-        epss = finding.get("epss_probability")
-        if isinstance(epss, (int, float)):
-            marks.append(f"EPSS {epss:.2f}")
+        epss_label = _epss_label(finding, data["coverage"])
+        if epss_label:
+            marks.append(epss_label)
         mark_text = f" [{', '.join(marks)}]" if marks else ""
         actions.append(
             f"- {finding['package']} {finding.get('version') or ''}{mark_text}:{fixed_text}"

@@ -22,7 +22,7 @@ _RFC3339_DATE_TIME = re.compile(
 def apply_cve_alias_enrichment(
     findings: list[Finding],
     kev_cves: set[str] | None = None,
-    epss_scores: dict[str, float] | None = None,
+    epss_scores: dict[str, tuple[float, str | None]] | None = None,
 ) -> None:
     kev_cves = {item.upper() for item in (kev_cves or set())}
     epss_scores = {key.upper(): value for key, value in (epss_scores or {}).items()}
@@ -35,7 +35,9 @@ def apply_cve_alias_enrichment(
 
         for cve in sorted(cves):
             if cve in epss_scores:
-                finding.epss_probability = epss_scores[cve]
+                finding.epss_probability, finding.epss_date = epss_scores[cve]
+                finding.epss_cve = cve
+                finding.epss_source = "first-epss"
                 break
 
 
@@ -65,10 +67,10 @@ def fetch_kev_catalog(timeout: float = 20.0) -> tuple[set[str], CoverageSource]:
 
 def fetch_epss_scores(
     cves: set[str], timeout: float = 20.0
-) -> tuple[dict[str, float], CoverageSource]:
+) -> tuple[dict[str, tuple[float, str | None]], CoverageSource]:
     if not cves:
         return {}, CoverageSource("first-epss", "skipped", detail="No CVE aliases found")
-    scores: dict[str, float] = {}
+    scores: dict[str, tuple[float, str | None]] = {}
     publication_dates: list[str | None] = []
     with httpx.Client(timeout=timeout) as client:
         for batch in _chunks(sorted(cves), 100):
@@ -98,8 +100,9 @@ def fetch_epss_scores(
                 if not math.isfinite(score) or not 0.0 <= score <= 1.0:
                     msg = "FIRST EPSS score must be finite and within [0, 1]"
                     raise ValueError(msg)
-                scores[cve.strip().upper()] = score
-                publication_dates.append(_date_text(item.get("date")))
+                publication_date = _date_text(item.get("date"))
+                scores[cve.strip().upper()] = (score, publication_date)
+                publication_dates.append(publication_date)
     as_of = (
         min((date for date in publication_dates if date is not None), default=None)
         if all(date is not None for date in publication_dates)

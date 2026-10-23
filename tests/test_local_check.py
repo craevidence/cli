@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import click
+import httpx
 import pytest
 from click.testing import CliRunner
 
@@ -16,6 +17,7 @@ from cra_evidence_cli.exceptions import (
     ScanEngineUnavailable,
     VulnerabilityThresholdExceeded,
 )
+from cra_evidence_cli.local import enrich
 from cra_evidence_cli.local.enrich import apply_cve_alias_enrichment
 from cra_evidence_cli.local.models import (
     Component,
@@ -231,7 +233,7 @@ def test_cve_alias_join_sets_known_exploited_before_kev_lookup():
     )
 
     apply_cve_alias_enrichment(
-        [finding], kev_cves={"CVE-2024-1234"}, epss_scores={"CVE-2024-1234": 0.7}
+        [finding], kev_cves={"CVE-2024-1234"}, epss_scores={"CVE-2024-1234": (0.7, None)}
     )
 
     assert finding.known_exploited is True
@@ -298,10 +300,37 @@ def test_grype_match_level_related_cve_reaches_kev_and_epss_enrichment():
 
     assert findings[0].aliases == {"CVE-2026-53493"}
     apply_cve_alias_enrichment(
-        findings, kev_cves={"CVE-2026-53493"}, epss_scores={"CVE-2026-53493": 0.42}
+        findings, kev_cves={"CVE-2026-53493"}, epss_scores={"CVE-2026-53493": (0.42, None)}
     )
     assert findings[0].known_exploited is True
     assert findings[0].epss_probability == 0.42
+
+
+@pytest.mark.parametrize(("rows", "expected"), [
+    ([{"epss": "bad", "cve": "CVE-2026-9999", "date": "2026-10-16"},
+      {"epss": "0.25", "cve": " cve-2026-0001 ", "date": "2026-10-14"},
+      {"epss": 0.9, "cve": "CVE-2026-0002", "date": "2026-10-15"}],
+     (0.25, "CVE-2026-0001", "2026-10-14", "grype-db")),
+    ([{"epss": 0, "cve": "CVE-2026-0001", "date": "2026-10-14"}],
+     (0.0, "CVE-2026-0001", "2026-10-14", "grype-db")),
+    ([{"epss": 0.25, "cve": 42, "date": "not-a-date"}],
+     (0.25, None, None, "grype-db")),
+    ([{"epss": 0.25, "cve": "  "}], (0.25, None, None, "grype-db")),
+    ([], (None, None, None, None)),
+    ([{"cve": "CVE-2026-0001", "date": "2026-10-14"}], (None, None, None, None)),
+])
+def test_grype_epss_keeps_first_scored_row_without_inventing_metadata(rows, expected):
+    """Catches mixing rows, selecting the maximum, losing zero or borrowing the finding ID."""
+    (finding,) = parse_grype_output(json.dumps({"matches": [{
+        "vulnerability": {"id": "CVE-2026-1234", "epss": rows},
+        "artifact": {"name": "pkg", "version": "1.0"},
+        "matchDetails": _direct_match_details("1.0"),
+    }]}))
+
+    assert (
+        finding.epss_probability, finding.epss_cve, finding.epss_date, finding.epss_source
+    ) == expected
+    assert finding.source == "grype"
 
 
 def test_stale_source_downgrades_vulnerability_dimension():
@@ -377,16 +406,24 @@ def test_strict_gate_does_not_fail_for_osv_partial_coverage_alone():
     check_module._enforce_gate(result, None, True)
 
 
-def test_unknown_feed_freshness_fails_strict_but_keeps_findings_in_optional_mode():
-    finding = Finding(id="CVE-2026-0001", package="pkg", version="1.0")
+@pytest.mark.parametrize("status", ["unknown", "stale", "unavailable"])
+def test_unknown_feed_freshness_fails_strict_but_keeps_findings_in_optional_mode(status):
+    """Catches treating zero EPSS or its provenance as a severity or freshness waiver."""
+    finding = Finding(
+        id="CVE-2026-0001", package="pkg", version="1.0", severity="critical",
+        epss_probability=0, epss_cve="CVE-2026-0001", epss_date="2026-10-14",
+        epss_source="grype-db",
+    )
     result = _result(findings=[finding])
-    result.coverage = [CoverageSource("first-epss", "unknown")]
+    result.coverage = [CoverageSource("first-epss", status)]
 
     with pytest.raises(ScanEngineUnavailable, match="unknown, stale, or unavailable"):
         check_module._enforce_gate(result, None, True)
 
     check_module._enforce_gate(result, None, False)
     assert result.findings == [finding]
+    with pytest.raises(VulnerabilityThresholdExceeded):
+        check_module._enforce_gate(result, "critical", False)
 
 
 def test_osv_batches_under_size_limit():
@@ -725,6 +762,70 @@ def _critical_finding(cve="CVE-2025-9999", known_exploited=None):
 def _run_check(args):
     runner = CliRunner()
     return runner.invoke(cli, ["--output", "json", "check", *args])
+
+
+@pytest.mark.parametrize("second_response", ["transport-error", "malformed", "empty"])
+def test_check_epss_later_batch_failure_preserves_prior_observations(
+    monkeypatch, tmp_path, second_response,
+):
+    """Catches partial application before a later batch fails and clearing unreturned rows."""
+    findings = [Finding(
+        f"CVE-2026-{index:04d}", "pkg", "1.0", source="grype",
+        epss_probability=0.41, epss_cve=f"CVE-2026-{index:04d}",
+        epss_date="2026-10-14", epss_source="grype-db",
+    ) for index in range(1, 102)]
+    monkeypatch.setattr(_FakeScanner, "findings", findings)
+    monkeypatch.setattr(check_module, "GrypeLocalScanner", _FakeScanner)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
+    monkeypatch.setattr(check_module, "fetch_kev_catalog", lambda: (
+        set(), CoverageSource("cisa-kev", "present", as_of="2026-10-15"),
+    ))
+    original_client = httpx.Client
+    requests = []
+
+    def respond(request):
+        requested = request.url.params["cve"].split(",")
+        requests.append(requested)
+        if len(requests) == 1:
+            return httpx.Response(200, json={"data": [
+                {"cve": requested[0], "epss": 0.7, "date": "2026-10-15"},
+            ]})
+        if second_response == "transport-error":
+            msg = "unavailable"
+            raise httpx.ConnectError(msg, request=request)
+        return httpx.Response(200, json={} if second_response == "malformed" else {"data": []})
+
+    def client_factory(*, timeout):
+        return original_client(timeout=timeout, transport=httpx.MockTransport(respond))
+
+    monkeypatch.setattr(enrich.httpx, "Client", client_factory)
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+    result = _run_check(["--sbom", str(sbom)])
+
+    assert result.exit_code == 0, result.output
+    assert list(map(len, requests)) == [100, 1]
+    report = json.loads(result.stdout)
+    first = report["findings"][0]
+    expected = (0.7, "2026-10-15", "first-epss") if second_response == "empty" else (
+        0.41, "2026-10-14", "grype-db",
+    )
+    assert (first["epss_probability"], first["epss_date"], first["epss_source"]) == expected
+    assert first["epss_cve"] == "CVE-2026-0001"
+    assert first["source"] == "grype"
+    for unchanged in report["findings"][1:]:
+        assert (unchanged["epss_probability"], unchanged["epss_cve"],
+                unchanged["epss_date"], unchanged["epss_source"]) == (
+            0.41, unchanged["id"], "2026-10-14", "grype-db",
+        )
+    coverage = next(row for row in report["coverage"] if row["source"] == "first-epss")
+    if second_response == "empty":
+        assert coverage["status"] in {"present", "stale"}
+        assert coverage["as_of"] == "2026-10-15"
+    else:
+        assert coverage["status"] == "unavailable"
+        assert coverage["as_of"] is None
+    assert report["provenance"]["first-epss"]["status"] == coverage["status"]
 
 
 def test_vex_not_affected_with_justification_suppresses(monkeypatch, tmp_path):

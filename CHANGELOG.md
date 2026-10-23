@@ -78,6 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PURL version extraction distinguishes a release from `@` in a namespace,
   qualifier or subpath and preserves one version carrier in OSV requests.
 
+- `check` retains each EPSS score's CVE, observation date and acquisition source in
+  JSON, SARIF and action labels. Missing rows or failed FIRST refreshes preserve
+  existing Grype observations without presenting them as refreshed. Missing scores
+  and metadata remain distinct from zero; finding gates and ranking are unchanged.
 - `check` no longer treats a version of `-` behind a numeric epoch (`1:-`) as a
   concrete version. Like `*`, `-` and `unknown`, it names no version, with or without
   the epoch. Versions such as `1:1.0-1`, `0` and `unknown-1` stay concrete.

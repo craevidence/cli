@@ -182,8 +182,8 @@ def test_parser_marks_versionless_component_matches_indicative():
     assert all(f.is_indicative for f in findings)
 
 
-def test_parser_keeps_confirmed_finding_shape_unchanged():
-    """Fails if a version-anchored finding gains a flag or loses a reported field."""
+def test_parser_keeps_confirmed_finding_shape_with_nullable_epss_provenance():
+    """Fails if a confirmed finding loses fields or omits unknown EPSS provenance."""
     (finding,) = parse_grype_output(json.dumps({"matches": [_confirmed_match(exploited=True)]}))
 
     assert not finding.is_indicative
@@ -200,6 +200,9 @@ def test_parser_keeps_confirmed_finding_shape_unchanged():
         "title",
         "references",
         "epss_probability",
+        "epss_cve",
+        "epss_date",
+        "epss_source",
         "known_exploited",
         "source",
         "ignored_by_policy",
@@ -480,11 +483,16 @@ def test_closing_line_for_other_exits_is_unchanged():
 
 def test_json_report_shape_for_indicative_candidates(monkeypatch, tmp_path):
     """Fails if the JSON mixes the lists, drops the policy or omits the reason and evidence."""
-    _, report = _json_run(monkeypatch, tmp_path, [*_versionless_matches(), _confirmed_match()])
+    matches = _versionless_matches()
+    matches[0]["vulnerability"]["epss"] = [
+        {"epss": 0.9, "cve": "CVE-2026-0001", "date": "2026-10-14"},
+    ]
+    run, report = _json_run(monkeypatch, tmp_path, [*matches, _confirmed_match()])
 
     assert report["provenance"]["version_applicability_policy"] == "concrete-v1"
     assert [f["id"] for f in report["findings"]] == ["CVE-2026-1111"]
     assert report["summary"]["total"] == 1
+    assert run.epss_queries == [{"CVE-2026-1111"}]
     first = report["indicative_findings"][0]
     assert set(first) == {
         "id",

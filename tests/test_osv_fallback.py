@@ -367,7 +367,9 @@ def test_osv_applicability_controls_high_gate(
 
     def fake_epss(cves):
         epss_queries.append(cves)
-        return {"CVE-2024-0001": 0.9}, CoverageSource("first-epss", "present", as_of=today)
+        return {"CVE-2024-0001": (0.9, today)}, CoverageSource(
+            "first-epss", "present", as_of=today
+        )
 
     monkeypatch.setattr(check_module, "fetch_epss_scores", fake_epss)
     sbom = tmp_path / "sbom.json"
@@ -397,6 +399,12 @@ def test_osv_applicability_controls_high_gate(
     assert payload["summary"]["known_exploited"] == confirmed
     assert [f["severity"] for f in payload["findings"]] == ["high"] * confirmed
     assert [f["cve_aliases"] for f in payload["findings"]] == [["CVE-2024-0001"]] * confirmed
+    assert [
+        (f["epss_probability"], f["epss_cve"], f["epss_date"], f["epss_source"])
+        for f in payload["findings"]
+    ] == [(0.9, "CVE-2024-0001", today, "first-epss")] * confirmed
+    epss = next(source for source in payload["coverage"] if source["source"] == "first-epss")
+    assert epss["status"] == "present"
     assert epss_queries == [{"CVE-2024-0001"} if confirmed else set()]
     candidates = payload["indicative_findings"]
     assert [f["quality_reason"] for f in candidates] == ["version_conflict"] * indicative

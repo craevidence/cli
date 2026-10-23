@@ -130,6 +130,109 @@ def test_plain_text_render_has_no_terminal_control_sequences() -> None:
     assert "\x1b[" not in text
 
 
+@pytest.mark.parametrize(("probability", "source", "status", "expected", "absent"), [
+    (0.0, "grype-db", "unavailable", "FIRST refresh unavailable", "no matching FIRST row"),
+    (0.25, "grype-db", "present", "no matching FIRST row returned", "FIRST refresh unavailable"),
+    (0.25, "grype-db", "stale", "no matching FIRST row returned", "FIRST refresh unavailable"),
+    (0.25, "grype-db", "unknown", "no matching FIRST row returned", "FIRST refresh unavailable"),
+    (0.25, "first-epss", "present", "source: first-epss", "no matching FIRST row"),
+    (
+        0.25,
+        None,
+        "unavailable",
+        "CVE: unknown; date: unknown; source: unknown",
+        "FIRST refresh unavailable",
+    ),
+    (None, None, "unavailable", "EPSS unavailable (FIRST refresh unavailable)", "EPSS 0.00"),
+    (None, None, "unknown", "EPSS unavailable (no matching FIRST row returned)", "EPSS 0.00"),
+])
+def test_epss_human_reports_keep_observation_and_refresh_distinct(
+    probability, source, status, expected, absent,
+):
+    """Catches lost zero, invented metadata and one-renderer-only provenance updates."""
+    result = _result()
+    result.findings = [Finding(
+        "CVE-2026-0001", "demo", "1.0", epss_probability=probability,
+        epss_cve="CVE-2026-0002" if source else None,
+        epss_date="2026-10-14" if source else None, epss_source=source,
+    )]
+    result.coverage = [CoverageSource("first-epss", status, as_of="2026-10-15")]
+    rich_output = StringIO()
+    print_text_report(Console(file=rich_output, width=300, color_system=None), result)
+    for rendered in (render(result, "text"), render(result, "markdown"), rich_output.getvalue()):
+        assert expected in rendered
+        assert absent not in rendered
+        if probability is not None:
+            assert f"EPSS {probability:.2f}" in rendered
+        if source:
+            assert "CVE: CVE-2026-0002; date: 2026-10-14" in rendered
+
+
+def test_epss_unknown_date_is_not_filled_from_feed_coverage():
+    """Catches assigning a feed-level date to a dated or undated selected observation."""
+    result = _result()
+    result.findings = [Finding(
+        "CVE-2026-0001", "demo", "1.0", epss_probability=0,
+        epss_cve="CVE-2026-0001", epss_source="first-epss",
+    )]
+    result.coverage = [CoverageSource("first-epss", "unknown", as_of="2026-10-15")]
+
+    for format_name in ("text", "markdown"):
+        rendered = render(result, format_name)
+        assert "EPSS 0.00 (CVE: CVE-2026-0001; date: unknown; source: first-epss)" in rendered
+        assert "no matching FIRST row" not in rendered
+
+
+def test_epss_json_and_sarif_preserve_the_same_observation():
+    """Catches metadata dropped in SARIF or conflated with the vulnerability source."""
+    result = _result()
+    result.findings = [Finding(
+        "GHSA-example", "demo", "1.0", aliases={"CVE-2026-0001"}, source="grype",
+        epss_probability=0, epss_cve="CVE-2026-0001", epss_date="2026-10-14",
+        epss_source="grype-db",
+    )]
+    json_finding = json.loads(render(result, "json"))["findings"][0]
+    sarif_finding = json.loads(render(result, "sarif"))["runs"][0]["results"][0]["properties"]
+
+    for finding in (json_finding, sarif_finding):
+        assert (
+            finding["epss_probability"],
+            finding["epss_cve"],
+            finding["epss_date"],
+            finding["epss_source"],
+        ) == (
+            0, "CVE-2026-0001", "2026-10-14", "grype-db",
+        )
+        assert finding["source"] == "grype"
+
+
+@pytest.mark.parametrize("status", ["unavailable", "present", "stale", "unknown"])
+def test_epss_cve_less_observation_does_not_claim_a_first_lookup(status):
+    """Catches attaching a global refresh outcome to an unqueried finding."""
+    result = _result()
+    result.findings = [Finding(
+        "GHSA-example", "demo", "1.0", epss_probability=0,
+        epss_cve="CVE-2026-0001", epss_date="2026-10-14", epss_source="grype-db",
+    )]
+    result.coverage = [CoverageSource("first-epss", status, as_of="2026-10-15")]
+    rich_output = StringIO()
+    print_text_report(Console(file=rich_output, width=300, color_system=None), result)
+
+    for rendered in (render(result, "text"), render(result, "markdown"), rich_output.getvalue()):
+        assert "EPSS 0.00 (CVE: CVE-2026-0001; date: 2026-10-14; source: grype-db)" in rendered
+        assert "FIRST refresh unavailable" not in rendered
+        assert "no matching FIRST row" not in rendered
+
+
+def test_epss_cve_less_skipped_enrichment_adds_no_score_label():
+    """Catches reporting a failed lookup when no CVE was requested."""
+    result = _result()
+    result.findings = [Finding("GHSA-example", "demo", "1.0")]
+    result.coverage = [CoverageSource("first-epss", "skipped")]
+
+    assert "EPSS" not in render(result, "text")
+
+
 # Fix 1: SARIF locations
 
 

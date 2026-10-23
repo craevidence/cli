@@ -126,7 +126,7 @@ Notes:
   contradict each other yield `version_conflict`. Such matches are indicative candidates, not
   confirmed vulnerabilities. They are listed apart from the findings:
   - JSON: the top-level `indicative_findings` array (each entry has `quality_reason` and
-    `applicability_evidence`, and no `known_exploited` or `epss_probability`) and
+    `applicability_evidence`, and no `known_exploited` or EPSS fields) and
     `indicative_summary` (`total`, `unversioned`, `version_conflict`). `findings` and `summary`
     hold confirmed findings only, and `provenance.version_applicability_policy` names the policy
     when the local Grype engine ran.
@@ -144,7 +144,14 @@ Notes:
   indicative with `version_conflict`, and OSV coverage is partial even if no advisories
   are returned. OSV partial coverage alone does not fail `--strict`.
 - Each finding's exploit probability is shown inline when available and used to
-  rank the "Top actions".
+  rank the "Top actions". JSON findings and SARIF result properties retain
+  `epss_probability`, `epss_cve`, `epss_date` and `epss_source` together. The latter
+  records acquisition through `grype-db` or `first-epss`; the publisher is FIRST in
+  both cases. Missing CVE or observation date stays `null`, separate from feed-level
+  coverage dates. Text, Markdown and terminal action labels show the same evidence.
+  A failed FIRST refresh or a response with no matching row retains the previous
+  Grype observation and says why it was retained. Missing scores remain unavailable,
+  not zero. These details do not change finding gates or score ordering.
 - `--vex` consumes an [OpenVEX](https://openvex.dev/) (or CSAF VEX) document and suppresses a
   finding **before** the gates only when a matching statement is `fixed`, or `not_affected` with
   a justification or impact statement (a `not_affected` statement with no rationale never

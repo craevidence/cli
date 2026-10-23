@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from cra_evidence_cli.local import enrich
+from cra_evidence_cli.local.models import Finding
 
 
 def _install_response(monkeypatch, payload: object, *, raw: bytes | None = None) -> None:
@@ -155,7 +156,7 @@ def test_valid_epss_probability_is_preserved(monkeypatch, score):
 
     scores, source = enrich.fetch_epss_scores({"CVE-2026-0001"})
 
-    assert scores == {"CVE-2026-0001": float(score)}
+    assert scores == {"CVE-2026-0001": (float(score), "2026-10-15")}
     assert source.status == "present"
     assert source.as_of == "2026-10-15"
 
@@ -169,7 +170,7 @@ def test_epss_publication_date_remains_unknown_without_valid_date(monkeypatch, d
 
     scores, source = enrich.fetch_epss_scores({"CVE-2026-0001"})
 
-    assert scores == {"CVE-2026-0001": 0.25}
+    assert scores == {"CVE-2026-0001": (0.25, None)}
     assert source.status == "present"
     assert source.as_of is None
 
@@ -185,9 +186,62 @@ def test_epss_uses_oldest_returned_publication_date(monkeypatch):
         },
     )
 
-    _, source = enrich.fetch_epss_scores({"CVE-2026-0001", "CVE-2026-0002"})
+    scores, source = enrich.fetch_epss_scores({"CVE-2026-0001", "CVE-2026-0002"})
 
+    assert scores == {
+        "CVE-2026-0001": (0.25, "2026-10-15"),
+        "CVE-2026-0002": (0.5, "2026-10-14"),
+    }
     assert source.as_of == "2026-10-14"
+
+
+def test_epss_duplicate_keeps_last_row_score_and_date_together(monkeypatch):
+    """Catches a last score paired with the first or aggregate publication date."""
+    _install_response(monkeypatch, {"data": [
+        {"cve": "CVE-2026-0001", "epss": 0.9, "date": "2026-10-14"},
+        {"cve": " cve-2026-0001 ", "epss": 0, "date": "2026-10-15"},
+    ]})
+
+    scores, source = enrich.fetch_epss_scores({"CVE-2026-0001"})
+
+    assert scores == {"CVE-2026-0001": (0.0, "2026-10-15")}
+    assert source.as_of == "2026-10-14"
+
+
+@pytest.mark.parametrize("date", [None, "2026-10-15"])
+def test_epss_sorted_alias_replaces_entire_observation(date):
+    """Catches highest-score selection, retained old dates and changed engine source."""
+    finding = Finding(
+        "GHSA-example", "pkg", "1.0", aliases={"CVE-2026-0002", "CVE-2026-0001"},
+        epss_probability=0.9, epss_cve="CVE-2026-0002", epss_date="2026-10-14",
+        epss_source="grype-db", source="grype",
+    )
+
+    enrich.apply_cve_alias_enrichment([finding], epss_scores={
+        "CVE-2026-0002": (1.0, "2026-10-16"),
+        "cve-2026-0001": (0.0, date),
+    })
+
+    assert (finding.epss_probability, finding.epss_cve, finding.epss_date, finding.epss_source) == (
+        0.0, "CVE-2026-0001", date, "first-epss",
+    )
+    assert finding.source == "grype"
+
+
+@pytest.mark.parametrize("scores", [None, {}, {"CVE-2026-9999": (0.9, "2026-10-15")}])
+def test_epss_missing_row_and_kev_only_leave_prior_observation(scores):
+    """Catches resetting or relabeling an observation without a replacement row."""
+    finding = Finding(
+        "CVE-2026-0001", "pkg", "1.0", epss_probability=0.0,
+        epss_cve="CVE-2026-0001", epss_date="2026-10-14", epss_source="grype-db",
+    )
+
+    enrich.apply_cve_alias_enrichment([finding], kev_cves={finding.id}, epss_scores=scores)
+
+    assert finding.known_exploited is True
+    assert (finding.epss_probability, finding.epss_cve, finding.epss_date, finding.epss_source) == (
+        0.0, "CVE-2026-0001", "2026-10-14", "grype-db",
+    )
 
 
 def test_feed_freshness_status_preserves_seven_day_boundary():

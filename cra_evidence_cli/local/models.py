@@ -53,6 +53,9 @@ class Finding:
     vex_conflict: str | None = None
     indicative_reason: str | None = None
     applicability_evidence: dict[str, Any] | None = None
+    epss_cve: str | None = None
+    epss_date: str | None = None
+    epss_source: str | None = None
 
     @property
     def is_indicative(self) -> bool:
@@ -80,6 +83,9 @@ class Finding:
             "title": self.title,
             "references": self.references,
             "epss_probability": self.epss_probability,
+            "epss_cve": self.epss_cve,
+            "epss_date": self.epss_date,
+            "epss_source": self.epss_source,
             "known_exploited": self.known_exploited,
             "source": self.source,
             "ignored_by_policy": self.ignored_by_policy,
@@ -92,7 +98,10 @@ class Finding:
         Exploitation and EPSS signals are left out: they describe a vulnerability
         in a confirmed version, which this candidate is not.
         """
-        omitted = {"known_exploited", "epss_probability", "ignored_by_policy", "vex_conflict"}
+        omitted = {
+            "known_exploited", "epss_probability", "epss_cve", "epss_date", "epss_source",
+            "ignored_by_policy", "vex_conflict",
+        }
         entry = {key: value for key, value in self.to_dict().items() if key not in omitted}
         entry["quality_reason"] = self.indicative_reason
         entry["applicability_evidence"] = self.applicability_evidence
