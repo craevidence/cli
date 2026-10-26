@@ -484,6 +484,7 @@ def _exit_line(data: dict[str, Any], exit_code: int) -> str:
 _UNASSESSED_SHOWN = 5
 _UNASSESSED_REASON_LABELS = {
     "unknown-package-version": "Package version unknown",
+    "invalid-rpm-purl-epoch": "RPM PURL epoch invalid or ambiguous",
     "no-package-ecosystem": "Package ecosystem unknown",
     "distro-release-not-in-db": "Operating-system release not in the vulnerability database",
     "matcher-error": "Matcher error",

@@ -24,7 +24,7 @@ from cra_evidence_cli.local.models import (
     UnassessedPackage,
     normalize_severity,
 )
-from cra_evidence_cli.local.version_applicability import classify_occurrence
+from cra_evidence_cli.local.version_applicability import InvalidPurlEpoch, classify_occurrence
 
 
 class GrypeLocalScanner:
@@ -147,7 +147,7 @@ class GrypeLocalScanner:
         if result.returncode == 1 and not result.stdout.strip():
             raise ScanEngineUnavailable(result.stderr.strip() or "Grype scan failed")
         try:
-            findings, document = _parse_grype_document(result.stdout)
+            findings, document, local_unassessed = _parse_grype_document(result.stdout)
         except (TypeError, ValueError, AttributeError, KeyError, IndexError, RecursionError) as exc:
             message = "scanner returned malformed match data"
             raise ScanEngineUnavailable(message) from exc
@@ -158,6 +158,13 @@ class GrypeLocalScanner:
         elif document.get("assessment") is not None:
             message = "scanner returned an assessment with a successful exit"
             raise ScanEngineUnavailable(message)
+        if local_unassessed:
+            unassessed.extend(local_unassessed)
+            local_detail = (
+                f"{len(local_unassessed)} package(s) could not be assessed because of "
+                "an invalid RPM PURL epoch"
+            )
+            partial_detail = f"{partial_detail}; {local_detail}" if partial_detail else local_detail
         metadata = self.get_db_metadata() or {}
         return findings, CoverageSource(
             "grype-db",
@@ -185,7 +192,11 @@ class GrypeLocalScanner:
 
 
 def parse_grype_output(raw: str) -> list[Finding]:
-    findings, _ = _parse_grype_document(raw)
+    findings, _, unassessed = _parse_grype_document(raw)
+    if unassessed:
+        # This findings-only interface cannot convey the incomplete assessment.
+        message = "RPM PURL has an invalid or ambiguous epoch"
+        raise InvalidPurlEpoch(message)
     return findings
 
 
@@ -308,7 +319,9 @@ def _candidates(
     return count, tuple(ids), True
 
 
-def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
+def _parse_grype_document(
+    raw: str,
+) -> tuple[list[Finding], dict[str, Any], list[UnassessedPackage]]:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as exc:
@@ -364,18 +377,29 @@ def _parse_grype_document(raw: str) -> tuple[list[Finding], dict[str, Any]]:
         if isinstance(artifact.get("cpes"), list):
             cpes.update(cpe for cpe in artifact["cpes"] if isinstance(cpe, str))
         parsed.append((finding, key))
-    classifications = {
-        key: classify_occurrence(key[2], key[3], details, sorted(cpes))
-        for key, (details, cpes) in evidence.items()
-    }
+    classifications = {}
+    unassessed = {}
+    for key, (details, cpes) in evidence.items():
+        try:
+            classifications[key] = classify_occurrence(key[2], key[3], details, sorted(cpes))
+        except InvalidPurlEpoch:
+            unassessed[key[1:]] = UnassessedPackage(
+                name=key[1],
+                version=key[2],
+                purl=key[3],
+                reason="invalid-rpm-purl-epoch",
+                matcher="cli-version-applicability",
+            )
     findings = []
     for finding, key in parsed:
+        if key[1:] in unassessed:
+            continue
         classification = classifications[key]
         if classification.status == "indicative":
             finding.indicative_reason = classification.reason
             finding.applicability_evidence = classification.evidence
         findings.append(finding)
-    return findings, data
+    return findings, data, list(unassessed.values())
 
 
 def _first_epss(items: list[Any]) -> tuple[float | None, str | None, str | None]:

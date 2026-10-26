@@ -29,6 +29,7 @@ from cra_evidence_cli.local.models import (
 )
 from cra_evidence_cli.local.report import print_text_report, render
 from cra_evidence_cli.local.scanner import parse_grype_output
+from cra_evidence_cli.local.version_applicability import InvalidPurlEpoch
 
 TODAY = datetime.now(UTC).date().isoformat()
 WILDCARD_CPE = "cpe:2.3:a:widget:widget:*:*:*:*:*:*:*:*"
@@ -252,6 +253,96 @@ def test_parser_keeps_duplicate_indicative_matches_as_separate_candidates():
 
 
 # --- malformed match evidence -----------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "purl",
+    [
+        "pkg:rpm/widget@1.0?epoch=bad",
+        "pkg:rpm/widget@1.0?epoch=1&epoch=2",
+        "pkg:rpm/widget@2:1.0?epoch=1",
+    ],
+    ids=["invalid", "duplicate", "contradictory"],
+)
+@pytest.mark.parametrize(
+    ("args", "exit_code"), [((), 0), (("--fail-on", "high"), 11), (("--strict",), 15)]
+)
+def test_invalid_rpm_epoch_retains_other_findings_and_reports_one_gap(
+    monkeypatch, tmp_path, purl, args, exit_code
+):
+    """Catches whole-scan fallback, accepting a bad epoch, or one gap per vulnerability."""
+
+    class NoFallback:
+        def __init__(self):
+            pytest.fail("a package epoch must not discard the Grype scan")
+
+    matches = [
+        _confirmed_match(),
+        *[
+            _match(vuln_id, [_direct("1.0")], version="1.0", purl=purl, cpes=())
+            for vuln_id in ("CVE-2026-0007", "CVE-2026-0008")
+        ],
+    ]
+    result, report = _json_run(monkeypatch, tmp_path, matches, args, osv=NoFallback)
+
+    assert result.exit_code == exit_code, result.output
+    assert report["provenance"]["engine"] == "grype-local"
+    assert [finding["id"] for finding in report["findings"]] == ["CVE-2026-1111"]
+    gaps = report["unassessed_packages"]
+    assert gaps["total_packages"] == 1
+    assert gaps["not_checked"]["by_reason"] == {"invalid-rpm-purl-epoch": 1}
+    assert len(gaps["entries"]) == 1
+    gap = gaps["entries"][0]
+    assert (gap["name"], gap["version"], gap["purl"]) == ("widget", "1.0", purl)
+    assert gap["matcher"] == "cli-version-applicability"
+    assert "epoch" in gap["remedy"]
+    assert "Repair" in gap["remedy"]
+    assert (
+        next(source for source in report["coverage"] if source["source"] == "grype-db")["status"]
+        == "partial"
+    )
+
+
+def test_invalid_rpm_epoch_preserves_native_unassessed_packages(monkeypatch, tmp_path):
+    """Catches local gap handling overwriting the native incomplete assessment."""
+    match = _match(
+        "CVE-2026-0007", [_direct("1.0")], version="1.0", purl="pkg:rpm/widget@1.0?epoch=bad"
+    )
+    scanner = _engine_scanner(
+        monkeypatch,
+        json.dumps(
+            {
+                "matches": [match],
+                "assessment": _incomplete(_unassessable("broken", "2.0", BROKEN_PURL)),
+            }
+        ),
+        1,
+    )
+    findings, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert findings == []
+    assert coverage.status == "partial"
+    assert {(p.name, p.reason) for p in coverage.unassessed_packages} == {
+        ("broken", "version-comparison-error"),
+        ("widget", "invalid-rpm-purl-epoch"),
+    }
+
+
+def test_invalid_rpm_epoch_does_not_mask_malformed_match_details(monkeypatch, tmp_path):
+    """Catches catching all malformed evidence as a recoverable package epoch problem."""
+    match = _match("CVE-2026-0007", [], version="1.0", purl="pkg:rpm/widget@1.0?epoch=bad")
+    scanner = _engine_scanner(monkeypatch, json.dumps({"matches": [match]}))
+    with pytest.raises(ScanEngineUnavailable, match="malformed match data"):
+        scanner.scan_sbom(tmp_path / "sbom.json")
+
+
+def test_findings_only_parser_does_not_silently_drop_invalid_rpm_epoch():
+    """Catches dropping the gap when the helper cannot return assessment context."""
+    match = _match(
+        "CVE-2026-0007", [_direct("1.0")], version="1.0", purl="pkg:rpm/widget@1.0?epoch=bad"
+    )
+    with pytest.raises(InvalidPurlEpoch):
+        parse_grype_output(json.dumps({"matches": [_confirmed_match(), match]}))
 
 
 @pytest.mark.parametrize(

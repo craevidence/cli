@@ -78,6 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `check` retains valid Grype findings when another matched package has an invalid
+  RPM PURL epoch. The affected package is explicitly not checked, with a repair
+  instruction; coverage stays partial and strict mode fails instead of replacing
+  the entire scan with OSV results.
 - `db status` labels explicit database build metadata, the archive capture date
   hint, and the local database modification date separately, and names the date
   used for its existing age status. `db update` keeps a missing build date unknown

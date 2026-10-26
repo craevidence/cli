@@ -111,6 +111,12 @@ totals, the known-exploited count or EPSS, and it raises no annotation. Give the
 SBOM component its exact version to confirm it. Match details in a shape the
 policy does not recognise are treated like other malformed Grype output.
 
+If a matched RPM package has an invalid, repeated or contradictory PURL epoch,
+`check` keeps the other Grype findings and lists that package as not checked with
+reason `invalid-rpm-purl-epoch`. It does not fall back to OSV for this input error.
+Repair the package's epoch declaration and scan again. Coverage is partial and
+`--strict` exits 15; valid findings still count toward severity gates.
+
 The `concrete-v1` input policy treats `*`, `-`, `unknown`, `NA`, `N/A` and
 `NOASSERTION` (any case) as placeholders that name no concrete version. The same holds
 behind one numeric epoch: `1:-`, `1:*` and `1:unknown` are not concrete. `1:1.0-1`, `0`,

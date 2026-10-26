@@ -145,18 +145,23 @@ class UnassessedPackage:
     malformed_detail: bool = False
 
 
-# Reason codes for packages the engine did not check because the SBOM data or the
+# Reason codes for packages not checked because the SBOM data or the
 # vulnerability database lacked what the search needs. Every other code, including
 # one this CLI does not know, means the assessment failed.
 NOT_CHECKED_REASONS = (
     "unknown-package-version",
     "no-package-ecosystem",
     "distro-release-not-in-db",
+    "invalid-rpm-purl-epoch",
 )
 ASSESSMENT_FAILED_REMEDY = (
     "The scanner could not check these packages. Scan again; if it persists, report it."
 )
 _NOT_CHECKED_REMEDIES = {
+    "invalid-rpm-purl-epoch": (
+        "Repair the RPM PURL: use one numeric epoch qualifier that agrees with any "
+        "epoch in its version, then scan again."
+    ),
     "unknown-package-version": (
         "Add the resolved version (for example, generate the SBOM from the lock file "
         "or build output) and scan again."

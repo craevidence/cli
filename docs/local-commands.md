@@ -208,6 +208,11 @@ Notes:
   When both name concrete but different versions, that occurrence's returned results are
   indicative with `version_conflict`, and OSV coverage is partial even if no advisories
   are returned. OSV partial coverage alone does not fail `--strict`.
+  An invalid, repeated or contradictory RPM PURL epoch on a Grype-matched package
+  is handled per package: its matches are excluded, other findings are retained,
+  and `unassessed_packages` reports `invalid-rpm-purl-epoch` with matcher
+  `cli-version-applicability`. Repair the epoch declaration and scan again.
+  Grype coverage is partial, `--strict` exits 15, and OSV fallback is not invoked.
 - Each finding's exploit probability is shown inline when available and used to
   rank the "Top actions". JSON findings and SARIF result properties retain
   `epss_probability`, `epss_cve`, `epss_date` and `epss_source` together. The latter
