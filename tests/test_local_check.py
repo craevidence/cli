@@ -139,6 +139,7 @@ def test_check_json_gate_error_goes_to_stderr(monkeypatch, tmp_path):
             image=None,
             sbom_file=sbom_path,
             baseline=None,
+            scan_timeout=300,
             fail_on="known-exploited",
             fail_on_new=None,
             deny_license="",
@@ -190,6 +191,7 @@ def test_check_scan_engine_unavailable_goes_to_stderr(monkeypatch, tmp_path):
             image=None,
             sbom_file=sbom_path,
             baseline=None,
+            scan_timeout=300,
             fail_on=None,
             fail_on_new=None,
             deny_license="",
@@ -685,6 +687,7 @@ def test_output_file_writes_machine_output_and_text_summary(monkeypatch, tmp_pat
             image=None,
             sbom_file=None,
             baseline=None,
+            scan_timeout=300,
             fail_on=None,
             fail_on_new=None,
             deny_license="",
@@ -762,6 +765,81 @@ def _critical_finding(cve="CVE-2025-9999", known_exploited=None):
 def _run_check(args):
     runner = CliRunner()
     return runner.invoke(cli, ["--output", "json", "check", *args])
+
+
+@pytest.mark.parametrize(
+    ("timeout_args", "expected_timeout"),
+    [([], 300), (["--scan-timeout", "47"], 47)],
+)
+def test_check_scan_timeout_reaches_grype_subprocess(
+    monkeypatch, tmp_path, timeout_args, expected_timeout
+):
+    """Catch a CLI timeout that is accepted but never reaches Grype's subprocess."""
+    from cra_evidence_cli.local import scanner as scanner_module
+
+    identity = EngineIdentity(
+        path="/opt/bin/grype",
+        version="craevidence-v0.116.1-p3",
+        syft_version="1.50.0",
+    )
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append((cmd, kwargs))
+        if len(cmd) > 1 and cmd[1].startswith("sbom:"):
+            return SimpleNamespace(returncode=0, stdout=json.dumps({"matches": []}), stderr="")
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {"built": "2026-10-26T00:00:00Z", "schemaVersion": "v6", "valid": True}
+            ),
+            stderr="",
+        )
+
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    monkeypatch.setattr(
+        scanner_module,
+        "inspect_engine",
+        lambda path=None: EngineInspection(identity, ""),
+    )
+    monkeypatch.setattr(scanner_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
+    monkeypatch.setattr(
+        check_module,
+        "fetch_kev_catalog",
+        lambda: (set(), CoverageSource("cisa-kev", "present", as_of="2026-10-26")),
+    )
+    monkeypatch.setattr(
+        check_module,
+        "fetch_epss_scores",
+        lambda cves: ({}, CoverageSource("first-epss", "present", as_of="2026-10-26")),
+    )
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    result = _run_check(["--sbom", str(sbom), *timeout_args])
+
+    assert result.exit_code == 0, result.output
+    scan_calls = [kwargs for cmd, kwargs in calls if len(cmd) > 1 and cmd[1].startswith("sbom:")]
+    assert len(scan_calls) == 1
+    assert scan_calls[0]["timeout"] == expected_timeout
+
+
+@pytest.mark.parametrize("invalid_timeout", ["0", "-1"])
+def test_check_scan_timeout_rejects_nonpositive_values_before_scan(
+    monkeypatch, tmp_path, invalid_timeout
+):
+    """Catch nonpositive timeout values reaching local scan work."""
+    calls = []
+    monkeypatch.setattr(check_module, "run_local_check", lambda **kwargs: calls.append(kwargs))
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    result = _run_check(["--sbom", str(sbom), "--scan-timeout", invalid_timeout])
+
+    assert result.exit_code == 2
+    assert "--scan-timeout" in result.output
+    assert calls == []
 
 
 @pytest.mark.parametrize("second_response", ["transport-error", "malformed", "empty"])
@@ -1161,31 +1239,41 @@ def _install_process_scanner(monkeypatch, returncode, stdout, stderr=""):
 
 
 @pytest.mark.parametrize(
-    ("failure_kind", "expected_error", "safe_reason", "private_detail"),
+    ("failure_kind", "strict", "expected_error", "safe_reason", "private_detail"),
     [
         (
             "missing",
+            False,
             FileNotFoundError,
             "Grype scan could not be started",
             "/runner/private/grype",
         ),
         (
             "permission",
+            False,
             PermissionError,
             "Grype scan could not be started",
             "/runner/private/grype",
         ),
         (
             "timeout",
+            False,
+            subprocess.TimeoutExpired,
+            "Grype scan timed out",
+            "/opt/bin/grype",
+        ),
+        (
+            "timeout",
+            True,
             subprocess.TimeoutExpired,
             "Grype scan timed out",
             "/opt/bin/grype",
         ),
     ],
-    ids=["missing-executable", "permission-denied", "process-timeout"],
+    ids=["missing-executable", "permission-denied", "process-timeout", "strict-process-timeout"],
 )
 def test_scan_process_failures_fall_back_with_unavailable_coverage(
-    monkeypatch, tmp_path, failure_kind, expected_error, safe_reason, private_detail
+    monkeypatch, tmp_path, failure_kind, strict, expected_error, safe_reason, private_detail
 ):
     from cra_evidence_cli.local import scanner as scanner_module
 
@@ -1200,7 +1288,7 @@ def test_scan_process_failures_fall_back_with_unavailable_coverage(
             raise FileNotFoundError(2, "No such file or directory", private_detail)
         if failure_kind == "permission":
             raise PermissionError(13, "Permission denied", private_detail)
-        raise subprocess.TimeoutExpired(["/opt/bin/grype", "sbom"], timeout=300)
+        raise subprocess.TimeoutExpired(["/opt/bin/grype", "sbom"], timeout=kwargs["timeout"])
 
     monkeypatch.setattr(scanner_module.subprocess, "run", fail_run)
     monkeypatch.setattr(
@@ -1244,18 +1332,60 @@ def test_scan_process_failures_fall_back_with_unavailable_coverage(
         lambda cves: ({}, _Cov("first-epss", "present", as_of="2026-06-10")),
     )
 
-    result = _run_check(["--sbom", str(sbom)])
+    args = ["--sbom", str(sbom)]
+    if failure_kind == "timeout":
+        args.extend(["--scan-timeout", "1"])
+    if strict:
+        args.append("--strict")
+    result = _run_check(args)
 
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == (15 if strict else 0), result.output
     payload = json.loads(result.stdout)
     assert payload["provenance"]["engine"] == "osv-online"
     assert payload["provenance"]["grype-db"]["status"] == "unavailable"
     assert payload["provenance"]["osv.dev"]["status"] == "present"
     assert payload["findings"][0]["id"] == "OSV-2026-1"
+    if strict:
+        assert payload["provenance"]["strict_failure"] == "unknown, stale, or unavailable source"
     assert f"Warning: local matcher failed ({safe_reason})" in result.stderr
     assert "attempting an OSV.dev fallback" in result.stderr
     assert "may use the network and results may differ" in result.stderr
     assert private_detail not in result.stderr
+
+
+def test_check_keyboard_interrupt_does_not_fall_back_to_osv(monkeypatch, tmp_path):
+    """Catch converting a user interruption into an OSV fallback attempt."""
+    monkeypatch.delenv("CRA_EVIDENCE_API_KEY", raising=False)
+    osv_calls = []
+
+    class InterruptedScanner:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def is_available(self):
+            return True
+
+        def scan_sbom(self, sbom_path):
+            raise KeyboardInterrupt
+
+    class UnexpectedOSVClient:
+        def query_components(self, components):
+            osv_calls.append(components)
+            message = "user interruption must not start the OSV fallback"
+            raise AssertionError(message)
+
+    monkeypatch.setattr(check_module, "GrypeLocalScanner", InterruptedScanner)
+    monkeypatch.setattr(check_module, "OSVClient", UnexpectedOSVClient)
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    result = CliRunner().invoke(cli, ["--output", "json", "check", "--sbom", str(sbom)])
+
+    assert result.exit_code == 1
+    assert isinstance(result.exception, SystemExit)
+    assert "Aborted!" in result.stderr
+    assert result.stdout == ""
+    assert osv_calls == []
 
 
 def _incomplete_grype_document():
@@ -1590,6 +1720,9 @@ def test_grype_failure_falls_back_to_osv(monkeypatch, tmp_path):
     monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
 
     class FailingScanner:
+        def __init__(self, timeout=300):
+            self.timeout = timeout
+
         def is_available(self):
             return True
 
@@ -1653,6 +1786,9 @@ def test_grype_partial_report_keeps_findings_without_osv_fallback(
     today = datetime.now(UTC).date().isoformat()
 
     class PartialScanner:
+        def __init__(self, timeout=300):
+            self.timeout = timeout
+
         def is_available(self):
             return True
 
@@ -1725,6 +1861,9 @@ def test_absent_engine_is_announced_but_not_reported_as_a_failure(monkeypatch, t
     monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
 
     class NoGrype:
+        def __init__(self, timeout=300):
+            self.timeout = timeout
+
         def is_available(self):
             return False
 

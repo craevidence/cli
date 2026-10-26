@@ -82,6 +82,10 @@ and working, falls back to OSV.dev when Grype is absent or fails, and consults
 CISA KEV plus FIRST EPSS for enrichment. For a network-restricted run, provide
 an SBOM with `--sbom` and run where Grype has a local database; CISA KEV and
 FIRST EPSS enrichment are reported as unavailable if they cannot be reached.
+Use `--scan-timeout SECONDS` to set the maximum time for the local Grype matching
+subprocess, including any Grype database update it performs (default: 300;
+minimum: 1). This timeout does not cover SBOM generation, OSV.dev fallback,
+KEV/EPSS enrichment, or the full `check` command.
 
 If Grype returns a valid incomplete assessment, `check` keeps its findings and
 reports partial coverage in the report and a notice on stderr instead of

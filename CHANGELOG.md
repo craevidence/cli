@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `check --scan-timeout SECONDS` sets the positive timeout for the local Grype
+  matching subprocess, including any Grype database update it performs. It
+  defaults to 300 seconds and does not bound SBOM generation, OSV.dev fallback,
+  or enrichment.
+
 ## [4.10.0] - 2026-10-26
 
 ### Added

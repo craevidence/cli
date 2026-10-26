@@ -140,7 +140,7 @@ def _run(monkeypatch, tmp_path, matches, args=(), *, kev=(), assessment=None, os
         document["assessment"] = assessment
         returncode = 1
     scanner = _engine_scanner(monkeypatch, json.dumps(document), returncode)
-    monkeypatch.setattr(check_module, "GrypeLocalScanner", lambda: scanner)
+    monkeypatch.setattr(check_module, "GrypeLocalScanner", lambda **_kwargs: scanner)
     monkeypatch.setattr(check_module, "get_embedded_syft_version", lambda: None)
     epss_queries = []
 

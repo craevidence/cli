@@ -115,6 +115,13 @@ def _validate_output_destinations(destinations: list[tuple[str, Path]]) -> None:
 @click.option("--sbom", "sbom_file", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option("--baseline", type=click.Path(exists=True, dir_okay=False, path_type=Path))
 @click.option(
+    "--scan-timeout",
+    type=click.IntRange(min=1),
+    default=300,
+    show_default=True,
+    help="Maximum seconds for the local Grype matching subprocess.",
+)
+@click.option(
     "--fail-on",
     type=click.Choice(["critical", "high", "medium", "known-exploited"], case_sensitive=False),
 )
@@ -222,6 +229,7 @@ def check(
     image: str | None,
     sbom_file: Path | None,
     baseline: Path | None,
+    scan_timeout: int,
     fail_on: str | None,
     fail_on_new: str | None,
     deny_license: str,
@@ -309,6 +317,7 @@ def check(
             image=image,
             sbom_file=sbom_file,
             baseline=baseline,
+            scan_timeout=scan_timeout,
             strict=strict,
             sbom_quality=sbom_quality,
             verbose=verbose,
@@ -464,6 +473,7 @@ def run_local_check(
     vex_file: Path | None = None,
     ignore_ids: set[str] | None = None,
     sbom_output: Path | None = None,
+    scan_timeout: int = 300,
 ) -> LocalCheckResult:
     generated_sbom = None
     target_type = "directory"
@@ -494,6 +504,7 @@ def run_local_check(
             vex_file=vex_file,
             ignore_ids=ignore_ids,
             sbom_output=sbom_output,
+            scan_timeout=scan_timeout,
         )
     finally:
         # Generated SBOMs live in a private temporary directory; remove it once
@@ -516,6 +527,7 @@ def _run_local_check_on_sbom(
     vex_file: Path | None,
     ignore_ids: set[str] | None,
     sbom_output: Path | None,
+    scan_timeout: int = 300,
 ) -> LocalCheckResult:
     if generated_sbom is not None and target_type == "directory":
         if generated_sbom.component_count == 0:
@@ -569,7 +581,7 @@ def _run_local_check_on_sbom(
         )
     coverage: list[CoverageSource] = []
     sources_consulted: set[str] = set()
-    scanner = GrypeLocalScanner()
+    scanner = GrypeLocalScanner(timeout=scan_timeout)
     findings = []
     unassessed: list[UnassessedPackage] = []
     measured_unassessed: list[UnassessedPackage] | None = None
