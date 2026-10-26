@@ -187,10 +187,10 @@ spec:
       fi
 
       CLI_VERSION="4.10.0"
-      CLI_WHEEL_SHA256_MANYLINUX_X86_64="8b3834222d42396caf22e7cdd411f4d91b1fbaede5e2aa33fe11d3eefce98c0a"
-      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="105e85f8f2a64cde485aba63a1c2eef5305f897cb224fdb7df87775de697d684"
-      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="6613bc7f37f80da7aa7ff99cd6db4ff62f32d8e4a975aadfe86d7d5a50251124"
-      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="576641f4ffda9d33c0011ea4ea6f61b59f88fc1511b07e05e8dd60891e7c2baa"
+      CLI_WHEEL_SHA256_MANYLINUX_X86_64="b51c85d0ffc7b1e7da6520fd04633408f9aba0a5bf15b9bf884333163789b85e"
+      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="ebcdce0505944a2b1e92d9ddd90cd3c07710e2b25258d231f3c095f4246cdd4f"
+      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="e0afa2e120c4e73a667413d025b9fa0852f4ad96e2cdca8388ccac2d53de0c13"
+      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="664a495a8c2d00de99d8bcf8bf1d5234fa6a30c3dccae9f5c9bbe47b6bc2844f"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       CLI_WHEEL=$(find /tmp/craevidence-dist -maxdepth 1 -type f -name "craevidence-${CLI_VERSION}-*.whl")
       [ -n "${CLI_WHEEL}" ] && [ "$(printf '%s\n' "${CLI_WHEEL}" | wc -l)" -eq 1 ]
@@ -361,10 +361,10 @@ cra-evidence-upload:
     - |
       set -eu
       CLI_VERSION="4.10.0"
-      CLI_WHEEL_SHA256_MANYLINUX_X86_64="8b3834222d42396caf22e7cdd411f4d91b1fbaede5e2aa33fe11d3eefce98c0a"
-      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="105e85f8f2a64cde485aba63a1c2eef5305f897cb224fdb7df87775de697d684"
-      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="6613bc7f37f80da7aa7ff99cd6db4ff62f32d8e4a975aadfe86d7d5a50251124"
-      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="576641f4ffda9d33c0011ea4ea6f61b59f88fc1511b07e05e8dd60891e7c2baa"
+      CLI_WHEEL_SHA256_MANYLINUX_X86_64="b51c85d0ffc7b1e7da6520fd04633408f9aba0a5bf15b9bf884333163789b85e"
+      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="ebcdce0505944a2b1e92d9ddd90cd3c07710e2b25258d231f3c095f4246cdd4f"
+      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="e0afa2e120c4e73a667413d025b9fa0852f4ad96e2cdca8388ccac2d53de0c13"
+      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="664a495a8c2d00de99d8bcf8bf1d5234fa6a30c3dccae9f5c9bbe47b6bc2844f"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       CLI_WHEEL=$(find /tmp/craevidence-dist -maxdepth 1 -type f -name "craevidence-${CLI_VERSION}-*.whl")
       [ -n "${CLI_WHEEL}" ] && [ "$(printf '%s\n' "${CLI_WHEEL}" | wc -l)" -eq 1 ]
