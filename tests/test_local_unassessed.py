@@ -90,11 +90,15 @@ def test_gap_only_text_report_lists_each_reason_with_its_remedy(monkeypatch, tmp
     assert section.splitlines() == [
         "Not checked for vulnerabilities: 3 packages",
         "The vulnerability counts above do not cover these packages.",
-        "- Operating-system release not in the vulnerability database "
-        "(distro-release-not-in-db): 1 package",
-        "  The vulnerability database has no entry for the requested operating-system scope "
-        "debian 14. Either the advisory data does not cover that release, or the "
-        "operating-system identity in the SBOM is not the intended one.",
+        (
+            "- Operating-system release not in the vulnerability database "
+            "(distro-release-not-in-db): 1 package"
+        ),
+        (
+            "  The vulnerability database has no entry for the requested operating-system scope "
+            "debian 14. Either the advisory data does not cover that release, or the "
+            "operating-system identity in the SBOM is not the intended one."
+        ),
         "  - libc6 2.41-1 (matcher: dpkg-matcher)",
         "- Package ecosystem unknown (no-package-ecosystem): 1 package",
         f"  {ECOSYSTEM_REMEDY}",

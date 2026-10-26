@@ -94,8 +94,10 @@ def coverage_gap_lines(gaps: CoverageGaps) -> list[str]:
     if gaps.state == "none":
         return ["Coverage gaps: none reported."]
     lines = [
-        f"Coverage gaps: {gaps.total} package(s) not checked for vulnerabilities. "
-        "The vulnerability counts do not cover them."
+        (
+            f"Coverage gaps: {gaps.total} package(s) not checked for vulnerabilities. "
+            "The vulnerability counts do not cover them."
+        )
     ]
     for code, count in _by_count(gaps.counts_by_reason):
         lines.append(f"  {count} with {escape(_reason_label(code))}")

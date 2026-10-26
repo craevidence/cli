@@ -439,8 +439,10 @@ def _indicative_lines(data: dict[str, Any]) -> list[str]:
     lines = [
         "",
         f"Indicative candidates, version not confirmed (not counted, not gated): {len(items)}",
-        "These matches rest on a missing or conflicting component version, so they are "
-        "not confirmed vulnerabilities. Give the SBOM component its exact version and re-run.",
+        (
+            "These matches rest on a missing or conflicting component version, so they are "
+            "not confirmed vulnerabilities. Give the SBOM component its exact version and re-run."
+        ),
     ]
     for item in items[:_INDICATIVE_SHOWN]:
         reason = _INDICATIVE_REASON_TEXT.get(item["quality_reason"], item["quality_reason"])
@@ -626,10 +628,14 @@ def _inventory_coverage_lines(data: dict[str, Any]) -> list[str]:
         return []
     lines = [
         "",
-        f"Inventory coverage: incomplete, {total} coverage-gap entries reported by the SBOM "
-        "generator",
-        "Packages from these files may be missing from the SBOM, so the vulnerability "
-        "counts above do not cover them. Exit codes are unchanged.",
+        (
+            f"Inventory coverage: incomplete, {total} coverage-gap entries reported by the SBOM "
+            "generator"
+        ),
+        (
+            "Packages from these files may be missing from the SBOM, so the vulnerability "
+            "counts above do not cover them. Exit codes are unchanged."
+        ),
     ]
     for code, entries in _inventory_groups(coverage).items():
         count = coverage["counts"].get(code, 0)
