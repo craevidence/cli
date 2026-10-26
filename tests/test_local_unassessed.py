@@ -31,7 +31,7 @@ VERSION_REMEDY = (
 ECOSYSTEM_REMEDY = "Give the package a typed purl (pkg:type/name@version) or a CPE and scan again."
 FAILED_REMEDY = "The scanner could not check these packages. Scan again; if it persists, report it."
 WARNING = (
-    "Warning: Grype returned an incomplete vulnerability assessment; valid findings are retained."
+    "Warning: the vulnerability assessment is incomplete; valid findings are retained."
 )
 MALFORMED_WARNING = (
     "Warning: the scan engine returned malformed details for packages it could not check; "

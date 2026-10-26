@@ -287,6 +287,10 @@ def test_invalid_rpm_epoch_retains_other_findings_and_reports_one_gap(
 
     assert result.exit_code == exit_code, result.output
     assert report["provenance"]["engine"] == "grype-local"
+    assert (
+        "Warning: the vulnerability assessment is incomplete; valid findings are retained."
+        in result.stderr
+    )
     assert [finding["id"] for finding in report["findings"]] == ["CVE-2026-1111"]
     gaps = report["unassessed_packages"]
     assert gaps["total_packages"] == 1
@@ -958,6 +962,20 @@ def test_baseline_absence_with_changed_identity_does_not_claim_remediation(
     assert "Baseline findings absent now: 1" in text
     assert "Absence alone does not prove remediation" in text
     assert "package identity or scan coverage may have changed" in text
+    assert "Removed vulnerabilities" not in text
+
+
+def test_terminal_baseline_absence_does_not_claim_remediation():
+    """Catches the interactive renderer retaining the old claim or omitting its caveat."""
+    result = _result_with()
+    result.baseline = {"removed_vulnerabilities": ["CVE-2026-3333"]}
+    buffer = io.StringIO()
+
+    print_text_report(Console(file=buffer, width=400, color_system=None), result, exit_code=0)
+
+    text = buffer.getvalue()
+    assert "Baseline findings absent now: 1" in text
+    assert "Absence alone does not prove remediation" in text
     assert "Removed vulnerabilities" not in text
 
 

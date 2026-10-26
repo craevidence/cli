@@ -85,6 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   RPM PURL epoch. The affected package is explicitly not checked, with a repair
   instruction; coverage stays partial and strict mode fails instead of replacing
   the entire scan with OSV results.
+  The incomplete-assessment warning also covers gaps detected by the CLI.
 - `db status` labels explicit database build metadata, the archive capture date
   hint, and the local database modification date separately, and names the date
   used for its existing age status. `db update` keeps a missing build date unknown

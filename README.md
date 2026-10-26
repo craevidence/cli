@@ -116,6 +116,8 @@ If a matched RPM package has an invalid, repeated or contradictory PURL epoch,
 reason `invalid-rpm-purl-epoch`. It does not fall back to OSV for this input error.
 Repair the package's epoch declaration and scan again. Coverage is partial and
 `--strict` exits 15; valid findings still count toward severity gates.
+Matches on the excluded package do not count toward `--fail-on`; use `--strict`
+to fail when this assessment gap remains.
 
 The `concrete-v1` input policy treats `*`, `-`, `unknown`, `NA`, `N/A` and
 `NOASSERTION` (any case) as placeholders that name no concrete version. The same holds

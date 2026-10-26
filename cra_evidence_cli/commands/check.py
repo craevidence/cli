@@ -584,7 +584,7 @@ def _run_local_check_on_sbom(
             engine = "grype-local"
             if source.status == "partial":
                 click.echo(
-                    "Warning: Grype returned an incomplete vulnerability assessment; "
+                    "Warning: the vulnerability assessment is incomplete; "
                     "valid findings are retained.",
                     err=True,
                 )

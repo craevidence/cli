@@ -57,6 +57,7 @@ Notes:
   remediation. Human reports label this count "Baseline findings absent now". A changed or
   unknown package version, a changed PURL, or incomplete coverage can prevent reassessment of
   the old occurrence; absence alone does not establish that its vulnerability was fixed.
+  A VEX statement can also suppress a finding before the baseline comparison.
 - A vulnerability that `--baseline` lists but that is now only an indicative candidate
   (see below) is reported under `reclassified_vulnerabilities` as "reclassified: version could
   not be confirmed". It is not counted as removed or fixed and it is not new, so `--fail-on-new`
@@ -217,6 +218,7 @@ Notes:
   and `unassessed_packages` reports `invalid-rpm-purl-epoch` with matcher
   `cli-version-applicability`. Repair the epoch declaration and scan again.
   Grype coverage is partial, `--strict` exits 15, and OSV fallback is not invoked.
+  Excluded matches do not count toward `--fail-on`; use `--strict` to fail on this gap.
 - Each finding's exploit probability is shown inline when available and used to
   rank the "Top actions". JSON findings and SARIF result properties retain
   `epss_probability`, `epss_cve`, `epss_date` and `epss_source` together. The latter

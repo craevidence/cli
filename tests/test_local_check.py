@@ -1697,7 +1697,7 @@ def test_grype_partial_report_keeps_findings_without_osv_fallback(
     assert result.exit_code == expected_exit_code, result.output
     assert osv_calls == []
     warning = (
-        "Warning: Grype returned an incomplete vulnerability assessment; "
+        "Warning: the vulnerability assessment is incomplete; "
         "valid findings are retained."
     )
     assert result.stderr.count(warning) == 1
