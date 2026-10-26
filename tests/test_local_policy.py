@@ -108,7 +108,7 @@ def test_duplicate_policy_key_refuses_check_command(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 6, result.stdout + result.stderr
-    assert "duplicate mapping key" in result.stdout + result.stderr
+    assert "duplicate mapping key" in " ".join((result.stdout + result.stderr).split())
     assert "fail_on_score:" not in result.stdout + result.stderr
 
 
