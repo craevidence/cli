@@ -227,7 +227,7 @@ jobs:
         if: steps.ecr-login.outcome == 'success'
         env:
           ENGINE_REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          ENGINE_DIGEST: sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+          ENGINE_DIGEST: sha256:0cb3454cd50072a38d072ce90f33d7cab5ed3fc396c0a026d06575b4fc4b0641
         run: |
           set -euo pipefail
           ENGINE_IMAGE="${ENGINE_REGISTRY}/craevidence/grype-engine@${ENGINE_DIGEST}"
@@ -306,7 +306,7 @@ jobs:
       - name: Build CLI Docker image
         if: steps.ecr-login.outcome == 'success'
         env:
-          ENGINE_ARG: --build-arg GRYPE_ENGINE_REGISTRY=${{ steps.ecr-login.outputs.registry }} --build-arg GRYPE_ENGINE_DIGEST=sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+          ENGINE_ARG: --build-arg GRYPE_ENGINE_REGISTRY=${{ steps.ecr-login.outputs.registry }} --build-arg GRYPE_ENGINE_DIGEST=sha256:0cb3454cd50072a38d072ce90f33d7cab5ed3fc396c0a026d06575b4fc4b0641
         run: |
           if [ "${{ steps.dhi-login.outcome }}" = "success" ]; then
             docker build ${ENGINE_ARG} -t craevidence:${{ steps.version.outputs.version }} .
@@ -879,7 +879,7 @@ jobs:
       - name: Bind the release image engine to the release source
         if: steps.existing.outputs.digest == ''
         env:
-          ENGINE_DIGEST: sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+          ENGINE_DIGEST: sha256:0cb3454cd50072a38d072ce90f33d7cab5ed3fc396c0a026d06575b4fc4b0641
         run: |
           set -euo pipefail
           expected=$(sed -n 's|^ARG GRYPE_ENGINE_DIGEST=\(sha256:[a-f0-9]\{64\}\)$|\1|p' release-src/Dockerfile)
@@ -908,7 +908,7 @@ jobs:
           push: true
           build-args: |
             GRYPE_ENGINE_REGISTRY=${{ steps.ecr-login.outputs.registry }}
-            GRYPE_ENGINE_DIGEST=sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+            GRYPE_ENGINE_DIGEST=sha256:0cb3454cd50072a38d072ce90f33d7cab5ed3fc396c0a026d06575b4fc4b0641
           tags: |
             ghcr.io/${{ github.repository_owner }}/craevidence:${{ needs.validate-release.outputs.version }}
 

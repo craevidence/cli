@@ -56,13 +56,13 @@
 # for another location. An image must provide the supported CRA Evidence engine
 # contract, including /grype, /LICENSE and /NOTICE.
 ARG GRYPE_ENGINE_REGISTRY
-ARG GRYPE_ENGINE_DIGEST=sha256:40cc7ccc80d2e62782d6c6f7cf4275f8d55583e252918a0d6ae1cf39604fb9e7
+ARG GRYPE_ENGINE_DIGEST=sha256:0cb3454cd50072a38d072ce90f33d7cab5ed3fc396c0a026d06575b4fc4b0641
 ARG GRYPE_ENGINE_IMAGE=${GRYPE_ENGINE_REGISTRY}/craevidence/grype-engine@${GRYPE_ENGINE_DIGEST}
 
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:c73dad82bf13f79fc2677318eb95c4a76c5920635d1177a2618da621c8953fbd
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:debbc2a523d09b60d89c0d1f5792609a3cc8840726871b0ca278e9533a6c342e
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:b2dee88be07689a608f86c392dd863f20399f8ffcbe99eff6bdb4f04485d9298
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:02aeafdfeb18e859d8ccb221c2ca8e23c54632fd79ce841359f9f06b646877b3
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
 # The runtime base, read by the builder to decide which of its packages need a

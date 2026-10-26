@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.10.0] - 2026-10-26
+
 ### Added
 
 - `check` reports repeated local definition occurrences and unresolved local
@@ -51,13 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   text, Markdown and GitHub step summary reports. The JSON report adds an
   `unassessed_packages` object (`null` when the local engine did not run) and SARIF
   reports them as tool execution notifications, not results. Exit codes are unchanged.
-- `AGENTS.md`: contribution rules for people and coding agents (command interfaces,
-  honest network claims, commit conventions, release gates and the root layout).
-  `CLAUDE.md` imports it so Claude Code loads the same rules.
+- Contributor guidance documents command interfaces, network behaviour, commit
+  conventions, release gates and the repository layout.
 
 ### Changed
 
-- The hardened Python 3.14 builder base-image digest is refreshed and remains
+- The hardened Python 3.14 builder and runtime bases are refreshed and remain
   pinned by digest.
 - `check` separates Grype matches whose component version is missing or whose
   version evidence conflicts (policy `concrete-v1`) from confirmed findings.
@@ -1012,7 +1013,8 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.9.1...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.10.0...HEAD
+[4.10.0]: https://github.com/craevidence/cli/compare/v4.9.0...v4.10.0
 [4.9.1]: https://github.com/craevidence/cli/compare/v4.9.0...v4.9.1
 [4.9.0]: https://github.com/craevidence/cli/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/craevidence/cli/compare/v4.7.0...v4.8.0
