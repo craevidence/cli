@@ -12,15 +12,12 @@
 # gets reviewed here instead of staying suppressed.
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
-# Derived from an unfiltered Grype 0.116.1 scan, most recently re-run
-# 2026-10-16 against DB schema v6.1.10 built 2026-10-16T06:29:51Z, on
-# local image sha256:bc49f170eaacea1c26bffbb796f175f6a757cecb10551cb2ce3af0e1c13d9fd5
-# built from the 4.9.1 release tree with bases
-# dhi.io/python:3.14-dev@sha256:5b7724d3ca177d536fe88db1de8c900f29671f2cca613358e618567acfe526b2
-# and dhi.io/python:3.14@sha256:b2dee88be07689a608f86c392dd863f20399f8ffcbe99eff6bdb4f04485d9298,
-# with CRA Evidence Grype engine craevidence-v0.120.1-p2. The exact gate
-# reported no fixed finding at any severity, so no waiver is needed. The
-# comparison scan with Grype 0.111.0 reports no fixed finding either.
+# Reviewed 2026-10-26 against DB schema v6.1.10 built 2026-10-26T06:38:44Z,
+# for the 4.10.0 release images on AMD64 and ARM64. Exact image IDs, base
+# digests and scan hashes are recorded in grype-watchlist.yaml alongside the
+# unfixed findings. The engine is craevidence-v0.120.1-p3 (Go 1.26.10).
+# Both the gate and pinned Grype 0.111.0 comparison report no fixed finding.
+# This does not mean the images contain no vulnerabilities. No waiver is added.
 # Re-evaluate at every release.
 
 ignore: []

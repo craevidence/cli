@@ -16,16 +16,24 @@
 #
 # Provenance of the scan-derived sections (everything except
 # build_info_audit):
-#   command: grype -o json <image>   (no GRYPE_CONFIG, unfiltered)
+#   command: grype --config empty.yaml -o json docker:sha256:<image ID>
+#   empty.yaml contains {}; no severity/fix filter or user waiver is applied.
+#   Built-in defaults remain: each scan retains 848 ignored kernel-header rows
+#   separately from 146 reported match rows. Counts include duplicate package
+#   locations and are not unique vulnerability counts.
 #   scanner: Grype 0.116.1
-#   database: schema v6.1.10, built 2026-10-16T06:29:51Z
-#   image: built 2026-10-16 from the 4.9.1 release tree with bases
-#     dhi.io/python:3.14-dev@sha256:5b7724d3ca177d536fe88db1de8c900f29671f2cca613358e618567acfe526b2
-#     and dhi.io/python:3.14@sha256:b2dee88be07689a608f86c392dd863f20399f8ffcbe99eff6bdb4f04485d9298,
-#     with CRA Evidence Grype engine craevidence-v0.120.1-p2
-#   image ID: sha256:bc49f170eaacea1c26bffbb796f175f6a757cecb10551cb2ce3af0e1c13d9fd5
-#   unfiltered JSON sha256: 3ac18b6978c4f94d0f3e298d8f90134709752601acc8a2f1782ed2a663079ea3
-#   review date: 2026-10-16
+#   database: schema v6.1.10, built 2026-10-26T06:38:44Z
+#   database archive SHA-256: 214b59fbe13608346ee1b22583ec0531083d6088c33891f3520d0fbdedb1b308
+#   release: 4.10.0, with bases
+#     dhi.io/python:3.14-dev@sha256:debbc2a523d09b60d89c0d1f5792609a3cc8840726871b0ca278e9533a6c342e
+#     and dhi.io/python:3.14@sha256:02aeafdfeb18e859d8ccb221c2ca8e23c54632fd79ce841359f9f06b646877b3,
+#     with CRA Evidence Grype engine craevidence-v0.120.1-p3 (Go 1.26.10)
+#   AMD64 image ID: sha256:b46b0d2dab1b7931d5123578baa0a49b7d4754feef508c8f91ca4c72d7473e09
+#   AMD64 JSON SHA-256: 73bc0a9d1de5b1339332001a5ed20eff8596dea67352c954dafd51a07e72a5d2
+#   ARM64 image ID: sha256:aa82a96941670fa47b8316a23ff8b943ee12060667071e0ef39cb4093660d391
+#   ARM64 JSON SHA-256: e292d3cc6d5a8a863556e2d56585cf178399f9edb0548690735e8d770b7e7e16
+#   review date: 2026-10-26
+# Older dated exposure notes below are historical observations, not fresh proof.
 # Review at every release.
 
 watchlist:
@@ -58,16 +66,12 @@ watchlist:
         - { id: CVE-2019-1010024, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010025, severity: Negligible, fix_state: not-fixed }
       note: "glibc issues Debian marks wont-fix or leaves unfixed. The High items concern the deprecated DNS record printing functions (ns_printrr, ns_printrrf, fp_nquery) and strfmon right-justified width padding. The Medium items concern further checks in those printing functions, tilde expansion, long resolver search lists, the fopen ccs= mode extension, tdelete, JISX0213 conversions, $ORIGIN expansion for setuid programs and the nscd service. The image contains no setuid or setgid files and no nscd binary (checked 2026-10-12)."
-    - package: libexpat1 2.8.3-1~deb13u1+dhi5
+    - package: libexpat1 2.9.0-1~deb13u1+dhi0
       advisories:
-        - { id: CVE-2026-66046, severity: High, fix_state: wont-fix }
-        - { id: CVE-2026-76956, severity: High, fix_state: wont-fix }
-        - { id: CVE-2026-76957, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-113351, severity: High, fix_state: wont-fix }
+        - { id: CVE-2026-115506, severity: High, fix_state: wont-fix }
         - { id: CVE-2025-66382, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-102633, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-77214, severity: High, fix_state: not-fixed }
-        - { id: CVE-2026-93990, severity: High, fix_state: not-fixed }
-      note: "The refreshed base ships expat 2.8.3. Debian marks most of these findings wont-fix; CVE-2026-93990 (UTF-16 surrogate validation, fixed upstream in 2.8.5) and CVE-2026-77214 (heap over-read in XML_ParseBuffer) have no Debian fix yet. Python's XML parser in the image uses its bundled expat 2.8.5, the bundled engine is a static Go binary that reads Maven pom.xml files with Go's own XML decoder, and Opengrep links only libc, so none of them loads this package (checked 2026-10-12)."
+      note: "Both architecture scans report these three advisories against the hardened base's expat 2.9.0 package with no fixed version. The database marks them wont-fix. Six previously reported advisories are no longer reported, but other findings remain. No reachability or non-exploitability conclusion is inferred from the fixed-finding gate."
     - package: libsqlite3-0 3.46.1-7+deb13u2+dhi1
       advisories:
         - { id: CVE-2026-50812, severity: Medium, fix_state: wont-fix }
@@ -131,15 +135,17 @@ watchlist:
 
   # Entries below come from the binaries' embedded Go build information, not
   # from the scanner output above. They record embedded dependencies the
-  # scanner currently filters out, so the dependency stays visible.
+  # scanner does not report; absence does not establish reachability or safety.
   build_info_audit:
     - package: golang.org/x/crypto v0.57.0
-      source: go build info of CRA Evidence Grype engine craevidence-v0.120.1-p2
+      source: go build info of CRA Evidence Grype engine craevidence-v0.120.1-p3 (Go 1.26.10, reviewed 2026-10-26)
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
-      note: "The advisory covers the unmaintained openpgp package and lists no fixed version, so every x/crypto release is in range. Grype 0.116.1 does not report it against the image (Go reachability filtering, checked 2026-10-16)."
+      note: "The advisory covers the unmaintained openpgp package and lists no fixed version. Grype 0.116.1 does not report it against either image in the 2026-10-26 scans. Embedded module presence does not prove use of the affected openpgp packages; scanner absence does not prove safety. Advisory: https://pkg.go.dev/vuln/GO-2026-5932."
 
   resolved_since_last_review:
+    - ids: [CVE-2026-66046, CVE-2026-76956, CVE-2026-76957, CVE-2026-102633, CVE-2026-77214, CVE-2026-93990]
+      note: "Previously reported against libexpat1 2.8.3-1~deb13u1+dhi5. Neither 2026-10-26 architecture scan reports them against 2.9.0-1~deb13u1+dhi0. CVE-2025-66382 remains reported, alongside the two new High findings above. This records scanner results, not a blanket remediation claim."
     - ids: [CVE-2026-5450, CVE-2026-5928]
       note: "Previously listed against libc6 2.41-12+deb13u3+dhi2. The refreshed 2.41-12+deb13u4+dhi1 package is still scanned, but the 2026-10-04 database no longer reported these advisories against it, and the 2026-10-12 scan does not report them either."
     - ids: [CVE-2026-11822, CVE-2026-11824, CVE-2026-39113]
@@ -149,7 +155,7 @@ watchlist:
     - ids: [CVE-2026-27456, CVE-2026-13595, CVE-2026-53612, CVE-2026-53613, CVE-2026-53614, CVE-2026-53615, CVE-2025-14104]
       note: "Previously listed against libuuid1 2.41.5-0+deb13u1. At the 2026-08-29 review the refreshed 2.41.5-0+deb13u1+dhi2 package no longer had these advisories reported against it; the 2026-10-04 scan of 2.41.5-0+deb13u1+dhi3 does not report them either."
     - ids: [GO-2026-4970, CVE-2026-39822, GO-2026-5037, CVE-2026-27145, GO-2026-5038, CVE-2026-42504]
-      note: "The p3 engine is built with Go 1.26.5; the 2026-08-09 scan no longer reports these Go 1.26.3 findings."
+      note: "The engine reviewed on 2026-08-09 was built with Go 1.26.5; that scan no longer reported these Go 1.26.3 findings."
     - id: GHSA-hc8v-wwc9-vgxm
       note: "The p3 engine embeds go-git 5.19.2; the 2026-08-09 scan no longer reports the 5.19.1 finding."
     - ids: [GHSA-x744-4wpc-v9h2, GHSA-pxq6-2prw-chj9, GHSA-vp62-88p7-qqf5]

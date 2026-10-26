@@ -58,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Forward the configured organization selector during GitHub workload identity exchange.
+- Match baseline findings by shared case-insensitive ID/alias and exact package/version,
+  requiring an exact PURL match when both reports provide one. Keep legacy ID-only rows
+  on case-insensitive ID equality without alias inference and gate new package
+  occurrences independently.
+
 - The hardened Python 3.14 builder and runtime bases are refreshed and remain
   pinned by digest.
 - `check` separates Grype matches whose component version is missing or whose
@@ -78,6 +84,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   epoch (`2:`); a real epoch version such as `1:1.0-1` is unchanged.
 
 ### Fixed
+
+- The `--fail-on` gate now exits 30 immediately when the server reports an
+  incomplete assessment, even when the vulnerability summary is missing or
+  omits its incomplete flag.
+- Keep firmware, diagram, and structured-evidence diagnostics off JSON stdout.
+- Keep finding names within their GitHub summary table cells and show Action
+  upload results only for upload commands.
+- Preserve compliance template and source-download destinations unless --force
+  was supplied, including files created while input was being retrieved.
+- Preserve files created during SBOM signing unless replacement is requested.
+- Honor explicit source directories alongside an SBOM during egress checks.
+- Use the Spring Security lifecycle for its packages instead of the Spring
+  Framework lifecycle.
+- Distinguish unavailable lifecycle data from successful no-match results in
+  saved reports while retaining advisory behavior.
+- Report unreadable configuration files as skipped and encode report file paths
+  as URIs.
+- Reject incomplete or invalidly encoded OSV responses and retain the existing fallback when
+  the local scanning process cannot start or times out.
+- Link SARIF findings to a retained generated SBOM when requested. GitLab locations use that retained
+  copy too, rather than a deleted generation path.
+- Reject conflicting local-check report destinations before scanning.
+- Return an error for failed or disabled scan requests, including without a
+  severity gate, and reject malformed scan responses.
+- Send verification requests once; keep retries for retrieval requests.
+- Verify explicit attestation IDs through their detail endpoint and bind them to the selected version.
+- Resolve product slugs before the product-list limit and reject malformed
+  product lists and details during compliance template generation.
+- Reject malformed evidence lists, local SBOM entries and enrichment data.
+- Bound GitHub identity-token requests, refuse redirects and unsafe request
+  URLs, and omit credential values from configuration errors.
+- Allow engine-free commands to start without the Unix database-lock module.
+- Show only a validated server origin in verbose version output.
+- Reject repeated mapping keys in check policy, repository identity and assessment
+  gate configuration while preserving legal merge overrides and equals keys.
+- Use KEV and EPSS publication dates for freshness, retaining unknown dates as unknown
+  instead of assigning the local fetch date. `--strict` now also fails when a feed's
+  freshness is unknown.
+- Resolve opposing OpenVEX statuses by effective timestamp only when author, product and
+  vulnerability identity agree; retain unresolved conflicts in findings and reports with a
+  `vex_conflict` note.
+- Report a malformed version list response as invalid instead of as a missing version when
+  resolving versions for uploads, version settings and version creation.
+- `compliance-as-code template` refuses malformed version, version detail and component
+  responses instead of crashing or silently rendering placeholders, and warns when the
+  component fetch itself fails before falling back to placeholders.
 
 - Baseline reports describe findings absent from the current results without
   implying remediation when package identity or scan coverage changed. JSON
@@ -137,68 +189,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- The hardened runtime base now ships a fixed `libexpat1`; the temporary package
+- The hardened runtime base now supplies `libexpat1` 2.9.0; the temporary package
   upgrade used by the container build has been removed.
-
-## [4.9.1] - 2026-10-16
-
-### Changed
-
-- Forward the configured organization selector during GitHub workload identity exchange.
-- Match baseline findings by shared case-insensitive ID/alias and exact package/version,
-  requiring an exact PURL match when both reports provide one. Keep legacy ID-only rows
-  on case-insensitive ID equality without alias inference and gate new package
-  occurrences independently.
-- The hardened Python 3.14 builder and runtime base-image digests are refreshed
-  and remain pinned by digest.
-
-### Fixed
-
-- The `--fail-on` gate now exits 30 immediately when the server reports an
-  incomplete assessment, even when the vulnerability summary is missing or
-  omits its incomplete flag.
-- Keep firmware, diagram, and structured-evidence diagnostics off JSON stdout.
-- Keep finding names within their GitHub summary table cells and show Action
-  upload results only for upload commands.
-- Preserve compliance template and source-download destinations unless --force
-  was supplied, including files created while input was being retrieved.
-- Preserve files created during SBOM signing unless replacement is requested.
-- Honor explicit source directories alongside an SBOM during egress checks.
-- Use the Spring Security lifecycle for its packages instead of the Spring
-  Framework lifecycle.
-- Distinguish unavailable lifecycle data from successful no-match results in
-  saved reports while retaining advisory behavior.
-- Report unreadable configuration files as skipped and encode report file paths
-  as URIs.
-- Reject incomplete or invalidly encoded OSV responses and retain the existing fallback when
-  the local scanning process cannot start or times out.
-- Link SARIF findings to a retained generated SBOM when requested. GitLab locations use that retained
-  copy too, rather than a deleted generation path.
-- Reject conflicting local-check report destinations before scanning.
-- Return an error for failed or disabled scan requests, including without a
-  severity gate, and reject malformed scan responses.
-- Send verification requests once; keep retries for retrieval requests.
-- Verify explicit attestation IDs through their detail endpoint and bind them to the selected version.
-- Resolve product slugs before the product-list limit and reject malformed
-  product lists and details during compliance template generation.
-- Reject malformed evidence lists, local SBOM entries and enrichment data.
-- Bound GitHub identity-token requests, refuse redirects and unsafe request
-  URLs, and omit credential values from configuration errors.
-- Allow engine-free commands to start without the Unix database-lock module.
-- Show only a validated server origin in verbose version output.
-- Reject repeated mapping keys in check policy, repository identity and assessment
-  gate configuration while preserving legal merge overrides and equals keys.
-- Use KEV and EPSS publication dates for freshness, retaining unknown dates as unknown
-  instead of assigning the local fetch date. `--strict` now also fails when a feed's
-  freshness is unknown.
-- Resolve opposing OpenVEX statuses by effective timestamp only when author, product and
-  vulnerability identity agree; retain unresolved conflicts in findings and reports with a
-  `vex_conflict` note.
-- Report a malformed version list response as invalid instead of as a missing version when
-  resolving versions for uploads, version settings and version creation.
-- `compliance-as-code template` refuses malformed version, version detail and component
-  responses instead of crashing or silently rendering placeholders, and warns when the
-  component fetch itself fails before falling back to placeholders.
 
 ## [4.9.0] - 2026-10-12
 
@@ -1012,7 +1004,6 @@ development builds and are not itemized._
 
 [Unreleased]: https://github.com/craevidence/cli/compare/v4.10.0...HEAD
 [4.10.0]: https://github.com/craevidence/cli/compare/v4.9.0...v4.10.0
-[4.9.1]: https://github.com/craevidence/cli/compare/v4.9.0...v4.9.1
 [4.9.0]: https://github.com/craevidence/cli/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/craevidence/cli/compare/v4.7.0...v4.8.0
 [4.7.0]: https://github.com/craevidence/cli/compare/v4.6.0...v4.7.0
