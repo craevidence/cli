@@ -189,8 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- The hardened runtime base now supplies `libexpat1` 2.9.0; the temporary package
-  upgrade used by the container build has been removed.
+- The hardened runtime base now supplies `libexpat1` 2.9.0.
 
 ## [4.9.0] - 2026-10-12
 
