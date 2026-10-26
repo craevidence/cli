@@ -762,7 +762,7 @@ def test_baseline_text_report_states_the_reclassification(monkeypatch, tmp_path)
     args = ["--output", "text", "--baseline", str(baseline)]
     result = _run(monkeypatch, tmp_path, _versionless_matches(), args)
 
-    assert "- Removed vulnerabilities: 0" in result.stdout
+    assert "- Baseline findings absent now: 0" in result.stdout
     assert "- Reclassified: version could not be confirmed: 1 (CVE-2026-0002)" in result.stdout
 
 
@@ -936,6 +936,31 @@ def test_baseline_row_that_is_not_the_unassessed_package_is_removed(monkeypatch,
     assert report["baseline"]["not_reassessed_vulnerabilities"] == []
 
 
+@pytest.mark.parametrize("output", ["text", "markdown"])
+def test_baseline_absence_with_changed_identity_does_not_claim_remediation(
+    monkeypatch, tmp_path, output
+):
+    """Catches calling an absent finding fixed when the new package could not be checked."""
+    baseline = _write_baseline(
+        tmp_path / "baseline.json", [_broken_baseline_row(version="1.0")]
+    )
+    assessment = _incomplete(_unassessable("broken", "2.0", BROKEN_PURL))
+    result = _run(
+        monkeypatch,
+        tmp_path,
+        [],
+        ["--baseline", str(baseline), "--output", output],
+        assessment=assessment,
+    )
+
+    assert result.exit_code == 0, result.output
+    text = " ".join(result.stdout.split())
+    assert "Baseline findings absent now: 1" in text
+    assert "Absence alone does not prove remediation" in text
+    assert "package identity or scan coverage may have changed" in text
+    assert "Removed vulnerabilities" not in text
+
+
 def test_baseline_row_without_purl_matches_unassessed_package_by_name_and_version(
     monkeypatch, tmp_path
 ):
@@ -1059,7 +1084,7 @@ def test_complete_scan_reports_a_vanished_vulnerability_as_removed(monkeypatch, 
     assert report["baseline"]["removed_vulnerabilities"] == ["CVE-2026-3333"]
     assert report["baseline"]["not_reassessed_vulnerabilities"] == []
     assert report["baseline"]["not_reassessed_reasons"] == {}
-    assert "- Removed vulnerabilities: 1" in text.stdout
+    assert "- Baseline findings absent now: 1" in text.stdout
     assert "Not reassessed" not in text.stdout
 
 
@@ -1094,7 +1119,7 @@ def test_text_report_states_which_vulnerabilities_were_not_reassessed(monkeypatc
         assessment=assessment,
     )
 
-    assert "- Removed vulnerabilities: 0" in result.stdout
+    assert "- Baseline findings absent now: 0" in result.stdout
     assert (
         "- Not reassessed: package could not be assessed in this scan: 1 (CVE-2026-3333)"
         in result.stdout

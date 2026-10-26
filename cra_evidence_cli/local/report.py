@@ -199,11 +199,16 @@ def _text(data: dict[str, Any], verbose: bool = False, exit_code: int = 0) -> st
                 "",
                 "Changed since baseline",
                 f"- New vulnerabilities: {len(new)}{new_text}",
-                f"- Removed vulnerabilities: {len(removed)}",
+                f"- Baseline findings absent now: {len(removed)}",
                 *_reclassified_lines(baseline),
                 *_not_reassessed_lines(baseline),
             ]
         )
+        if removed:
+            lines.append(
+                "Absence alone does not prove remediation; package identity or scan coverage "
+                "may have changed."
+            )
     if verbose:
         # Verbose adds review detail. The per-dimension
         # citation ids, scan-source provenance, and attribution stay in JSON and
@@ -397,9 +402,14 @@ def _print_baseline(console: Console, data: dict[str, Any]) -> None:
     console.print()
     console.print(Text("Changed since baseline", style=STYLE_TITLE))
     console.print(f"- New vulnerabilities: {len(new)}{new_text}")
-    console.print(f"- Removed vulnerabilities: {len(removed)}")
+    console.print(f"- Baseline findings absent now: {len(removed)}")
     for line in (*_reclassified_lines(baseline), *_not_reassessed_lines(baseline)):
         console.print(line, markup=False)
+    if removed:
+        console.print(
+            "Absence alone does not prove remediation; package identity or scan coverage "
+            "may have changed."
+        )
 
 
 _INDICATIVE_SHOWN = 10

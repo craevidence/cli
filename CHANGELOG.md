@@ -78,6 +78,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Baseline reports describe findings absent from the current results without
+  implying remediation when package identity or scan coverage changed. JSON
+  fields, exact-occurrence matching and exit codes are unchanged.
 - `check` retains valid Grype findings when another matched package has an invalid
   RPM PURL epoch. The affected package is explicitly not checked, with a repair
   instruction; coverage stays partial and strict mode fails instead of replacing

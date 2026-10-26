@@ -53,6 +53,10 @@ Notes:
   package/version. When both reports provide a PURL, it must also match exactly. Legacy
   id-only rows match by case-insensitive ID only; they do not gain alias matching. The gate compares
   new package occurrences so a known ID on one package does not hide a new occurrence on another.
+  `removed_vulnerabilities` means baseline findings absent from the current results, not proven
+  remediation. Human reports label this count "Baseline findings absent now". A changed or
+  unknown package version, a changed PURL, or incomplete coverage can prevent reassessment of
+  the old occurrence; absence alone does not establish that its vulnerability was fixed.
 - A vulnerability that `--baseline` lists but that is now only an indicative candidate
   (see below) is reported under `reclassified_vulnerabilities` as "reclassified: version could
   not be confirmed". It is not counted as removed or fixed and it is not new, so `--fail-on-new`
