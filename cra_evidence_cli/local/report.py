@@ -9,7 +9,12 @@ from urllib.parse import quote
 from rich.console import Console
 from rich.text import Text
 
-from cra_evidence_cli.local.inventory_coverage import CODE_DECLARED_UNRESOLVED, code_heading
+from cra_evidence_cli.local.inventory_coverage import (
+    CODE_DECLARED_UNRESOLVED,
+    CODE_DEPENDENCY_GRAPH_UNRESOLVED,
+    code_heading,
+    only_dependency_graph_gaps,
+)
 from cra_evidence_cli.local.models import ASSESSMENT_FAILED_REMEDY, LocalCheckResult
 from cra_evidence_cli.styles import (
     STYLE_BLOCKER,
@@ -633,7 +638,10 @@ def _inventory_coverage_lines(data: dict[str, Any]) -> list[str]:
             "generator"
         ),
         (
-            "Packages from these files may be missing from the SBOM, so the vulnerability "
+            "Dependency targets are ambiguous or missing. Package entries are retained "
+            "and no dependency edges were guessed. Exit codes are unchanged."
+            if only_dependency_graph_gaps(coverage["counts"])
+            else "Packages from these files may be missing from the SBOM, so the vulnerability "
             "counts above do not cover them. Exit codes are unchanged."
         ),
     ]
@@ -688,13 +696,19 @@ def _inventory_notifications(data: dict[str, Any], sbom_uri: str) -> list[dict[s
         unit = (
             "dependency manifest(s)" if code == CODE_DECLARED_UNRESOLVED else "coverage-gap entries"
         )
+        detail = (
+            "Dependency targets are ambiguous or missing. Package entries are retained "
+            "and no dependency edges were guessed."
+            if code == CODE_DEPENDENCY_GRAPH_UNRESOLVED
+            else "Packages from these files may be missing from the SBOM."
+        )
         notifications.append(
             {
                 "level": "warning",
                 "descriptor": {"id": f"craevidence/inventory-coverage/{code}"},
                 "message": {
                     "text": f"{code_heading(code)} ({code}): {count} {unit} reported by the "
-                    "SBOM generator. Packages from these files may be missing from the SBOM."
+                    f"SBOM generator. {detail}"
                 },
                 "locations": location,
                 "properties": {"entries": entries, "count": count},

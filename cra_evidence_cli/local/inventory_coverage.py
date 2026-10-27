@@ -93,6 +93,10 @@ def code_heading(code: str) -> str:
     return CODE_HEADINGS.get(code, f"Files reported with reason code {code}")
 
 
+def only_dependency_graph_gaps(counts: dict[str, int]) -> bool:
+    return {code for code, count in counts.items() if count} == {CODE_DEPENDENCY_GRAPH_UNRESOLVED}
+
+
 @dataclass(frozen=True)
 class CoverageEntry:
     path: str
@@ -132,8 +136,7 @@ class InventoryCoverage:
             "ambiguous or missing. Package entries are retained and no dependency edges "
             "were guessed. An absent statement is no coverage information, never a complete "
             "inventory."
-            if {code for code, count in self.counts.items() if count}
-            == {CODE_DEPENDENCY_GRAPH_UNRESOLVED}
+            if only_dependency_graph_gaps(self.counts)
             else (
                 "Coverage-gap entries the SBOM generator reported for files not resolved "
                 "or not fully read; one file can have more than one entry. Their packages "

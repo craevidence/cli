@@ -36,6 +36,7 @@ from cra_evidence_cli.local.inventory_coverage import (
     STATUS_REPORTED,
     STATUS_UNINTERPRETABLE,
     declared_unresolved_summary,
+    only_dependency_graph_gaps,
     read_inventory_coverage,
 )
 from cra_evidence_cli.local.models import (
@@ -573,10 +574,15 @@ def _run_local_check_on_sbom(
             err=True,
         )
     elif inventory.status == STATUS_REPORTED and inventory.total:
+        detail = (
+            "; dependency targets are ambiguous or missing. Package entries are retained "
+            "and no dependency edges were guessed."
+            if only_dependency_graph_gaps(inventory.counts)
+            else " for files whose packages may be missing from the SBOM; the vulnerability "
+            "counts do not cover them."
+        )
         click.echo(
-            f"Warning: the SBOM generator reported {inventory.total} coverage-gap entries for "
-            "files whose packages may be missing from the SBOM; the vulnerability counts do "
-            "not cover them.",
+            f"Warning: the SBOM generator reported {inventory.total} coverage-gap entries{detail}",
             err=True,
         )
     coverage: list[CoverageSource] = []

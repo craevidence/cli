@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `check` names unresolved dependency relationships separately from package
   sources that could not be read. When only relationships are unresolved, the
-  report explains that package entries are retained and edges were not guessed.
+  stderr warning, text, Markdown and SARIF reports explain that package entries
+  are retained and edges were not guessed.
   Findings, gates and exit codes are unchanged.
 
 - `check --scan-timeout SECONDS` sets the positive timeout for the local Grype

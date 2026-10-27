@@ -260,10 +260,11 @@ def test_check_text_report_names_each_file_and_reason(offline_check, name):
     )
 
 
+@pytest.mark.parametrize("inventory_gap", [False, True])
 def test_dependency_graph_gap_is_reported_without_changing_findings_or_exit_code(
-    offline_check, tmp_path
+    offline_check, tmp_path, inventory_gap
 ):
-    # Catches classifying an unresolved relationship as an unassessed package or finding.
+    # Catches graph-only gaps claiming missing packages, or hiding a real inventory gap.
     statement = {
         "v": 1,
         "state": "incomplete",
@@ -274,6 +275,10 @@ def test_dependency_graph_gap_is_reported_without_changing_findings_or_exit_code
             {"p": "/Gemfile.lock", "c": CODE_DEPENDENCY_GRAPH_UNRESOLVED, "by": "bundler"}
         ],
     }
+    if inventory_gap:
+        statement["counts"]["unparsed"] = 1
+        statement["entries"].append({"p": "/broken.lock", "c": "unparsed", "by": "parser"})
+        statement["listed"] = 2
     path = tmp_path / "graph-gap.json"
     path.write_text(json.dumps(_with_statement(_fixture("generated-cyclonedx.json"), statement)))
     offline_check.findings = [_critical()]
@@ -281,14 +286,32 @@ def test_dependency_graph_gap_is_reported_without_changing_findings_or_exit_code
     assert result.exit_code == 10
     payload = json.loads(result.stdout)
     assert [item["id"] for item in payload["findings"]] == ["CVE-2025-1"]
-    assert payload["inventory_coverage"]["counts"] == {CODE_DEPENDENCY_GRAPH_UNRESOLVED: 1}
+    assert payload["inventory_coverage"]["counts"] == statement["counts"]
     assert payload["inventory_coverage"]["entries"][0]["path"] == "/Gemfile.lock"
-    assert "packages may be missing" not in payload["inventory_coverage"]["note"]
+    assert ("may be missing" in payload["inventory_coverage"]["note"]) is inventory_gap
+    assert ("may be missing" in result.stderr) is inventory_gap
 
-    text = _run("--sbom", str(path), "--output", "text")
-    assert text.exit_code == 0
-    assert "Dependency relationships with unresolved targets" in text.stdout
-    assert "/Gemfile.lock: declares dependency relationships" in text.stdout
+    for output in ["text", "markdown", "sarif"]:
+        rendered = _run("--sbom", str(path), "--output", output)
+        assert rendered.exit_code == 0, rendered.output
+        assert ("may be missing" in rendered.stderr) is inventory_gap
+        if output == "sarif":
+            run = json.loads(rendered.stdout)["runs"][0]
+            notifications = run["invocations"][0]["toolExecutionNotifications"]
+            messages = {
+                item["descriptor"]["id"].rsplit("/", 1)[-1]: item["message"]["text"]
+                for item in notifications
+            }
+            assert "Package entries are retained" in messages[CODE_DEPENDENCY_GRAPH_UNRESOLVED]
+            assert "may be missing" not in messages[CODE_DEPENDENCY_GRAPH_UNRESOLVED]
+            if inventory_gap:
+                assert "may be missing" in messages["unparsed"]
+        else:
+            assert "Dependency relationships with unresolved targets" in rendered.stdout
+            assert "/Gemfile.lock: declares dependency relationships" in rendered.stdout
+            assert ("may be missing" in rendered.stdout) is inventory_gap
+            if not inventory_gap:
+                assert "Package entries are retained" in rendered.stdout
 
 
 def test_check_without_statement_prints_no_section(offline_check, tmp_path):
