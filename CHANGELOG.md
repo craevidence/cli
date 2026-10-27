@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `check` names unresolved dependency relationships separately from package
+  sources that could not be read. When only relationships are unresolved, the
+  report explains that package entries are retained and edges were not guessed.
+  Findings, gates and exit codes are unchanged.
+
 - `check --scan-timeout SECONDS` sets the positive timeout for the local Grype
   matching subprocess, including any Grype database update it performs. It
   defaults to 300 seconds and does not bound SBOM generation, OSV.dev fallback,

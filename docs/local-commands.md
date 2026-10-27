@@ -169,7 +169,10 @@ Notes:
   fully read, and sources not fully inspected because of a size or analysis limit. `check`
   reads it from generated SBOMs and from `--sbom` files alike. It never changes findings,
   gates or the exit code, `--strict` included, and it is never a claim that the inventory is
-  complete. SBOMs from other generators carry no statement.
+  complete. SBOMs from other generators carry no statement. The separate
+  `dependency_graph_unresolved` reason means relationship targets are missing or
+  ambiguous. Package entries are retained and no edge is guessed; this reason
+  alone does not mean packages failed to parse.
   - Text and Markdown: an "Inventory coverage" section with each file and its reason, up to ten
     per reason. JSON: the top-level `inventory_coverage` object with `status` (`reported`,
     `absent` or `uninterpretable`), `state`, `counts` (coverage-gap entries per reason code),

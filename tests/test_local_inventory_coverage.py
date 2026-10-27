@@ -16,6 +16,7 @@ from click.testing import CliRunner
 from cra_evidence_cli.cli import cli
 from cra_evidence_cli.commands import check as check_module
 from cra_evidence_cli.local.inventory_coverage import (
+    CODE_DEPENDENCY_GRAPH_UNRESOLVED,
     STATUS_ABSENT,
     STATUS_REPORTED,
     STATUS_UNINTERPRETABLE,
@@ -147,6 +148,32 @@ def test_unknown_reason_code_is_kept_and_named():
     assert "reason code future_reason" in coverage.to_dict()["entries"][0]["reason"]
 
 
+def test_dependency_graph_gap_preserves_packages_without_claiming_they_are_missing():
+    # Catches treating unresolved graph targets as missing package entries.
+    statement = {
+        "v": 1,
+        "state": "incomplete",
+        "counts": {CODE_DEPENDENCY_GRAPH_UNRESOLVED: 1},
+        "listed": 1,
+        "omitted": 0,
+        "entries": [
+            {"p": "/Gemfile.lock", "c": CODE_DEPENDENCY_GRAPH_UNRESOLVED, "by": "bundler"}
+        ],
+    }
+    coverage = read_inventory_coverage(
+        _with_statement(_fixture("generated-cyclonedx.json"), statement)
+    )
+    output = coverage.to_dict()
+    assert coverage.status == STATUS_REPORTED
+    assert output["counts"] == {CODE_DEPENDENCY_GRAPH_UNRESOLVED: 1}
+    assert output["entries"][0]["code"] == CODE_DEPENDENCY_GRAPH_UNRESOLVED
+    assert "ambiguous or missing" in output["entries"][0]["reason"]
+    assert "Package entries are retained" in output["entries"][0]["reason"]
+    assert "no dependency edges were guessed" in output["entries"][0]["reason"]
+    assert "no dependency edges were guessed" in output["note"]
+    assert "packages may be missing" not in output["note"]
+
+
 class _Scanner:
     findings: list = []
 
@@ -231,6 +258,37 @@ def test_check_text_report_names_each_file_and_reason(offline_check, name):
     assert (
         "/py/setup.py: install_requires has a requirement without an exact == pin" in result.stdout
     )
+
+
+def test_dependency_graph_gap_is_reported_without_changing_findings_or_exit_code(
+    offline_check, tmp_path
+):
+    # Catches classifying an unresolved relationship as an unassessed package or finding.
+    statement = {
+        "v": 1,
+        "state": "incomplete",
+        "counts": {CODE_DEPENDENCY_GRAPH_UNRESOLVED: 1},
+        "listed": 1,
+        "omitted": 0,
+        "entries": [
+            {"p": "/Gemfile.lock", "c": CODE_DEPENDENCY_GRAPH_UNRESOLVED, "by": "bundler"}
+        ],
+    }
+    path = tmp_path / "graph-gap.json"
+    path.write_text(json.dumps(_with_statement(_fixture("generated-cyclonedx.json"), statement)))
+    offline_check.findings = [_critical()]
+    result = _run("--sbom", str(path), "--output", "json", "--fail-on", "critical")
+    assert result.exit_code == 10
+    payload = json.loads(result.stdout)
+    assert [item["id"] for item in payload["findings"]] == ["CVE-2025-1"]
+    assert payload["inventory_coverage"]["counts"] == {CODE_DEPENDENCY_GRAPH_UNRESOLVED: 1}
+    assert payload["inventory_coverage"]["entries"][0]["path"] == "/Gemfile.lock"
+    assert "packages may be missing" not in payload["inventory_coverage"]["note"]
+
+    text = _run("--sbom", str(path), "--output", "text")
+    assert text.exit_code == 0
+    assert "Dependency relationships with unresolved targets" in text.stdout
+    assert "/Gemfile.lock: declares dependency relationships" in text.stdout
 
 
 def test_check_without_statement_prints_no_section(offline_check, tmp_path):

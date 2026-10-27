@@ -30,9 +30,11 @@ STATUS_UNINTERPRETABLE = "uninterpretable"
 CODE_UNPARSED = "unparsed"
 CODE_LIMIT_REFUSED = "limit_refused"
 CODE_DECLARED_UNRESOLVED = "declared_unresolved"
+CODE_DEPENDENCY_GRAPH_UNRESOLVED = "dependency_graph_unresolved"
 
 CODE_HEADINGS = {
     CODE_DECLARED_UNRESOLVED: "Dependency manifests not shown to be resolved to packages",
+    CODE_DEPENDENCY_GRAPH_UNRESOLVED: "Dependency relationships with unresolved targets",
     CODE_UNPARSED: "Package sources not fully read",
     CODE_LIMIT_REFUSED: "Package sources not fully inspected (size or analysis limit)",
 }
@@ -68,6 +70,10 @@ _REASONS = {
 _CODE_REASONS = {
     CODE_DECLARED_UNRESOLVED: (
         "declares dependencies that were not shown to be resolved to packages."
+    ),
+    CODE_DEPENDENCY_GRAPH_UNRESOLVED: (
+        "declares dependency relationships whose targets are ambiguous or missing. "
+        "Package entries are retained and no dependency edges were guessed."
     ),
     CODE_UNPARSED: "could not be fully read; packages read from the rest are kept.",
     CODE_LIMIT_REFUSED: "was not fully inspected because of a size or analysis limit.",
@@ -121,6 +127,21 @@ class InventoryCoverage:
         return [entry for entry in self.entries if entry.code == code]
 
     def to_dict(self) -> dict[str, Any]:
+        note = (
+            "The SBOM generator reported dependency relationships whose targets are "
+            "ambiguous or missing. Package entries are retained and no dependency edges "
+            "were guessed. An absent statement is no coverage information, never a complete "
+            "inventory."
+            if {code for code, count in self.counts.items() if count}
+            == {CODE_DEPENDENCY_GRAPH_UNRESOLVED}
+            else (
+                "Coverage-gap entries the SBOM generator reported for files not resolved "
+                "or not fully read; one file can have more than one entry. Their packages "
+                "may be missing from the SBOM, so the vulnerability counts do not cover "
+                "them. An absent statement is no coverage information, never a complete "
+                "inventory."
+            )
+        )
         return {
             "status": self.status,
             "state": self.state,
@@ -130,13 +151,7 @@ class InventoryCoverage:
             "entries": [entry.to_dict() for entry in self.entries],
             "deliberate_omissions": dict(sorted(self.deliberate_omissions.items())),
             "detail": self.detail,
-            "note": (
-                "Coverage-gap entries the SBOM generator reported for files not resolved "
-                "or not fully read; one file can have more than one entry. Their packages "
-                "may be missing from the SBOM, so the vulnerability counts do not cover "
-                "them. An absent statement is no coverage information, never a complete "
-                "inventory."
-            ),
+            "note": note,
         }
 
 
