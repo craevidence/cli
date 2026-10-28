@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   defaults to 300 seconds and does not bound SBOM generation, OSV.dev fallback,
   or enrichment.
 
+### Fixed
+
+- `check` treats malformed Grype match identity or known-exploited data as a
+  matcher failure and uses the existing OSV.dev fallback with an explicit warning.
+  Grype coverage remains unavailable and `--strict` still fails.
+
+- `check` skips Grype EPSS entries whose probability is text or a non-finite
+  number instead of treating them as valid enrichment.
+
+- `check` keeps valid Grype findings when local database status is unavailable, and reports the
+  coverage as unavailable. Missing, malformed or future database build dates have unknown
+  freshness and fail `--strict`; recognized Grype build dates still use the 30-day age limit.
+
 ## [4.10.0] - 2026-10-26
 
 ### Added

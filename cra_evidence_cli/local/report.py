@@ -495,6 +495,14 @@ def _exit_line(data: dict[str, Any], exit_code: int) -> str:
             "Exit 15: strict mode failed because the vulnerability assessment is incomplete, "
             "not because a blocking threshold was exceeded."
         )
+    if (
+        exit_code == 15
+        and data["provenance"].get("strict_failure") == "unknown, stale, or unavailable source"
+    ):
+        return (
+            "Exit 15: strict mode failed because a consulted source is unknown, stale, "
+            "or unavailable."
+        )
     return data["exit_note"]
 
 

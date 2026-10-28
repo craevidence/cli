@@ -45,7 +45,9 @@ craevidence check [PATH]
 Notes:
 - `--strict` fails when a consulted source is unavailable, stale, or has unknown freshness,
   and when Grype returns an incomplete vulnerability assessment. Missing or malformed KEV/EPSS
-  publication dates remain unknown; optional mode still reports valid findings and enrichment.
+  publication dates and an unverifiable Grype database build date remain unknown; optional mode
+  still reports valid findings and enrichment. If Grype matching succeeds but its DB status
+  cannot be read, the findings are retained and the database coverage is reported unavailable.
 - `--fail-on-new` is the brownfield ratchet: it fails only on vulnerabilities introduced
   since `--baseline` (a previous `--output json` report), so a backlog of known issues does
   not block every build.
@@ -222,6 +224,9 @@ Notes:
   `cli-version-applicability`. Repair the epoch declaration and scan again.
   Grype coverage is partial, `--strict` exits 15, and OSV fallback is not invoked.
   Excluded matches do not count toward `--fail-on`; use `--strict` to fail on this gap.
+  A missing, malformed or future database build date is reported with unknown freshness and
+  fails `--strict`; Grype's dotted `YYYY.MM.DD` build date is also recognized. Local file
+  modification time is not substituted for a missing build date.
 - Each finding's exploit probability is shown inline when available and used to
   rank the "Top actions". JSON findings and SARIF result properties retain
   `epss_probability`, `epss_cve`, `epss_date` and `epss_source` together. The latter

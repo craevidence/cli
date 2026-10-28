@@ -740,7 +740,7 @@ def _run_local_check_on_sbom(
     )
     if strict and any(
         source.status in {"stale", "unavailable"}
-        or (source.source in {"cisa-kev", "first-epss"} and source.status == "unknown")
+        or (source.source in {"grype-db", "cisa-kev", "first-epss"} and source.status == "unknown")
         for source in coverage
     ):
         result.provenance["strict_failure"] = "unknown, stale, or unavailable source"
@@ -780,7 +780,7 @@ def _enforce_gate(
         raise ScanEngineUnavailable(msg)
     if strict and any(
         source.status in {"stale", "unavailable"}
-        or (source.source in {"cisa-kev", "first-epss"} and source.status == "unknown")
+        or (source.source in {"grype-db", "cisa-kev", "first-epss"} and source.status == "unknown")
         for source in result.coverage
     ):
         msg = "Strict mode failed because a consulted source is unknown, stale, or unavailable"

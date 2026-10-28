@@ -112,13 +112,7 @@ def fetch_epss_scores(
 
 
 def stale_status(as_of: str | None, max_age_days: int, today: datetime | None = None) -> bool:
-    if not as_of:
-        return False
-    today = today or datetime.now(UTC)
-    parsed = _parse_grype_date(as_of)
-    if not parsed:
-        return False
-    return (today - parsed).days > max_age_days
+    return grype_freshness_status(as_of, max_age_days, today) == "stale"
 
 
 def feed_freshness_status(
@@ -151,13 +145,22 @@ def _parse_date(value: str) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
-def _parse_grype_date(value: str) -> datetime | None:
-    for fmt, width in (("%Y-%m-%d", 10), ("%Y.%m.%d", 10), ("%Y-%m-%dT%H:%M:%SZ", 20)):
+def grype_freshness_status(
+    as_of: str | None, max_age_days: int, today: datetime | None = None
+) -> str:
+    if not as_of:
+        return "unknown"
+    today = today or datetime.now(UTC)
+    parsed = _parse_date(as_of)
+    if parsed is None:
         try:
-            return datetime.strptime(value[:width], fmt).replace(tzinfo=UTC)
+            legacy_date = datetime.strptime(as_of, "%Y.%m.%d").replace(tzinfo=UTC)
+            parsed = legacy_date if legacy_date.strftime("%Y.%m.%d") == as_of else None
         except ValueError:
-            continue
-    return None
+            parsed = None
+    if parsed is None or parsed > today:
+        return "unknown"
+    return "stale" if (today - parsed).days > max_age_days else "fresh"
 
 
 def _date_text(value: object) -> str | None:

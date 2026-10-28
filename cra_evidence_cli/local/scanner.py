@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import subprocess
 from datetime import UTC, datetime
@@ -16,7 +17,7 @@ from cra_evidence_cli.engine import (
     inspect_engine,
 )
 from cra_evidence_cli.exceptions import ScanEngineUnavailable
-from cra_evidence_cli.local.enrich import _date_text
+from cra_evidence_cli.local.enrich import _date_text, grype_freshness_status
 from cra_evidence_cli.local.models import (
     CoverageSource,
     Finding,
@@ -101,7 +102,9 @@ class GrypeLocalScanner:
             if result.returncode != 0:
                 return None
             data = json.loads(result.stdout)
-        except Exception:
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError, UnicodeError):
+            return None
+        if not isinstance(data, dict):
             return None
         schema_raw = str(data.get("schemaVersion") or "")
         schema_version = schema_raw.lstrip("v").split(".")[0] or None
@@ -165,12 +168,33 @@ class GrypeLocalScanner:
                 "an invalid RPM PURL epoch"
             )
             partial_detail = f"{partial_detail}; {local_detail}" if partial_detail else local_detail
-        metadata = self.get_db_metadata() or {}
+        metadata = self.get_db_metadata()
+        built = metadata.get("built") if metadata is not None else None
+        freshness = grype_freshness_status(built if isinstance(built, str) else None, 30)
+        freshness_detail = (
+            "; database freshness cannot be verified"
+            if metadata is None or freshness == "unknown"
+            else ""
+        )
+        schema_detail = (
+            f"schema={metadata.get('schema_version') or 'unknown'}"
+            if metadata is not None
+            else "database metadata unavailable"
+        )
+        detail = partial_detail or schema_detail
+        if partial_detail is not None and metadata is None:
+            detail += "; database metadata unavailable"
+        detail += freshness_detail
+        status = "partial" if partial_detail is not None else freshness
+        if status == "fresh":
+            status = "present"
+        elif metadata is None and partial_detail is None:
+            status = "unavailable"
         return findings, CoverageSource(
             "grype-db",
-            "partial" if partial_detail is not None else "present",
-            as_of=metadata.get("built"),
-            detail=partial_detail or f"schema={metadata.get('schema_version') or 'unknown'}",
+            status,
+            as_of=built if isinstance(built, str) and freshness != "unknown" else None,
+            detail=detail,
             unassessed_packages=unassessed,
         )
 
@@ -336,9 +360,24 @@ def _parse_grype_document(
         raise ScanEngineUnavailable(message)
     parsed: list[tuple[Finding, tuple[Any, ...]]] = []
     evidence: dict[tuple[Any, ...], tuple[list[Any], set[str]]] = {}
+    malformed_match_message = "scanner returned malformed match data"
     for match in data.get("matches", []):
-        vulnerability = match.get("vulnerability") or {}
-        artifact = match.get("artifact") or {}
+        vulnerability = match.get("vulnerability")
+        artifact = match.get("artifact")
+        if not isinstance(vulnerability, dict) or not isinstance(artifact, dict):
+            raise ScanEngineUnavailable(malformed_match_message)
+        vuln_id = vulnerability.get("id")
+        package_name = artifact.get("name")
+        version = artifact.get("version")
+        purl = artifact.get("purl")
+        if (
+            not isinstance(vuln_id, str)
+            or not vuln_id.strip()
+            or not isinstance(package_name, str)
+            or not (isinstance(version, str) or version is None)
+            or not (isinstance(purl, str) or purl is None)
+        ):
+            raise ScanEngineUnavailable(malformed_match_message)
         aliases = set()
         # Grype reports related identifiers (for example the CVE behind a GHSA
         # finding) on the match, not inside the vulnerability object.
@@ -346,19 +385,28 @@ def _parse_grype_document(
             related_id = related.get("id") if isinstance(related, dict) else related
             if related_id:
                 aliases.add(str(related_id))
-        vuln_id = str(vulnerability.get("id") or "UNKNOWN")
         aliases.discard(vuln_id)
-        known_exploited_raw = vulnerability.get("knownExploited") or []
+        known_exploited_raw = vulnerability.get("knownExploited")
+        if "knownExploited" in vulnerability and (
+            not isinstance(known_exploited_raw, list)
+            or any(
+                not isinstance(entry, dict)
+                or not isinstance(entry.get("cve"), str)
+                or not entry["cve"].strip()
+                for entry in known_exploited_raw
+            )
+        ):
+            raise ScanEngineUnavailable(malformed_match_message)
         fix = vulnerability.get("fix") or {}
         epss_probability, epss_cve, epss_date = _first_epss(vulnerability.get("epss") or [])
         finding = Finding(
             id=vuln_id,
-            package=str(artifact.get("name") or "unknown"),
-            version=artifact.get("version"),
+            package=package_name,
+            version=version,
             severity=normalize_severity(vulnerability.get("severity")),
             aliases=aliases,
             fixed_versions=[str(item) for item in fix.get("versions") or []],
-            purl=artifact.get("purl"),
+            purl=purl,
             title=vulnerability.get("description"),
             references=_references(vulnerability.get("urls") or []),
             epss_probability=epss_probability,
@@ -370,7 +418,7 @@ def _parse_grype_document(
         )
         # Matches of one vulnerability on one package occurrence share a single
         # classification computed from all of their match details.
-        key = (vuln_id, artifact.get("name"), artifact.get("version"), artifact.get("purl"))
+        key = (vuln_id, package_name, version, purl)
         details, cpes = evidence.setdefault(key, ([], set()))
         if isinstance(match.get("matchDetails"), list):
             details.extend(match["matchDetails"])
@@ -406,9 +454,14 @@ def _first_epss(items: list[Any]) -> tuple[float | None, str | None, str | None]
     for item in items:
         if not isinstance(item, dict):
             continue
+        raw_probability = item.get("epss")
+        if isinstance(raw_probability, bool) or not isinstance(raw_probability, (int, float)):
+            continue
         try:
-            probability = float(item["epss"])
-        except (KeyError, TypeError, ValueError):
+            probability = float(raw_probability)
+        except OverflowError:
+            continue
+        if not math.isfinite(probability):
             continue
         raw_cve = item.get("cve")
         cve = raw_cve.strip().upper() if isinstance(raw_cve, str) and raw_cve.strip() else None

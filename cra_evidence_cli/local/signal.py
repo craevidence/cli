@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from cra_evidence_cli.local.enrich import feed_freshness_status, stale_status
+from cra_evidence_cli.local.enrich import feed_freshness_status, grype_freshness_status
 from cra_evidence_cli.local.models import Component, CoverageSource, Finding, summarize_findings
 
 RESULT_NEEDS_REVIEW = "Needs Review"
@@ -33,7 +33,16 @@ def build_dimensions(
         if source.source in {"grype-db", "cisa-kev"}
     ):
         vuln_status = RESULT_UNKNOWN
-    if any(source.status == "unknown" for source in coverage if source.source == "cisa-kev"):
+    if any(
+        source.status == "unknown"
+        or (
+            source.source == "grype-db"
+            and source.status == "unavailable"
+            and not any(item.source == "osv.dev" for item in coverage)
+        )
+        for source in coverage
+        if source.source in {"grype-db", "cisa-kev"}
+    ):
         vuln_status = RESULT_UNKNOWN_FRESHNESS
     if any(source.source == "grype-db" and source.status == "partial" for source in coverage):
         vuln_status = "Unknown - incomplete vulnerability assessment"
@@ -107,8 +116,10 @@ def mark_stale_sources(coverage: list[CoverageSource]) -> None:
             freshness = feed_freshness_status(source.as_of, 7)
             if freshness != "fresh":
                 source.status = freshness
-        if source.source == "grype-db" and stale_status(source.as_of, 30):
-            source.status = "stale"
+        if source.source == "grype-db":
+            freshness = grype_freshness_status(source.as_of, 30)
+            if freshness != "fresh":
+                source.status = freshness
 
 
 def assert_no_cra_pass(dimensions: list[dict[str, Any]]) -> None:

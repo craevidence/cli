@@ -118,10 +118,19 @@ def _sbom(path):
 
 
 def _engine_scanner(monkeypatch, stdout, returncode=0):
+    def fake_run(command, **kwargs):
+        if len(command) > 1 and command[1] == "db":
+            return SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps({"built": TODAY, "schemaVersion": "v6", "valid": True}),
+                stderr="",
+            )
+        return SimpleNamespace(returncode=returncode, stdout=stdout, stderr="")
+
     monkeypatch.setattr(
         scanner_module.subprocess,
         "run",
-        lambda *args, **kwargs: SimpleNamespace(returncode=returncode, stdout=stdout, stderr=""),
+        fake_run,
     )
     scanner = scanner_module.GrypeLocalScanner()
     scanner._inspection = EngineInspection(

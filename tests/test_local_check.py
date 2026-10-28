@@ -1,5 +1,6 @@
 import json
 import subprocess
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -274,6 +275,125 @@ def test_grype_cve_less_finding_keeps_unknown_kev_state():
     assert findings[0].known_exploited is None
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        "missing-vulnerability",
+        "null-vulnerability",
+        "wrong-vulnerability",
+        "missing-id",
+        "blank-id",
+        "numeric-id",
+        "missing-artifact",
+        "null-artifact",
+        "wrong-artifact",
+        "missing-name",
+        "null-name",
+        "numeric-name",
+        "numeric-version",
+        "numeric-purl",
+        "unhashable-version",
+        "unhashable-purl",
+    ],
+)
+def test_grype_rejects_missing_or_invalid_finding_identity(case):
+    """Catches placeholder identities, string coercion and unhashable identity fields."""
+    match = {
+        "vulnerability": {"id": "CVE-2026-0001"},
+        "artifact": {"name": "pkg", "version": "1.0", "purl": "pkg:pypi/pkg@1.0"},
+    }
+    if case == "missing-vulnerability":
+        del match["vulnerability"]
+    elif case == "null-vulnerability":
+        match["vulnerability"] = None
+    elif case == "wrong-vulnerability":
+        match["vulnerability"] = []
+    elif case == "missing-id":
+        del match["vulnerability"]["id"]
+    elif case == "blank-id":
+        match["vulnerability"]["id"] = "  "
+    elif case == "numeric-id":
+        match["vulnerability"]["id"] = 123
+    elif case == "missing-artifact":
+        del match["artifact"]
+    elif case == "null-artifact":
+        match["artifact"] = None
+    elif case == "wrong-artifact":
+        match["artifact"] = []
+    elif case == "missing-name":
+        del match["artifact"]["name"]
+    elif case == "null-name":
+        match["artifact"]["name"] = None
+    elif case == "numeric-name":
+        match["artifact"]["name"] = 123
+    elif case == "numeric-version":
+        match["artifact"]["version"] = 123
+    elif case == "numeric-purl":
+        match["artifact"]["purl"] = 123
+    elif case == "unhashable-version":
+        match["artifact"]["version"] = []
+    elif case == "unhashable-purl":
+        match["artifact"]["purl"] = {}
+
+    with pytest.raises(ScanEngineUnavailable, match="malformed match data"):
+        parse_grype_output(json.dumps({"matches": [match]}))
+
+
+@pytest.mark.parametrize(
+    ("name", "artifact_fields"),
+    [
+        ("", {"version": "", "purl": None}),
+        ("pkg", {"version": None}),
+    ],
+)
+def test_grype_preserves_empty_name_version_and_optional_purl(name, artifact_fields):
+    artifact = {"name": name, **artifact_fields}
+    (finding,) = parse_grype_output(json.dumps({"matches": [{
+        "vulnerability": {"id": "CVE-2026-0001"},
+        "artifact": artifact,
+        "matchDetails": _direct_match_details(artifact.get("version")),
+    }]}))
+
+    assert finding.package == name
+    assert finding.version == artifact.get("version")
+    assert finding.purl == artifact.get("purl")
+
+
+@pytest.mark.parametrize(
+    "known_exploited",
+    [
+        "false",
+        {"cve": "CVE-2026-0001"},
+        None,
+        [None],
+        [{}],
+        [{"cve": "  "}],
+        [{"cve": 123}],
+    ],
+)
+def test_grype_rejects_malformed_known_exploited_data(known_exploited):
+    """Catches truthy non-list data and KEV rows without a usable CVE identity."""
+    report = {"matches": [{
+        "vulnerability": {"id": "CVE-2026-0001", "knownExploited": known_exploited},
+        "artifact": {"name": "pkg", "version": "1.0"},
+        "matchDetails": _direct_match_details("1.0"),
+    }]}
+
+    with pytest.raises(ScanEngineUnavailable, match="malformed match data"):
+        parse_grype_output(json.dumps(report))
+
+
+@pytest.mark.parametrize("known_exploited", [[], [{"cve": "CVE-2026-0001"}]])
+def test_grype_keeps_empty_and_valid_known_exploited_data(known_exploited):
+    findings = parse_grype_output(json.dumps({"matches": [{
+        "vulnerability": {"id": "CVE-2026-0001", "knownExploited": known_exploited},
+        "artifact": {"name": "pkg", "version": "1.0"},
+        "matchDetails": _direct_match_details("1.0"),
+    }]}))
+
+    assert findings[0].known_exploited is (True if known_exploited else None)
+
+
 def test_grype_match_level_related_cve_reaches_kev_and_epss_enrichment():
     # Grype places the CVE behind a GHSA finding on the match. Reading it from the
     # vulnerability object left GHSA findings without CVE aliases, so KEV and EPSS
@@ -312,7 +432,7 @@ def test_grype_match_level_related_cve_reaches_kev_and_epss_enrichment():
     ([{"epss": "bad", "cve": "CVE-2026-9999", "date": "2026-10-16"},
       {"epss": "0.25", "cve": " cve-2026-0001 ", "date": "2026-10-14"},
       {"epss": 0.9, "cve": "CVE-2026-0002", "date": "2026-10-15"}],
-     (0.25, "CVE-2026-0001", "2026-10-14", "grype-db")),
+     (0.9, "CVE-2026-0002", "2026-10-15", "grype-db")),
     ([{"epss": 0, "cve": "CVE-2026-0001", "date": "2026-10-14"}],
      (0.0, "CVE-2026-0001", "2026-10-14", "grype-db")),
     ([{"epss": 0.25, "cve": 42, "date": "not-a-date"}],
@@ -333,6 +453,41 @@ def test_grype_epss_keeps_first_scored_row_without_inventing_metadata(rows, expe
         finding.epss_probability, finding.epss_cve, finding.epss_date, finding.epss_source
     ) == expected
     assert finding.source == "grype"
+
+
+@pytest.mark.parametrize(
+    "score",
+    [float("nan"), float("inf"), float("-inf"), True, "0.25"],
+    ids=["nan", "positive-infinity", "negative-infinity", "boolean", "numeric-string"],
+)
+def test_grype_epss_skips_nonfinite_and_non_numeric_rows(score):
+    """Catches float coercion and nonfinite EPSS values while preserving later-row recovery."""
+    (finding,) = parse_grype_output(json.dumps({"matches": [{
+        "vulnerability": {"id": "CVE-2026-0001", "epss": [
+            {"epss": score, "cve": "CVE-2026-0001"},
+            {"epss": 0.25, "cve": "CVE-2026-0002", "date": "2026-10-15"},
+        ]},
+        "artifact": {"name": "pkg", "version": "1.0"},
+        "matchDetails": _direct_match_details("1.0"),
+    }]}))
+
+    assert (
+        finding.epss_probability, finding.epss_cve, finding.epss_date, finding.epss_source
+    ) == (0.25, "CVE-2026-0002", "2026-10-15", "grype-db")
+
+
+@pytest.mark.parametrize("score", [float("nan"), float("inf"), False, "0.25"])
+def test_grype_epss_without_valid_rows_keeps_finding_unenriched(score):
+    """Catches treating invalid optional scores as data or discarding the finding."""
+    (finding,) = parse_grype_output(json.dumps({"matches": [{
+        "vulnerability": {"id": "CVE-2026-0001", "epss": [{"epss": score}]},
+        "artifact": {"name": "pkg", "version": "1.0"},
+        "matchDetails": _direct_match_details("1.0"),
+    }]}))
+
+    assert finding.id == "CVE-2026-0001"
+    assert finding.epss_probability is None
+    assert finding.epss_source is None
 
 
 def test_stale_source_downgrades_vulnerability_dimension():
@@ -367,12 +522,104 @@ def test_unknown_kev_freshness_is_reported_without_calling_it_stale(as_of):
     assert vulnerability["result"] == "Unknown - freshness cannot be verified"
 
 
-def test_malformed_grype_date_keeps_legacy_stale_prefix_behavior():
-    coverage = [CoverageSource("grype-db", "present", as_of="2000-01-01 garbage")]
+@pytest.mark.parametrize(
+    ("as_of", "expected"),
+    [
+        (None, "unknown"),
+        ("not-a-date", "unknown"),
+        ("2000-01-01 garbage", "unknown"),
+        ("2999-01-01", "unknown"),
+        ("2000.01.01", "stale"),
+    ],
+)
+def test_grype_freshness_distinguishes_unknown_future_and_stale_dates(as_of, expected):
+    coverage = [CoverageSource("grype-db", "present", as_of=as_of)]
 
     mark_stale_sources(coverage)
 
-    assert coverage[0].status == "stale"
+    assert coverage[0].status == expected
+
+
+def test_grype_current_dotted_date_is_fresh():
+    today = datetime.now(UTC).strftime("%Y.%m.%d")
+    coverage = [CoverageSource("grype-db", "present", as_of=today)]
+
+    mark_stale_sources(coverage)
+
+    assert coverage[0].status == "present"
+    assert enrich.feed_freshness_status(today, 30) == "unknown"
+
+
+@pytest.mark.parametrize("status", ["unknown", "unavailable"])
+def test_unknown_grype_freshness_is_visible_in_dimension(status):
+    dimensions = build_dimensions(
+        components=[],
+        findings=[Finding(id="CVE-2026-0001", package="pkg", version="1.0")],
+        coverage=[CoverageSource("grype-db", status)],
+    )
+
+    vulnerability = next(
+        item for item in dimensions if item["title"] == "Known vulnerability snapshot"
+    )
+    assert vulnerability["result"] == "Unknown - freshness cannot be verified"
+
+
+@pytest.mark.parametrize(
+    ("age_days", "expected"),
+    [(30, "fresh"), (31, "stale")],
+)
+def test_grype_rfc3339_build_timestamp_uses_30_day_boundary(age_days, expected):
+    now = datetime(2026, 10, 27, 12, 0, tzinfo=UTC)
+    built = now - timedelta(days=age_days)
+
+    assert enrich.grype_freshness_status(
+        built.strftime("%Y-%m-%dT%H:%M:%SZ"), 30, now
+    ) == expected
+
+
+@pytest.mark.parametrize("output_format", ["json", "text", "markdown", "sarif"])
+def test_unknown_grype_freshness_fails_strict_without_dropping_findings(
+    monkeypatch, tmp_path, output_format
+):
+    finding = _critical_finding()
+    _install_fake_scanner(monkeypatch, [finding])
+
+    def mark_unknown(coverage):
+        for source in coverage:
+            if source.source == "grype-db":
+                source.status = "unknown"
+
+    monkeypatch.setattr(check_module, "mark_stale_sources", mark_unknown)
+    sbom = tmp_path / "sbom.json"
+    _write_sbom(sbom)
+
+    args = ["--sbom", str(sbom), "--output", output_format, "--verbose"]
+    optional = _run_check(args)
+    strict = _run_check([*args, "--strict"])
+
+    assert optional.exit_code == 0, optional.output
+    assert strict.exit_code == 15, strict.output
+    if output_format in {"json", "sarif"}:
+        assert finding.id in optional.stdout
+        assert finding.id in strict.stdout
+    else:
+        for output in (optional.stdout, strict.stdout):
+            assert "Vulnerabilities: 1" in output
+            assert "acme 1.0.0" in output
+    if output_format == "json":
+        strict_report = json.loads(strict.stdout)
+        assert strict_report["findings"][0]["id"] == finding.id
+        assert strict_report["provenance"]["grype-db"]["status"] == "unknown"
+    elif output_format == "sarif":
+        properties = json.loads(strict.stdout)["runs"][0]["tool"]["driver"]["properties"]
+        assert any(
+            row["source"] == "grype-db" and row["status"] == "unknown"
+            for row in properties["coverage"]
+        )
+    else:
+        assert "strict mode failed because a consulted source is unknown" in " ".join(
+            strict.stdout.split()
+        )
 
 
 def test_grype_partial_source_marks_incomplete_dimension_not_stale():
@@ -1214,18 +1461,31 @@ def test_scan_env_respects_explicit_grype_db_auto_update(monkeypatch, tmp_path):
     assert envs[0]["GRYPE_DB_AUTO_UPDATE"] == "true"
 
 
-def _install_process_scanner(monkeypatch, returncode, stdout, stderr=""):
+def _install_process_scanner(
+    monkeypatch, returncode, stdout, stderr="", db_returncode=0, db_stdout=None
+):
     from cra_evidence_cli.local import scanner as scanner_module
 
-    monkeypatch.setattr(
-        scanner_module.subprocess,
-        "run",
-        lambda *args, **kwargs: SimpleNamespace(
-            returncode=returncode,
-            stdout=stdout,
-            stderr=stderr,
-        ),
-    )
+    def fake_run(cmd, **kwargs):
+        if len(cmd) > 1 and cmd[1] == "db":
+            return SimpleNamespace(
+                returncode=db_returncode,
+                stdout=(
+                    db_stdout
+                    if db_stdout is not None
+                    else json.dumps(
+                        {
+                            "built": datetime.now(UTC).date().isoformat(),
+                            "schemaVersion": "v6",
+                            "valid": True,
+                        }
+                    )
+                ),
+                stderr="database status failed" if db_returncode else "",
+            )
+        return SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+
+    monkeypatch.setattr(scanner_module.subprocess, "run", fake_run)
     scanner = scanner_module.GrypeLocalScanner()
     scanner._inspection = EngineInspection(
         EngineIdentity(
@@ -1324,12 +1584,14 @@ def test_scan_process_failures_fall_back_with_unavailable_coverage(
     monkeypatch.setattr(
         check_module,
         "fetch_kev_catalog",
-        lambda: (set(), _Cov("cisa-kev", "present", as_of="2026-06-10")),
+        lambda: (set(), _Cov("cisa-kev", "present", as_of=datetime.now(UTC).date().isoformat())),
     )
     monkeypatch.setattr(
         check_module,
         "fetch_epss_scores",
-        lambda cves: ({}, _Cov("first-epss", "present", as_of="2026-06-10")),
+        lambda cves: (
+            {}, _Cov("first-epss", "present", as_of=datetime.now(UTC).date().isoformat())
+        ),
     )
 
     args = ["--sbom", str(sbom)]
@@ -1345,6 +1607,11 @@ def test_scan_process_failures_fall_back_with_unavailable_coverage(
     assert payload["provenance"]["grype-db"]["status"] == "unavailable"
     assert payload["provenance"]["osv.dev"]["status"] == "present"
     assert payload["findings"][0]["id"] == "OSV-2026-1"
+    vulnerability = next(
+        item for item in payload["cra_readiness_signal"]["dimensions"]
+        if item["title"] == "Known vulnerability snapshot"
+    )
+    assert vulnerability["result"] == "Action required"
     if strict:
         assert payload["provenance"]["strict_failure"] == "unknown, stale, or unavailable source"
     assert f"Warning: local matcher failed ({safe_reason})" in result.stderr
@@ -1437,6 +1704,20 @@ def test_exit_one_actionable_incomplete_grype_report_keeps_findings_and_reason_d
     assert "version-comparison-error" in coverage.detail
 
 
+def test_partial_assessment_keeps_both_assessment_and_metadata_failure(monkeypatch, tmp_path):
+    scanner = _install_process_scanner(
+        monkeypatch, 1, json.dumps(_incomplete_grype_document()), db_returncode=1
+    )
+
+    findings, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert findings[0].id == "CVE-2025-9999"
+    assert coverage.status == "partial"
+    assert "version-comparison-error" in coverage.detail
+    assert "database metadata unavailable" in coverage.detail
+    assert "freshness cannot be verified" in coverage.detail
+
+
 def test_exit_one_keeps_the_identity_and_reason_of_each_unassessed_package(monkeypatch, tmp_path):
     document = _incomplete_grype_document()
     document["assessment"]["unassessablePackages"].append(
@@ -1472,6 +1753,73 @@ def test_complete_scan_has_no_unassessed_packages(monkeypatch, tmp_path):
 
     assert coverage.status == "present"
     assert coverage.unassessed_packages == []
+
+
+@pytest.mark.parametrize(
+    ("db_returncode", "db_stdout"),
+    [(1, '{"built":"2026-10-27"}'), (0, "null"), (0, "[]"), (0, "not-json")],
+)
+def test_db_metadata_failure_keeps_matching_findings_and_reports_unavailable(
+    monkeypatch, tmp_path, db_returncode, db_stdout
+):
+    document = {
+        "matches": [
+            {
+                "vulnerability": {"id": "CVE-2026-0001", "severity": "High"},
+                "artifact": {"name": "pkg", "version": "1.0"},
+                "matchDetails": _direct_match_details("1.0"),
+            }
+        ]
+    }
+    scanner = _install_process_scanner(
+        monkeypatch,
+        0,
+        json.dumps(document),
+        db_returncode=db_returncode,
+        db_stdout=db_stdout,
+    )
+
+    findings, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert [finding.id for finding in findings] == ["CVE-2026-0001"]
+    assert coverage.status == "unavailable"
+    assert coverage.as_of is None
+    assert "freshness cannot be verified" in coverage.detail
+
+
+@pytest.mark.parametrize("built", [None, 42, "invalid", "2999-01-01"])
+def test_unverifiable_db_date_keeps_findings_and_reports_unknown(monkeypatch, tmp_path, built):
+    scanner = _install_process_scanner(
+        monkeypatch,
+        0,
+        json.dumps({"matches": [{
+            "vulnerability": {"id": "CVE-2026-0001", "severity": "High"},
+            "artifact": {"name": "pkg", "version": "1.0"},
+            "matchDetails": _direct_match_details("1.0"),
+        }]}),
+        db_stdout=json.dumps({"built": built}),
+    )
+
+    findings, coverage = scanner.scan_sbom(tmp_path / "sbom.json")
+
+    assert [finding.id for finding in findings] == ["CVE-2026-0001"]
+    assert coverage.status == "unknown"
+    assert coverage.as_of is None
+
+
+def test_db_metadata_process_failure_does_not_swallow_unexpected_exception(monkeypatch):
+    from cra_evidence_cli.local import scanner as scanner_module
+
+    scanner = _install_process_scanner(monkeypatch, 0, '{"matches":[]}')
+
+    def fail_run(*args, **kwargs):
+        message = "unexpected process wrapper failure"
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(scanner_module.subprocess, "run", fail_run)
+
+    with pytest.raises(RuntimeError, match="unexpected process wrapper failure"):
+        scanner.get_db_metadata()
 
 
 @pytest.mark.parametrize(
