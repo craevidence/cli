@@ -1081,10 +1081,11 @@ stderr with `--output json`). See [Coverage gaps](#coverage-gaps).
 ## Coverage gaps
 
 A coverage gap is a package a vulnerability scan could not check: the SBOM has no
-version or no supported package type for it, or the advisory data has no entry for
-its operating-system release. The vulnerability counts do not cover these
-packages. CRA Evidence reports them in `vulnerability_summary.coverage_gaps` of
-`GET /ci/status` (`state` `none` or `gaps`, `total`, `counts_by_reason`,
+version, no supported package type, or no operating-system distribution context for
+an advisory search, or the advisory data has no entry for its operating-system release.
+The vulnerability counts do not cover these packages. CRA Evidence reports
+them in `vulnerability_summary.coverage_gaps` of `GET /ci/status` (`state` `none`
+or `gaps`, `total`, `counts_by_reason`,
 `remedy`), per SBOM in `scan_coverage`, and in `coverage_gaps` of the
 release-state response.
 
@@ -1094,6 +1095,7 @@ Text output lists the total, the count per reason and the next step for each:
 |---|---|
 | `unknown-package-version` | no version in the SBOM |
 | `no-package-ecosystem` | no package type the scanner supports |
+| `missing-distro` | operating-system distribution context missing |
 | `distro-release-not-in-db` | operating-system release not in the advisory data |
 
 Any other reason code is shown as sent. When the server reports `none`, the

@@ -47,6 +47,10 @@ REMEDY_ECOSYSTEM = (
     "Give each package a typed purl (pkg:type/name@version) or a CPE and upload a "
     "new revision."
 )
+REMEDY_DISTRO = (
+    "Add each package's actual operating-system distribution and release to the SBOM, then upload "
+    "a new revision."
+)
 GAPS = {
     "state": "gaps",
     "total": 12,
@@ -147,6 +151,21 @@ class TestReadCoverageGaps:
         assert "  10 with no version in the SBOM (unknown-package-version)" in lines
         assert f"  Next step: {REMEDY_VERSION}" in lines
         assert f"  Next step: {REMEDY_ECOSYSTEM}" in lines
+
+    def test_missing_distro_remote_coverage_label_is_specific(self):
+        """Catches missing-distro being displayed only as an opaque reason code."""
+        gaps = read_coverage_gaps(
+            {
+                "state": "gaps",
+                "total": 1,
+                "counts_by_reason": {"missing-distro": 1},
+                "remedy": [REMEDY_DISTRO],
+            }
+        )
+        lines = coverage_gap_lines(gaps)
+
+        assert "  1 with operating-system distribution context missing (missing-distro)" in lines
+        assert f"  Next step: {REMEDY_DISTRO}" in lines
 
     def test_unknown_reason_code_is_shown_verbatim(self):
         """Catches a reason this CLI has no label for being dropped from the list."""

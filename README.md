@@ -95,8 +95,11 @@ assessment. Without `--strict`, configured finding gates still apply, and exit
 
 The reports list the packages Grype could not check, grouped by reason with the
 next step for each. "Not checked for vulnerabilities" covers packages whose SBOM
-entry has no version or no package ecosystem, and packages whose operating-system
-release has no entry in the vulnerability database. "Assessment failed" covers
+entry has no version, no package ecosystem, or no operating-system distribution
+context for an advisory search, and packages whose operating-system release has no
+entry in the vulnerability database. For missing distribution context, add the
+package's actual OS distribution and release to the SBOM.
+"Assessment failed" covers
 packages the scanner tried and failed to check, and any reason code this CLI
 does not recognise. The vulnerability counts do not cover either group. The JSON
 report carries them in `unassessed_packages` and SARIF as tool execution

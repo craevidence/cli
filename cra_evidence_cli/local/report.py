@@ -511,6 +511,7 @@ _UNASSESSED_REASON_LABELS = {
     "unknown-package-version": "Package version unknown",
     "invalid-rpm-purl-epoch": "RPM PURL epoch invalid or ambiguous",
     "no-package-ecosystem": "Package ecosystem unknown",
+    "missing-distro": "Operating-system distribution context missing",
     "distro-release-not-in-db": "Operating-system release not in the vulnerability database",
     "matcher-error": "Matcher error",
     "version-comparison-error": "Version comparison error",

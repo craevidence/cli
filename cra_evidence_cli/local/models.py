@@ -151,6 +151,7 @@ class UnassessedPackage:
 NOT_CHECKED_REASONS = (
     "unknown-package-version",
     "no-package-ecosystem",
+    "missing-distro",
     "distro-release-not-in-db",
     "invalid-rpm-purl-epoch",
 )
@@ -165,6 +166,10 @@ _NOT_CHECKED_REMEDIES = {
     "unknown-package-version": (
         "Add the resolved version (for example, generate the SBOM from the lock file "
         "or build output) and scan again."
+    ),
+    "missing-distro": (
+        "Add the package's actual operating-system distribution and release to the SBOM, "
+        "then scan again."
     ),
     "no-package-ecosystem": (
         "Give the package a typed purl (pkg:type/name@version) or a CPE and scan again."

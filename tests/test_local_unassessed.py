@@ -29,6 +29,10 @@ VERSION_REMEDY = (
     "output) and scan again."
 )
 ECOSYSTEM_REMEDY = "Give the package a typed purl (pkg:type/name@version) or a CPE and scan again."
+DISTRO_REMEDY = (
+    "Add the package's actual operating-system distribution and release to the SBOM, "
+    "then scan again."
+)
 FAILED_REMEDY = "The scanner could not check these packages. Scan again; if it persists, report it."
 WARNING = (
     "Warning: the vulnerability assessment is incomplete; valid findings are retained."
@@ -60,6 +64,12 @@ def _libc6(scopes=(DEBIAN_14,)):
         "dpkg-matcher",
     )
     return {**entry, "searchedDistros": list(scopes)}
+
+
+def _missing_distro():
+    return _unassessable(
+        "libc6", "2.41-1", "pkg:deb/debian/libc6@2.41-1", "missing-distro", "dpkg-matcher"
+    )
 
 
 def _broken(reason="matcher-error"):
@@ -142,6 +152,28 @@ def test_unknown_reason_code_is_an_assessment_failure(monkeypatch, tmp_path):
     assert report["unassessed_packages"]["not_checked"]["total_packages"] == 0
     assert "- Unrecognised reason (future-thing): 1 package" in text
     assert "Not checked for vulnerabilities" not in text
+
+
+def test_missing_distro_is_actionable_not_checked_input_gap(monkeypatch, tmp_path):
+    """Catches a missing distro being reported as a matcher failure or DB gap."""
+    assessment = _incomplete(_missing_distro())
+
+    result, report = _json_run(monkeypatch, tmp_path, [], assessment=assessment)
+    text = _run(monkeypatch, tmp_path, [], ["--output", "text"], assessment=assessment).stdout
+
+    entry = report["unassessed_packages"]["entries"][0]
+    assert entry["reason"] == "missing-distro"
+    assert entry["category"] == "not_checked"
+    assert entry["remedy"] == DISTRO_REMEDY
+    assert entry["searched_distros"] == []
+    assert report["unassessed_packages"]["not_checked"]["by_reason"] == {
+        "missing-distro": 1
+    }
+    assert report["unassessed_packages"]["assessment_failed"]["total_packages"] == 0
+    assert result.exit_code == 0
+    assert "Operating-system distribution context missing (missing-distro): 1 package" in text
+    assert DISTRO_REMEDY in text
+    assert "distro-release-not-in-db" not in text
 
 
 @pytest.mark.parametrize("assessment", [_gap_only, _mixed, lambda: _incomplete(_broken())])

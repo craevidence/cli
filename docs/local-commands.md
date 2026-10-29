@@ -76,9 +76,10 @@ Notes:
   lists the packages it named, grouped by reason code, with the next step for each reason.
   The vulnerability counts do not cover these packages, and the lists never change the exit code.
   - Not checked for vulnerabilities: `unknown-package-version` (add the resolved version),
-    `no-package-ecosystem` (give the package a typed purl or a CPE) and
-    `distro-release-not-in-db` (the vulnerability database has no entry for the requested
-    operating-system scope, which the report names).
+    `no-package-ecosystem` (give the package a typed purl or a CPE), `missing-distro` (add the
+    package's actual operating-system distribution and release to the SBOM), and
+    `distro-release-not-in-db` (the vulnerability database has no
+    entry for the requested operating-system scope, which the report names).
   - Assessment failed: `matcher-error`, `version-comparison-error`, `matcher-panic` and any
     reason code this CLI does not recognise. Scan again; if it persists, report it.
   - Text and Markdown: a section for each group after the summary, up to five packages per

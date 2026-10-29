@@ -1,9 +1,10 @@
 """Coverage gaps reported by CRA Evidence: packages a vulnerability scan could not check.
 
 A coverage gap is a package the scan could not check because the SBOM entry lacks
-a version or a package type the scanner supports, or because the advisory data has
-no entry for the operating-system release it names. Gaps are reported apart from
-scan failures. The vulnerability counts do not cover these packages.
+a version, a package type the scanner supports, or the operating-system distribution
+context needed for an advisory search, or because the advisory data has no entry for
+the operating-system release it names. Gaps are reported apart from scan failures.
+The vulnerability counts do not cover these packages.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from cra_evidence_cli.exceptions import CoverageGapsFound
 REASON_LABELS = {
     "unknown-package-version": "no version in the SBOM",
     "no-package-ecosystem": "no package type the scanner supports",
+    "missing-distro": "operating-system distribution context missing",
     "distro-release-not-in-db": "operating-system release not in the advisory data",
 }
 
