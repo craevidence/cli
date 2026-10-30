@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.11.0] - 2026-10-30
+
 ### Added
 
 - `check` names unresolved dependency relationships separately from package
@@ -20,7 +22,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   defaults to 300 seconds and does not bound SBOM generation, OSV.dev fallback,
   or enrichment.
 
+### Changed
+
+- The bundled Grype engine moves from CRA Evidence v0.120.1-p3 to v0.120.1-p4.
+  It selects go-jose v4.1.6 in both Grype and Syft, which fixes
+  GHSA-mgcc-cww5-fp2q (unbounded RSA JWK modulus parsing).
+- Refresh the digest-pinned hardened Python 3.14 builder and runtime images.
+
 ### Fixed
+
+- When an engine reports `missing-distro`, `check` lists the affected packages as
+  not checked and explains how to add the missing operating-system distribution
+  context. Coverage-gap summaries also name this reported reason.
 
 - `check` treats malformed Grype match identity or known-exploited data as a
   matcher failure and uses the existing OSV.dev fallback with an explicit warning.
@@ -1027,7 +1040,8 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.10.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.11.0...HEAD
+[4.11.0]: https://github.com/craevidence/cli/compare/v4.10.0...v4.11.0
 [4.10.0]: https://github.com/craevidence/cli/compare/v4.9.0...v4.10.0
 [4.9.0]: https://github.com/craevidence/cli/compare/v4.8.0...v4.9.0
 [4.8.0]: https://github.com/craevidence/cli/compare/v4.7.0...v4.8.0
