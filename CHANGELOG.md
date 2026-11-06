@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minutes, instead of giving up after four attempts. It prints its progress to stderr, so
   `--output json` stays parseable. `CRA_EVIDENCE_EXPORT_WAIT` changes the limit.
 
+### Changed
+
+- The hardened Python 3.14 builder and runtime base-image digests are refreshed
+  and remain pinned by digest.
+
 ## [4.11.0] - 2026-10-30
 
 ### Added
