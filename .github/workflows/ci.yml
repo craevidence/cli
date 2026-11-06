@@ -39,7 +39,7 @@ jobs:
   # Job 1: Run tests
   # ---------------------------------------------------------------------------
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
@@ -65,7 +65,7 @@ jobs:
   # Job 2: Rule pack structural gate + engine gate + dist content guard
   # ---------------------------------------------------------------------------
   rulepack:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
@@ -156,7 +156,7 @@ jobs:
   # Job 3: Build Docker image, generate SBOM, upload to CRA Evidence
   # ---------------------------------------------------------------------------
   build-and-sbom:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test, rulepack]
     permissions:
       contents: read
@@ -463,7 +463,7 @@ jobs:
   # must match the package version exactly. Publishing jobs consume the
   # validated version from this job instead of re-deriving it.
   validate-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test, rulepack, build-and-sbom]
     if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.resume_release != '')
     permissions:
@@ -677,7 +677,7 @@ jobs:
   # GHCR, Docker Hub, and Quay are all required channels: the release fails
   # early when any of them cannot be used.
   publish-images:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test, rulepack, build-and-sbom, validate-release]
     if: needs.validate-release.outputs.mode != ''
     environment: release-images
@@ -1207,7 +1207,7 @@ jobs:
   #     the PyPI project settings.
   # ---------------------------------------------------------------------------
   publish-pypi:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test, rulepack, build-and-sbom, validate-release, publish-images]
     if: needs.validate-release.outputs.mode != ''
     environment: pypi
@@ -1542,7 +1542,7 @@ jobs:
   # output (not re-resolved by tag), and every version tag is confirmed to
   # equal it before any latest tag is moved.
   finalize-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [validate-release, publish-images, publish-pypi]
     if: needs.validate-release.outputs.mode != ''
     environment: release-images
