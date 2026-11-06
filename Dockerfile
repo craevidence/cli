@@ -56,7 +56,7 @@
 # for another location. An image must provide the supported CRA Evidence engine
 # contract, including /grype, /LICENSE and /NOTICE.
 ARG GRYPE_ENGINE_REGISTRY
-ARG GRYPE_ENGINE_DIGEST=sha256:2eb7cdec80bc75c29b7bcb9ff0a1338ca0706fade1e163df088d55f8cf687902
+ARG GRYPE_ENGINE_DIGEST=sha256:6d569f10f662e1fe483c921572e16d678fcd50c9f06c265bcfea3adbfe468d25
 ARG GRYPE_ENGINE_IMAGE=${GRYPE_ENGINE_REGISTRY}/craevidence/grype-engine@${GRYPE_ENGINE_DIGEST}
 
 ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:4f0273dfbc2816cbe56de9bbb483699b4d0a0e824443fefb45e1dc7ff356b073

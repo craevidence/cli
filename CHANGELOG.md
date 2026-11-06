@@ -7,14 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.11.1] - 2026-11-06
+
 ### Fixed
 
 - `export` waits while the server is still building a large technical file, for up to 20
   minutes, instead of giving up after four attempts. It prints its progress to stderr, so
   `--output json` stays parseable. `CRA_EVIDENCE_EXPORT_WAIT` changes the limit.
+- A negative or non-numeric `Retry-After` value falls back to the usual backoff instead of
+  polling at once or failing with an unexpected error.
 
 ### Changed
 
+- The bundled Grype engine moves from CRA Evidence v0.120.1-p4 to v0.120.1-p5. It selects
+  andybalholm/brotli v1.2.8, klauspost/compress v1.20.3 and golang.org/x/net v0.62.0 in both
+  Grype and Syft, which fixes GO-2026-6888, GO-2026-6865, GO-2026-6860 and GO-2026-6866.
 - The hardened Python 3.14 builder and runtime base-image digests are refreshed
   and remain pinned by digest.
 
