@@ -12,13 +12,13 @@
 # gets reviewed here instead of staying suppressed.
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
-# Reviewed 2026-10-30 against DB schema v6.1.10 built 2026-10-30T06:23:28Z,
-# for the 4.11.0 release images on AMD64 and ARM64. Exact image IDs, base
+# Reviewed 2026-11-06 against DB schema v6.1.10 built 2026-11-06T06:21:59Z,
+# for the 4.11.1 release images on AMD64 and ARM64. Exact image IDs, base
 # digests and scan hashes are recorded in grype-watchlist.yaml alongside the
-# unfixed findings. The engine is craevidence-v0.120.1-p4 (Go 1.26.10).
+# unfixed findings. The engine is craevidence-v0.120.1-p5 (Go 1.26.10).
 # The gate reports no fixed finding. The pinned Grype 0.111.0 comparison reports
-# two fixed golang.org/x/net advisories in the engine; grype-watchlist.yaml
-# records them under build_info_audit with the reachability evidence.
+# GO-2026-5932 in the engine's golang.org/x/crypto; grype-watchlist.yaml records
+# it under build_info_audit.
 # This does not mean the images contain no vulnerabilities. No waiver is added.
 # Re-evaluate at every release.
 
