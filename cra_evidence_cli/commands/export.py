@@ -26,6 +26,11 @@ def _sanitize_filename(name: str) -> str:
     return name.replace("/", "_").replace("..", "_").replace("\x00", "")
 
 
+def _waited(seconds: float) -> str:
+    minutes, remainder = divmod(round(seconds), 60)
+    return f"{minutes}m {remainder}s" if minutes else f"{remainder}s"
+
+
 @click.command("export")
 @click.option(
     "--product",
@@ -96,6 +101,10 @@ def export(
                 version=version_number,
                 export_format=export_format,
                 output_path=output_path,
+                on_waiting=lambda seconds: err_console.print(
+                    f"[dim]Still preparing the {export_format}, "
+                    f"waited {_waited(seconds)}[/dim]"
+                ),
             )
         )
 

@@ -94,6 +94,169 @@ class TestRequestWithRetry:
         return requests, sleeps
 
     @pytest.mark.asyncio
+    async def test_keeps_waiting_while_the_server_is_still_preparing(self, monkeypatch):
+        """A slow export answers 503 with Retry-After many times; four attempts must
+        not be the limit when the caller agreed to wait."""
+        waiting = [
+            Response(status_code=503, headers={"Retry-After": "60"}) for _ in range(9)
+        ]
+        requests, sleeps = self._patch_transport(
+            monkeypatch, [*waiting, Response(status_code=200, content=b"zip")]
+        )
+
+        response = await self._client()._request_with_retry(
+            "GET", self.URL, wait_for_ready_seconds=1200
+        )
+
+        assert response.status_code == 200
+        assert len(requests) == 10
+        assert sleeps == [60.0] * 9
+
+    def _patch_clock(self, monkeypatch, request_seconds=0.0):
+        """Time passes only through sleeps and requests; returns the request start times."""
+        clock = {"now": 1000.0}
+        starts: list[float] = []
+
+        class FakeAsyncClient:
+            def __init__(self, timeout=None, **_kwargs):
+                self.timeout = timeout
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def request(self, method, url, headers=None, **kwargs):
+                starts.append(clock["now"] - 1000.0)
+                clock["now"] += request_seconds
+                return Response(status_code=503, headers={"Retry-After": "60"})
+
+        async def fake_sleep(seconds):
+            clock["now"] += seconds
+
+        monkeypatch.setattr(
+            "cra_evidence_cli.client.httpx.AsyncClient", FakeAsyncClient
+        )
+        monkeypatch.setattr("cra_evidence_cli.client.asyncio.sleep", fake_sleep)
+        monkeypatch.setattr(
+            "cra_evidence_cli.client.time.monotonic", lambda: clock["now"]
+        )
+        return starts
+
+    @pytest.mark.asyncio
+    async def test_a_limit_shorter_than_retry_after_is_kept(self, monkeypatch):
+        """Ordinary retries must not outlive the limit: one second must not become
+        three minutes of 60 second sleeps."""
+        starts = self._patch_clock(monkeypatch)
+
+        response = await self._client()._request_with_retry(
+            "GET", self.URL, wait_for_ready_seconds=1
+        )
+
+        assert response.status_code == 503
+        assert starts == [0.0, 1.0]
+
+    @pytest.mark.asyncio
+    async def test_a_positive_limit_ends_the_wait(self, monkeypatch):
+        """A server that never finishes stops the wait at the limit, not one sleep past it."""
+        starts = self._patch_clock(monkeypatch)
+
+        response = await self._client()._request_with_retry(
+            "GET", self.URL, wait_for_ready_seconds=150
+        )
+
+        assert response.status_code == 503
+        assert starts == [0.0, 60.0, 120.0, 150.0]
+
+    @pytest.mark.asyncio
+    async def test_slow_requests_count_against_the_limit(self, monkeypatch):
+        """Request time is part of the wait, and no request starts after the limit."""
+        starts = self._patch_clock(monkeypatch, request_seconds=30.0)
+
+        response = await self._client()._request_with_retry(
+            "GET", self.URL, wait_for_ready_seconds=100
+        )
+
+        assert response.status_code == 503
+        assert starts == [0.0, 90.0]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("-1", [1.0, 2.0, 4.0]),
+            ("NaN", [1.0, 2.0, 4.0]),
+            ("inf", [1.0, 2.0, 4.0]),
+            ("Wed, 21 Oct 2026 07:28:00 GMT", [1.0, 2.0, 4.0]),
+            ("0", [0.0, 0.0, 0.0]),
+            ("90", [60.0, 60.0, 60.0]),
+        ],
+    )
+    async def test_retry_after_values(self, monkeypatch, value, expected):
+        """An unusable value falls back to the usual backoff instead of a rapid loop or a
+        crash; a usable one is honoured and capped."""
+        _requests, sleeps = self._patch_transport(
+            monkeypatch,
+            [Response(status_code=503, headers={"Retry-After": value}) for _ in range(4)],
+        )
+
+        response = await self._client()._request_with_retry("GET", self.URL)
+
+        assert response.status_code == 503
+        assert sleeps == expected
+
+    @pytest.mark.asyncio
+    async def test_a_zero_retry_after_does_not_poll_rapidly_while_waiting(self, monkeypatch):
+        """Zero is honoured for ordinary retries, but during the long wait it would
+        mean hammering the server for the whole limit."""
+        _requests, sleeps = self._patch_transport(
+            monkeypatch,
+            [
+                *[Response(status_code=503, headers={"Retry-After": "0"}) for _ in range(5)],
+                Response(status_code=200, content=b"zip"),
+            ],
+        )
+
+        response = await self._client()._request_with_retry(
+            "GET", self.URL, wait_for_ready_seconds=1200
+        )
+
+        assert response.status_code == 200
+        assert sleeps == [1.0] * 5
+
+    @pytest.mark.asyncio
+    async def test_gives_up_when_the_wait_is_over(self, monkeypatch):
+        """A server that never finishes must not hold a pipeline forever."""
+        requests, _sleeps = self._patch_transport(
+            monkeypatch,
+            [Response(status_code=503, headers={"Retry-After": "60"}) for _ in range(5)],
+        )
+
+        response = await self._client()._request_with_retry(
+            "GET", self.URL, wait_for_ready_seconds=0
+        )
+
+        assert response.status_code == 503
+        assert len(requests) == 4
+
+    @pytest.mark.asyncio
+    async def test_a_real_failure_is_not_waited_for(self, monkeypatch):
+        """Only a 503 with Retry-After means still preparing: other failures stop at
+        the normal attempts even when the caller agreed to wait."""
+        requests, _sleeps = self._patch_transport(
+            monkeypatch,
+            [Response(status_code=500) for _ in range(5)],
+        )
+
+        response = await self._client()._request_with_retry(
+            "GET", self.URL, wait_for_ready_seconds=1200
+        )
+
+        assert response.status_code == 500
+        assert len(requests) == 4
+
+    @pytest.mark.asyncio
     async def test_429_then_success_retries_once(self, monkeypatch):
         """A 429 is retried after the first backoff step and the following
         200 is returned."""

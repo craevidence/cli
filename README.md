@@ -359,6 +359,7 @@ for runner egress, proxy, GitHub Action, and GitLab Component examples.
 | `CRA_EVIDENCE_COMPONENT` | Default component slug for component-aware uploads. |
 | `CRA_EVIDENCE_COMPONENT_VERSION` | Default component release version. |
 | `CRA_EVIDENCE_TIMEOUT` | HTTP request timeout in seconds for account commands. Defaults to `60`. |
+| `CRA_EVIDENCE_EXPORT_WAIT` | Seconds `export` keeps waiting while the server is still preparing the file, printing its progress to stderr. The last check starts when the limit is reached. Defaults to `1200`. `0` stops after the usual retries. |
 
 Credentials can also be stored in `~/.cra-evidence/config.yaml`. Keep that file
 private, for example with `chmod 600 ~/.cra-evidence/config.yaml`.

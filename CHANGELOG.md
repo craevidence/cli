@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `export` waits while the server is still building a large technical file, for up to 20
+  minutes, instead of giving up after four attempts. It prints its progress to stderr, so
+  `--output json` stays parseable. `CRA_EVIDENCE_EXPORT_WAIT` changes the limit.
+
 ## [4.11.0] - 2026-10-30
 
 ### Added

@@ -128,6 +128,19 @@ class TestLoadConfig:
         assert config.trusted_origin == "https://cli.api.com"
         assert config.ca_bundle == Path("/cli/ca.pem")
 
+    def test_export_wait_defaults_and_reads_the_environment(self):
+        """A pipeline can change how long export waits, and the default is 20 minutes."""
+        with patch.dict(os.environ, {}, clear=True):
+            assert load_config().export_wait == 1200
+        with patch.dict(os.environ, {"CRA_EVIDENCE_EXPORT_WAIT": "0"}, clear=True):
+            assert load_config().export_wait == 0
+
+    def test_invalid_export_wait_is_refused(self):
+        """A mistyped limit fails clearly instead of silently using the default."""
+        with patch.dict(os.environ, {"CRA_EVIDENCE_EXPORT_WAIT": "soon"}, clear=True):
+            with pytest.raises(ConfigurationError, match="CRA_EVIDENCE_EXPORT_WAIT"):
+                load_config()
+
     def test_load_config_invalid_timeout(self):
         """Non-numeric CRA_EVIDENCE_TIMEOUT raises ConfigurationError."""
         env_vars = {"CRA_EVIDENCE_TIMEOUT": "not_a_number"}

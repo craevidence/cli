@@ -53,6 +53,11 @@ class CRAEvidenceConfig(BaseModel):
         description="Default output format (text|json|sarif|markdown)",
     )
     timeout: int = Field(gt=0, default=60, description="HTTP request timeout in seconds")
+    export_wait: int = Field(
+        ge=0,
+        default=1200,
+        description="Seconds export keeps waiting while the server prepares the file",
+    )
     oidc_mode: bool = Field(default=False, description="Use OIDC authentication (GitHub Actions)")
     oidc_token: str | None = Field(default=None, description="GitHub Actions OIDC token")
 
@@ -211,6 +216,12 @@ def load_config(
             config_data["timeout"] = int(env_timeout)
         except ValueError:
             msg = "Invalid CRA_EVIDENCE_TIMEOUT: expected a positive integer"
+            raise ConfigurationError(msg) from None
+    if env_export_wait := os.getenv("CRA_EVIDENCE_EXPORT_WAIT"):
+        try:
+            config_data["export_wait"] = int(env_export_wait)
+        except ValueError:
+            msg = "Invalid CRA_EVIDENCE_EXPORT_WAIT: expected a whole number of seconds"
             raise ConfigurationError(msg) from None
 
     if oidc_mode:

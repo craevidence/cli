@@ -3,7 +3,10 @@ HTTP client for CRA Evidence API.
 """
 
 import asyncio
+import math
 import re
+import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 from uuid import UUID
@@ -42,6 +45,20 @@ def mask_api_key(key: str) -> str:
     if not key or len(key) <= 8:
         return "****"
     return f"{key[:4]}****{key[-4:]}"
+
+
+
+def _retry_delay(retry_after: str | None, backoff: float) -> float:
+    """Seconds to wait from a Retry-After value, capped at 60; ``backoff`` if unusable."""
+    if not retry_after:
+        return backoff
+    try:
+        delay = float(retry_after)
+    except ValueError:
+        return backoff
+    if not math.isfinite(delay) or delay < 0:
+        return backoff
+    return min(delay, 60.0)
 
 
 class CRAEvidenceClient:
@@ -257,6 +274,9 @@ class CRAEvidenceClient:
         self,
         method: str,
         url: str,
+        *,
+        wait_for_ready_seconds: float = 0,
+        on_waiting: Callable[[float], None] | None = None,
         **kwargs: Any,
     ) -> httpx.Response:
         """
@@ -264,7 +284,12 @@ class CRAEvidenceClient:
 
         Retries up to 3 times on 429 or 5xx responses with exponential
         backoff (1s, 2s, 4s). Honours the Retry-After header when present,
-        capped at 60 seconds per attempt.
+        capped at 60 seconds per attempt. With ``wait_for_ready_seconds``, a 503
+        carrying Retry-After means the server is still preparing the result, so
+        it keeps retrying for that long, and tells ``on_waiting`` the seconds
+        waited so far before each retry. That limit also ends the ordinary
+        retries: the last request starts when it is reached, and a request in
+        flight then runs to its own timeout.
 
         Authentication headers are built here, after the OIDC access token
         exchange has completed, so callers must not pass their own headers.
@@ -289,34 +314,46 @@ class CRAEvidenceClient:
         max_retries = 3
         backoff_seconds = [1, 2, 4]
 
+        started_at = time.monotonic()
+        give_up_at = started_at + wait_for_ready_seconds
         async with self._http_client() as client:
-            last_response: httpx.Response | None = None
-            for attempt in range(max_retries + 1):
+            attempt = -1
+            while True:
+                attempt += 1
                 try:
                     response = await client.request(method, url, headers=headers, **kwargs)
                 except httpx.RequestError as exc:
                     raise APIError(
                         message=f"Network error contacting {url}: {exc}",
                     ) from exc
-                last_response = response
                 self._raise_for_redirect(response)
 
                 if response.status_code == 429 or response.status_code >= 500:
-                    if attempt < max_retries:
-                        retry_after_header = response.headers.get("Retry-After")
-                        if retry_after_header:
-                            try:
-                                wait = min(float(retry_after_header), 60.0)
-                            except ValueError:
-                                wait = float(backoff_seconds[attempt])
-                        else:
-                            wait = float(backoff_seconds[attempt])
+                    retry_after_header = response.headers.get("Retry-After")
+                    remaining = give_up_at - time.monotonic()
+                    if wait_for_ready_seconds > 0 and remaining <= 0:
+                        return response
+                    still_preparing = (
+                        response.status_code == 503
+                        and bool(retry_after_header)
+                        and remaining > 0
+                    )
+                    if attempt < max_retries or still_preparing:
+                        wait = _retry_delay(
+                            retry_after_header,
+                            float(backoff_seconds[min(attempt, max_retries - 1)]),
+                        )
+                        if still_preparing:
+                            # A long wait must not turn into rapid polling.
+                            wait = max(wait, 1.0)
+                        if wait_for_ready_seconds > 0:
+                            wait = min(wait, remaining)
+                        if still_preparing and on_waiting is not None:
+                            on_waiting(time.monotonic() - started_at)
                         await asyncio.sleep(wait)
                         continue
 
                 return response
-
-            return last_response  # type: ignore[return-value]
 
     async def upload_sbom(
         self,
@@ -1840,6 +1877,7 @@ class CRAEvidenceClient:
         version: str,
         export_format: str,
         output_path: Path,
+        on_waiting: Callable[[float], None] | None = None,
     ) -> dict[str, Any]:
         """
         Download technical file export.
@@ -1849,6 +1887,7 @@ class CRAEvidenceClient:
             version: Version number
             export_format: Export format (technical-file, compliance-report, sbom-data)
             output_path: Path to save the exported file
+            on_waiting: Called with the seconds waited while the file is being prepared
         """
         response = await self._request_with_retry(
             "GET",
@@ -1858,6 +1897,8 @@ class CRAEvidenceClient:
                 "version": version,
                 "format": export_format,
             },
+            wait_for_ready_seconds=self.config.export_wait,
+            on_waiting=on_waiting,
         )
 
         if response.status_code >= 400:
