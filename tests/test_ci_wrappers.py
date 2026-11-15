@@ -374,3 +374,27 @@ def test_v4_release_docs_use_the_v4_major_tag_before_release():
     assert release_text.index("git tag v4 <commit>") < release_text.index(
         "Create the GitHub release"
     )
+
+
+def _tags_block(text: str, marker: str) -> str:
+    start = text.index(marker)
+    return text[start : text.index("esac", start)]
+
+
+def test_github_action_passes_tags_only_for_sbom_and_document():
+    """upload-hbom and upload-vex have no --tags option. The action forwards the
+    tags input only for sbom and document, and fails with a clear error when tags
+    is set for another artifact type instead of a bare CLI usage error."""
+    text = (REPO_ROOT / "action.yml").read_text()
+    block = _tags_block(text, 'case "${INPUT_ARTIFACT_TYPE}" in\n          sbom|document)')
+    assert 'add_optional "${INPUT_TAGS}" --tags' in block
+    assert "tags applies only to artifact-type sbom or document" in block
+    assert text.count("--tags") == 1
+
+
+def test_gitlab_component_passes_tags_only_for_sbom_and_document():
+    text = (REPO_ROOT / "gitlab-ci-component.yml").read_text()
+    block = _tags_block(text, 'case "${CRA_ARTIFACT_TYPE}" in\n        sbom|document)')
+    assert '--tags "${CRA_TAGS}"' in block
+    assert "CRA_TAGS applies only to CRA_ARTIFACT_TYPE sbom or document" in block
+    assert text.count("--tags") == 1

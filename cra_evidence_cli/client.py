@@ -414,7 +414,7 @@ class CRAEvidenceClient:
             product_group: Product group slug
             target_markets: Comma-separated EU country codes required when auto-creating a product
             environment: Environment slug for this version
-            tags: Comma-separated list of tags to apply to this version
+            tags: Comma-separated tags sent with the uploaded artifact
             commit_sha: Git commit SHA (auto-detected in CI)
             branch: Git branch name (auto-detected in CI)
             pipeline_id: CI pipeline ID (auto-detected in CI)
@@ -580,7 +580,6 @@ class CRAEvidenceClient:
         target_markets: str | None = None,
         # Version metadata
         environment: str | None = None,
-        tags: str | None = None,
         # CI metadata
         commit_sha: str | None = None,
         branch: str | None = None,
@@ -610,7 +609,6 @@ class CRAEvidenceClient:
             product_group: Product group slug
             target_markets: Comma-separated EU country codes required when auto-creating a product
             environment: Environment slug for this version
-            tags: Comma-separated list of tags to apply to this version
             commit_sha: Git commit SHA (auto-detected in CI)
             branch: Git branch name (auto-detected in CI)
             pipeline_id: CI pipeline ID (auto-detected in CI)
@@ -688,8 +686,6 @@ class CRAEvidenceClient:
 
                 if environment:
                     data["environment"] = environment
-                if tags:
-                    data["tags"] = tags
 
                 if commit_sha:
                     data["commit_sha"] = commit_sha
@@ -741,7 +737,6 @@ class CRAEvidenceClient:
         product_group: str | None = None,
         # Version metadata
         environment: str | None = None,
-        tags: str | None = None,
         # CI metadata
         commit_sha: str | None = None,
         branch: str | None = None,
@@ -767,7 +762,6 @@ class CRAEvidenceClient:
             cra_role: CRA economic operator role
             product_group: Product group slug
             environment: Environment slug for this version
-            tags: Comma-separated list of tags to apply to this version
             commit_sha: Git commit SHA (auto-detected in CI)
             branch: Git branch name (auto-detected in CI)
             pipeline_id: CI pipeline ID (auto-detected in CI)
@@ -813,8 +807,6 @@ class CRAEvidenceClient:
 
                 if environment:
                     data["environment"] = environment
-                if tags:
-                    data["tags"] = tags
 
                 if commit_sha:
                     data["commit_sha"] = commit_sha
@@ -1244,7 +1236,7 @@ class CRAEvidenceClient:
             product_group: Product group slug
             target_markets: Comma-separated EU country codes required when auto-creating a product
             environment: Environment slug for this version
-            tags: Comma-separated list of tags to apply to this version
+            tags: Comma-separated tags sent with the uploaded artifact
             commit_sha: Git commit SHA (auto-detected in CI)
             branch: Git branch name (auto-detected in CI)
             pipeline_id: CI pipeline ID (auto-detected in CI)

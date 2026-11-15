@@ -103,7 +103,7 @@ inputs:
     default: ''
 
   tags:
-    description: 'Comma-separated tags for the artifact (e.g., ci,main,nightly)'
+    description: 'Comma-separated tags for an SBOM or document upload (e.g., ci,main,nightly). Not accepted for hbom or vex.'
     required: false
     default: ''
 
@@ -511,7 +511,17 @@ runs:
         esac
 
         add_optional "${INPUT_ENVIRONMENT}" --environment
-        add_optional "${INPUT_TAGS}" --tags
+        case "${INPUT_ARTIFACT_TYPE}" in
+          sbom|document)
+            add_optional "${INPUT_TAGS}" --tags
+            ;;
+          *)
+            if [ -n "${INPUT_TAGS}" ]; then
+              echo "::error::tags applies only to artifact-type sbom or document"
+              exit 1
+            fi
+            ;;
+        esac
         add_optional "${GITHUB_RUN_ID_VAL}" --pipeline-id
         add_optional "${GITHUB_SHA_VAL}" --commit
         add_optional "${GITHUB_REF_NAME_VAL}" --branch

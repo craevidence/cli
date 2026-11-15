@@ -2699,7 +2699,6 @@ class TestUploadVexOutput:
                         "--subcategory", "vpn",
                         "--product-group", "iot",
                         "--environment", "production",
-                        "--tags", "ci,nightly",
                         "--commit", "abc123",
                         "--no-inherit",
                         "--no-ci-detect",
@@ -2717,7 +2716,7 @@ class TestUploadVexOutput:
         assert kwargs["category"] == "important_class_i"
         assert kwargs["product_group"] == "iot"
         assert kwargs["environment"] == "production"
-        assert kwargs["tags"] == "ci,nightly"
+        assert "tags" not in kwargs
         assert kwargs["commit_sha"] == "abc123"
         assert kwargs["no_inherit"] is True
 
@@ -2793,3 +2792,27 @@ class TestScanIncompleteGate:
         from cra_evidence_cli.commands.upload import check_vulnerability_threshold
 
         check_vulnerability_threshold({"critical": 0, "scan_incomplete": True}, "none")
+
+
+@pytest.mark.parametrize(
+    ("command", "file_name", "content"),
+    [
+        ("upload-hbom", "hbom.json", '{"bomFormat": "CycloneDX", "specVersion": "1.6"}'),
+        ("upload-vex", "vex.json", '{"vulnerabilities": []}'),
+    ],
+)
+def test_tags_option_is_not_offered_on_hbom_and_vex_uploads(command, file_name, content):
+    """`--tags` was removed from upload-hbom and upload-vex. Passing it is a usage
+    error, so a pipeline still sending it fails loudly instead of being ignored."""
+    from cra_evidence_cli.cli import cli
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path(file_name).write_text(content)
+        result = runner.invoke(
+            cli,
+            [command, "--product", "p", "--version", "1.0", "--file", file_name, "--tags", "a"],
+            env={"CRA_EVIDENCE_API_KEY": "cra_test", "CRA_EVIDENCE_URL": "https://api.test"},
+        )
+    assert result.exit_code == 2, result.output
+    assert "--tags" in result.output

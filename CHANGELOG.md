@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING:** `--tags` on `upload-hbom` and `upload-vex`. Tags sent with
+  hardware BOM and VEX uploads were never kept, so the option had no effect.
+  A pipeline that still passes `--tags` to these two commands now gets a usage
+  error (exit 2) and must drop the option. `--tags` on `upload-sbom` and
+  `upload-document` is unchanged. The GitHub Action and the GitLab CI component
+  pass their `tags` input only for `sbom` and `document` uploads, and stop with
+  an error when it is set for `hbom` or `vex`.
+
 ## [4.11.1] - 2026-11-06
 
 ### Fixed

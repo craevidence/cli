@@ -276,7 +276,7 @@ craevidence upload-sbom
   [--no-ci-detect]           # Disable automatic CI environment detection
   # Version metadata
   [--environment production|staging|development|testing]
-  [--tags <comma-separated>] # Arbitrary metadata tags
+  [--tags <comma-separated>] # Tags for this SBOM
   # Upload metadata (release_notes, release_date, external_url only applied on version creation)
   [--release-notes <text>]
   [--release-date <YYYY-MM-DD>]
@@ -506,7 +506,6 @@ craevidence upload-hbom
   [--external-url <url>]
   [--release-state draft|pending_review|approved|released|deprecated|end_of_life]
   [--environment production|staging|development|testing]
-  [--tags <comma-separated>]
   [--no-inherit]
 ```
 
@@ -539,7 +538,6 @@ craevidence upload-vex
   [--repo-path <subdir>]
   [--no-ci-detect]
   [--environment production|staging|development|testing]
-  [--tags <comma-separated>]
   [--no-inherit]
 ```
 
@@ -1229,7 +1227,7 @@ below do not apply to it.
 | `--no-inherit` | upload-sbom, upload-hbom, upload-vex, upload-document | Skip inheriting compliance artifacts from the previous version |
 | `--product-group <name>` | upload-sbom, upload-hbom, upload-vex, upload-document | Assign the product to a named product group |
 | `--environment <env>` | upload-sbom, upload-hbom, upload-vex, upload-document | Target a specific deployment environment (e.g. `production`, `staging`) |
-| `--tags <comma-separated>` | upload-sbom, upload-hbom, upload-vex, upload-document | Attach arbitrary metadata tags |
+| `--tags <comma-separated>` | upload-sbom, upload-document | Tags for the uploaded SBOM or document |
 | `--create-product` | upload-sbom, upload-hbom, upload-document, upload-diagram, compliance-as-code upload | Create the product if it's missing (disabled by default: creating a product sets its classification, ownership, and compliance context, so it's always an explicit choice). Requires `--target-markets`. |
 | `--no-create-version` | upload-sbom, upload-hbom, upload-document, upload-diagram, compliance-as-code upload | Disable auto-creation of the version (creation is on by default) |
 | `--target-markets <codes>` | upload-sbom, upload-hbom, upload-document, upload-diagram, compliance-as-code upload | Comma-separated EU country codes required when `--create-product` auto-creates a product, e.g. `DE,FR,ES` |

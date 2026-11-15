@@ -61,7 +61,7 @@ spec:
       type: string
       default: ''
     tags:
-      description: 'Comma-separated tags for the artifact'
+      description: 'Comma-separated tags for an SBOM or document upload. Not accepted for hbom or vex.'
       type: string
       default: ''
 
@@ -283,7 +283,17 @@ spec:
       esac
 
       [ -n "${CRA_ENVIRONMENT:-}" ] && set -- "$@" --environment "${CRA_ENVIRONMENT}"
-      [ -n "${CRA_TAGS:-}" ] && set -- "$@" --tags "${CRA_TAGS}"
+      case "${CRA_ARTIFACT_TYPE}" in
+        sbom|document)
+          [ -n "${CRA_TAGS:-}" ] && set -- "$@" --tags "${CRA_TAGS}"
+          ;;
+        *)
+          if [ -n "${CRA_TAGS:-}" ]; then
+            echo "ERROR: CRA_TAGS applies only to CRA_ARTIFACT_TYPE sbom or document"
+            exit 1
+          fi
+          ;;
+      esac
       [ -n "${CI_PIPELINE_ID:-}" ] && set -- "$@" --pipeline-id "${CI_PIPELINE_ID}"
       [ -n "${CI_COMMIT_SHA:-}" ] && set -- "$@" --commit "${CI_COMMIT_SHA}"
       [ -n "${CI_COMMIT_REF_NAME:-}" ] && set -- "$@" --branch "${CI_COMMIT_REF_NAME}"

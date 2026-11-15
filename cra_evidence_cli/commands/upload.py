@@ -1131,7 +1131,7 @@ def _resolve_signature_inputs(
 )
 @click.option(
     "--tags",
-    help="Comma-separated tags",
+    help="Comma-separated tags for this SBOM",
 )
 @click.option(
     "--kernel-config",
@@ -1768,10 +1768,6 @@ def upload_sbom(
     help="Deployment environment",
 )
 @click.option(
-    "--tags",
-    help="Comma-separated tags",
-)
-@click.option(
     "--release-notes",
     default=None,
     help="Release notes for this version (max 5000 chars, only applied on version creation)",
@@ -1823,7 +1819,6 @@ def upload_hbom(
     no_ci_detect: bool,
     no_inherit: bool,
     environment: str | None,
-    tags: str | None,
     release_notes: str | None,
     release_date: str | None,
     external_url: str | None,
@@ -1910,7 +1905,6 @@ def upload_hbom(
                 repository=ci_metadata.get("repository"),
                 repo_path=ci_metadata.get("repo_path"),
                 environment=environment,
-                tags=tags,
                 release_notes=release_notes,
                 release_date=release_date,
                 external_url=external_url,
@@ -2015,10 +2009,6 @@ def upload_hbom(
     type=click.Choice(["production", "staging", "development", "testing"]),
     help="Deployment environment",
 )
-@click.option(
-    "--tags",
-    help="Comma-separated tags",
-)
 @click.pass_context
 def upload_vex(
     ctx: click.Context,
@@ -2040,7 +2030,6 @@ def upload_vex(
     no_ci_detect: bool,
     no_inherit: bool,
     environment: str | None,
-    tags: str | None,
 ) -> None:
     """
     Upload a VEX (Vulnerability Exploitability eXchange) document to CRA Evidence.
@@ -2099,7 +2088,6 @@ def upload_vex(
                 repository=ci_metadata.get("repository"),
                 repo_path=ci_metadata.get("repo_path"),
                 environment=environment,
-                tags=tags,
             )
         )
 
@@ -2375,7 +2363,7 @@ def upload_attestation(
 )
 @click.option(
     "--tags",
-    help="Comma-separated tags",
+    help="Comma-separated tags for this document",
 )
 @click.option(
     "--release-notes",
