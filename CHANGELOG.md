@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.12.0] - 2026-11-16
+
 ### Removed
 
 - **BREAKING:** `--tags` on `upload-hbom` and `upload-vex`. Tags sent with
@@ -1073,7 +1075,9 @@ for the bundled tool and base image updates.
 _The public release history starts at 3.6.0. Earlier versions were internal
 development builds and are not itemized._
 
-[Unreleased]: https://github.com/craevidence/cli/compare/v4.11.0...HEAD
+[Unreleased]: https://github.com/craevidence/cli/compare/v4.12.0...HEAD
+[4.12.0]: https://github.com/craevidence/cli/compare/v4.11.1...v4.12.0
+[4.11.1]: https://github.com/craevidence/cli/compare/v4.11.0...v4.11.1
 [4.11.0]: https://github.com/craevidence/cli/compare/v4.10.0...v4.11.0
 [4.10.0]: https://github.com/craevidence/cli/compare/v4.9.0...v4.10.0
 [4.9.0]: https://github.com/craevidence/cli/compare/v4.8.0...v4.9.0

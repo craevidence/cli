@@ -4,7 +4,7 @@
 # Include in your .gitlab-ci.yml:
 #
 #   include:
-#     - remote: 'https://raw.githubusercontent.com/craevidence/cli/v4.11.1/gitlab-ci-component.yml'
+#     - remote: 'https://raw.githubusercontent.com/craevidence/cli/v4.12.0/gitlab-ci-component.yml'
 #       inputs:
 #         product: my-product
 #         version: $CI_COMMIT_TAG
@@ -186,11 +186,11 @@ spec:
         exit 1
       fi
 
-      CLI_VERSION="4.11.1"
-      CLI_WHEEL_SHA256_MANYLINUX_X86_64="a095bde6634d0622d1908f3be8a8765e6d225d29a38aad1a65909c8e393dcd70"
-      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="ae774de868375fce2ecdc7afe7689093ccae0b7f987394cf5cc7a47ae29471e7"
-      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="8e06416c1543eeb931dae987dca6718b266af9776b1468e9ecb35b755d8f2110"
-      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="68c6e893d230fa3db5d18680e378e8e0bbbac636840438336dd75f24545a4c4d"
+      CLI_VERSION="4.12.0"
+      CLI_WHEEL_SHA256_MANYLINUX_X86_64="6ded33170a136c36249c76962cb77cd4181ad11ce4d6f4ec03c05c0b18b130ec"
+      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="223070acc805c43c36dafcc2b4d8c6cfe728e99e070739d90a041fb3d8e81bb1"
+      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="9311546a1ee7bf59689cb9c88debad6e0075ec087149368b7fc3835886bf92dc"
+      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="6244bccfadd9b668cac860d670c6a401e969cae0b489ddad63c0b9855fe93560"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       CLI_WHEEL=$(find /tmp/craevidence-dist -maxdepth 1 -type f -name "craevidence-${CLI_VERSION}-*.whl")
       [ -n "${CLI_WHEEL}" ] && [ "$(printf '%s\n' "${CLI_WHEEL}" | wc -l)" -eq 1 ]
@@ -370,11 +370,11 @@ cra-evidence-upload:
   script:
     - |
       set -eu
-      CLI_VERSION="4.11.1"
-      CLI_WHEEL_SHA256_MANYLINUX_X86_64="a095bde6634d0622d1908f3be8a8765e6d225d29a38aad1a65909c8e393dcd70"
-      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="ae774de868375fce2ecdc7afe7689093ccae0b7f987394cf5cc7a47ae29471e7"
-      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="8e06416c1543eeb931dae987dca6718b266af9776b1468e9ecb35b755d8f2110"
-      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="68c6e893d230fa3db5d18680e378e8e0bbbac636840438336dd75f24545a4c4d"
+      CLI_VERSION="4.12.0"
+      CLI_WHEEL_SHA256_MANYLINUX_X86_64="6ded33170a136c36249c76962cb77cd4181ad11ce4d6f4ec03c05c0b18b130ec"
+      CLI_WHEEL_SHA256_MUSLLINUX_X86_64="223070acc805c43c36dafcc2b4d8c6cfe728e99e070739d90a041fb3d8e81bb1"
+      CLI_WHEEL_SHA256_MANYLINUX_AARCH64="9311546a1ee7bf59689cb9c88debad6e0075ec087149368b7fc3835886bf92dc"
+      CLI_WHEEL_SHA256_MUSLLINUX_AARCH64="6244bccfadd9b668cac860d670c6a401e969cae0b489ddad63c0b9855fe93560"
       python -m pip download --no-deps --only-binary :all: "craevidence==${CLI_VERSION}" -d /tmp/craevidence-dist
       CLI_WHEEL=$(find /tmp/craevidence-dist -maxdepth 1 -type f -name "craevidence-${CLI_VERSION}-*.whl")
       [ -n "${CLI_WHEEL}" ] && [ "$(printf '%s\n' "${CLI_WHEEL}" | wc -l)" -eq 1 ]
