@@ -59,10 +59,10 @@ ARG GRYPE_ENGINE_REGISTRY
 ARG GRYPE_ENGINE_DIGEST=sha256:6d569f10f662e1fe483c921572e16d678fcd50c9f06c265bcfea3adbfe468d25
 ARG GRYPE_ENGINE_IMAGE=${GRYPE_ENGINE_REGISTRY}/craevidence/grype-engine@${GRYPE_ENGINE_DIGEST}
 
-ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:4f0273dfbc2816cbe56de9bbb483699b4d0a0e824443fefb45e1dc7ff356b073
+ARG BASE_IMAGE_BUILDER=dhi.io/python:3.14-dev@sha256:60dbebd00c5332a2d5984a96f33b76d6e42167095a9db8c49cd0038ac388de77
 # Declared here (before the first FROM) because Docker only resolves ARGs in
 # FROM lines when they are global; a stage-scoped ARG cannot feed a FROM.
-ARG BASE_IMAGE=dhi.io/python:3.14@sha256:c98bac9272579c507b971989a7b9ea4f2b883ef2842bf2ff00a7b79b9d948a0e
+ARG BASE_IMAGE=dhi.io/python:3.14@sha256:d20d953b545c83acd9e1b6b6b6d27cf14de38e6a39689334f71454c33cf41893
 FROM ${GRYPE_ENGINE_IMAGE} AS grype-engine
 
 FROM ${BASE_IMAGE_BUILDER} AS builder

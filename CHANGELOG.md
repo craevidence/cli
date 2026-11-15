@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pass their `tags` input only for `sbom` and `document` uploads, and stop with
   an error when it is set for `hbom` or `vex`.
 
+### Changed
+
+- The hardened Python 3.14 builder and runtime base-image digests are refreshed
+  and remain pinned by digest.
+
 ## [4.11.1] - 2026-11-06
 
 ### Fixed
