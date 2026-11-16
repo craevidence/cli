@@ -18,21 +18,23 @@
 # build_info_audit):
 #   command: grype --config empty.yaml -o json docker:sha256:<image ID>
 #   empty.yaml contains {}; no severity/fix filter or user waiver is applied.
-#   Built-in defaults remain: each scan retains 319 ignored kernel-header rows
-#   separately from 197 reported match rows. Counts include duplicate package
+#   Built-in defaults remain: each scan retains 290 ignored kernel-header rows
+#   separately from 242 reported match rows. Counts include duplicate package
 #   locations and are not unique vulnerability counts.
 #   scanner: Grype 0.116.1
-#   database: schema v6.1.10, built 2026-11-06T06:21:59Z
-#   database archive SHA-256: fdc0c98e98e2c0599ae2909148a1d9002de603347726c09119a5c2458b178c23
-#   release: 4.11.1, with bases
-#     dhi.io/python:3.14-dev@sha256:4f0273dfbc2816cbe56de9bbb483699b4d0a0e824443fefb45e1dc7ff356b073
-#     and dhi.io/python:3.14@sha256:c98bac9272579c507b971989a7b9ea4f2b883ef2842bf2ff00a7b79b9d948a0e,
+#   database: schema v6.1.10, built 2026-11-15T06:19:39Z
+#   database archive SHA-256: 96ada30f3287fd04be595a8f419df98efdf19955e7bfa28eae80ef7c5fe27eb7
+#   release: 4.12.0, published as
+#     quay.io/craevidence/cli@sha256:cca01e135f9e2d5c8f14d4338652492b58204b93a79f5cde707f60f1ea43bc2f
+#     (the same index digest on ghcr.io and docker.io), with bases
+#     dhi.io/python:3.14-dev@sha256:60dbebd00c5332a2d5984a96f33b76d6e42167095a9db8c49cd0038ac388de77
+#     and dhi.io/python:3.14@sha256:d20d953b545c83acd9e1b6b6b6d27cf14de38e6a39689334f71454c33cf41893,
 #     with CRA Evidence Grype engine craevidence-v0.120.1-p5 (Go 1.26.10)
-#   AMD64 image ID: sha256:c0a7559cf93cc096ebcb074d3c39ad0c567774a3eb46f04f5fb1392642f7d9d3
-#   AMD64 JSON SHA-256: b4dfa5595a444528a518afc41aa044d934899ac2c90411a3ffe3858b385d682c
-#   ARM64 image ID: sha256:a955323efe63bff4c1d2b81bff6a669fdc36958f1b6e707973cc5083622a79b9
-#   ARM64 JSON SHA-256: a4d5805824876fc3497109c2082330ff6439c9770f980f496808cbae7754494f
-#   review date: 2026-11-06
+#   AMD64 image ID: sha256:cc277a6f1d2459fa4970817498e1711f24158d0aa1c191aa32a3a138652eb178
+#   AMD64 JSON SHA-256: 4ba4c726f8b0511b649e785a9a74f5b6ad789ea4de41bbff1705f3bc2ed882f8
+#   ARM64 image ID: sha256:13f1326c865b5e8f02821f52a2836a42656922d7961476511d6522c57136dfde
+#   ARM64 JSON SHA-256: fec70edf699c3a2bb0b34c6a1da2cda3321bcbb2b06488f12013b9c60b4ab472
+#   review date: 2026-11-16
 # Older dated exposure notes below are historical observations, not fresh proof.
 # Review at every release.
 
@@ -56,9 +58,11 @@ watchlist:
         - { id: CVE-2026-80489, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-86805, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-89092, severity: Medium, fix_state: wont-fix }
+        - { id: CVE-2026-115819, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-6368, severity: Low, fix_state: wont-fix }
         - { id: CVE-2026-95818, severity: Low, fix_state: wont-fix }
         - { id: CVE-2026-97399, severity: Low, fix_state: wont-fix }
+        - { id: CVE-2026-100290, severity: Low, fix_state: wont-fix }
         - { id: CVE-2010-4756, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2018-20796, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-9192, severity: Negligible, fix_state: not-fixed }
@@ -66,15 +70,17 @@ watchlist:
         - { id: CVE-2019-1010023, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010024, severity: Negligible, fix_state: not-fixed }
         - { id: CVE-2019-1010025, severity: Negligible, fix_state: not-fixed }
-      note: "glibc issues Debian marks wont-fix or leaves unfixed. The High items concern the deprecated DNS record printing functions (ns_printrr, ns_printrrf, fp_nquery), strfmon right-justified width padding, and gettext accepting path-like LANGUAGE values from an attacker who can set the environment (CVE-2026-84243, new in the 2026-11-06 scans). The Medium items concern further checks in those printing functions, tilde expansion, long resolver search lists, the fopen ccs= mode extension, tdelete, JISX0213 conversions, $ORIGIN expansion for setuid programs and the nscd service. The image contains no setuid or setgid files and no nscd binary (checked 2026-10-12)."
-    - package: libexpat1 2.9.0-1~deb13u1+dhi1
+      note: "glibc issues Debian marks wont-fix or leaves unfixed. The High items concern the deprecated DNS record printing functions (ns_printrr, ns_printrrf, fp_nquery), strfmon right-justified width padding, and gettext accepting path-like LANGUAGE values from an attacker who can set the environment (CVE-2026-84243, new in the 2026-11-06 scans). The Medium items concern further checks in those printing functions, tilde expansion, long resolver search lists, the fopen ccs= mode extension, tdelete, JISX0213 conversions, $ORIGIN expansion for setuid programs and the nscd service. CVE-2026-115819 (Medium, a one-byte null write past the destination when a wide scanf function converts %s or %[ into a char array) and CVE-2026-100290 (Low, a double free in regcomp and regexec after an allocation failure) are new in the 2026-11-16 scans. The image contains no setuid or setgid files and no nscd binary (checked 2026-10-12). No executable or library in the image imports swscanf, fwscanf, wscanf, vswscanf, vfwscanf or vwscanf. Of the ELF files, only libedit.so.2 and libformw.so.6 import regcomp and regexec; libedit is a dependency of libLLVM-18 and no file depends on libformw (dynamic symbol and shared-library entries read on both architectures, 2026-11-16; this does not cover libraries loaded at run time)."
+    - package: libexpat1 2.9.0-1~deb13u1+dhi2
       advisories:
         - { id: CVE-2026-113351, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-115506, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-117610, severity: High, fix_state: not-fixed }
         - { id: CVE-2026-118370, severity: High, fix_state: not-fixed }
         - { id: CVE-2025-66382, severity: Medium, fix_state: wont-fix }
-      note: "Both architecture scans report these five advisories against the hardened base's expat 2.9.0 package with no fixed version. CVE-2026-117610 (an external entity subparser NULL dereference under attacker-controlled chunking) and CVE-2026-118370 (an attribute-count overflow needing a start tag with more than 2^30 attributes) were first reported in the 2026-10-30 scans, as Medium; the 2026-11-06 database rates them High. It marks them not-fixed and the other three wont-fix. No reachability or non-exploitability conclusion is inferred from the fixed-finding gate."
+        - { id: CVE-2026-124317, severity: Medium, fix_state: not-fixed }
+        - { id: CVE-2026-128241, severity: Medium, fix_state: not-fixed }
+      note: "Both architecture scans report these seven advisories against the hardened base's expat 2.9.0 package with no fixed version. CVE-2026-117610 (an external entity subparser NULL dereference under attacker-controlled chunking) and CVE-2026-118370 (an attribute-count overflow needing a start tag with more than 2^30 attributes) were first reported in the 2026-10-30 scans, as Medium; the 2026-11-06 database rates them High. It marks them not-fixed and the other three wont-fix. CVE-2026-124317 (an out-of-bounds read on a document ending in a truncated multibyte sequence, only with an application-registered unknown-encoding handler) and CVE-2026-128241 (the xmlwf tool follows symbolic links when writing output files) are new in the 2026-11-16 scans, both not-fixed. No xmlwf binary is in the image, and no ELF file in it depends on libexpat (shared-library entries read on both architectures, 2026-11-16). The Python pyexpat module carries its own expat copy (version string expat_2.9.0), which this package-based scan does not report. No reachability or non-exploitability conclusion is inferred from the fixed-finding gate."
     - package: libsqlite3-0 3.46.1-7+deb13u2+dhi3
       advisories:
         - { id: CVE-2026-119373, severity: High, fix_state: wont-fix }
@@ -107,25 +113,29 @@ watchlist:
         - { id: CVE-2026-3184, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2022-0563, severity: Negligible, fix_state: not-fixed }
       note: "util-linux issues; the CLI runs as a non-root user and performs no privileged util-linux operations."
-    - package: zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u0+dhi4
+    - package: libssl3t64 3.5.7-1~deb13u3+dhi0
+      also: [openssl 3.5.7-1~deb13u3+dhi0, openssl-provider-legacy 3.5.7-1~deb13u3+dhi0]
       advisories:
-        - { id: CVE-2026-27171, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-85091, severity: High, fix_state: not-fixed }
-        - { id: CVE-2026-76844, severity: High, fix_state: not-fixed }
-      note: "Runtime base package, no Debian fix available. CVE-2026-76844, new in the 2026-11-06 scans, is a heap overflow in the gz* file writing functions after a failed write."
+        - { id: CVE-2026-88822, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-88823, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-95691, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-95692, severity: Unknown, fix_state: not-fixed }
+        - { id: CVE-2026-107496, severity: Unknown, fix_state: not-fixed }
+      note: "Runtime base package, no Debian fix available; the database gives these advisories no severity. All five are new in the 2026-11-16 scans. They concern the QUIC client (uninitialized stack data in automatic peer address detection, CVE-2026-88822; a use after free on a retransmitted CRYPTO frame, CVE-2026-95691), AES-GCM-SIV (empty additional data resetting the authenticated data, CVE-2026-88823; a short or long IV, CVE-2026-95692) and an endless loop in CMS_encrypt for an EC recipient certificate with a group order of 1 (CVE-2026-107496). Python's _ssl and _hashlib modules import none of the QUIC, CMS_encrypt or CMS_encrypt_ex symbols, and the CLI's Python code never references the openssl command. The openssl command-line tool is in the image (/usr/bin/openssl) and imports CMS_encrypt_ex and OSSL_QUIC_client_method, so those paths are reachable only by running that tool directly, and the image has no shell. No caller of the AES-GCM-SIV code was traced (dynamic symbol imports read on both architectures, 2026-11-16; libraries loaded at run time are not covered)."
     - package: libbz2-1.0 1.0.8-6+deb13u0+dhi2
       advisories:
         - { id: CVE-2026-42250, severity: Medium, fix_state: wont-fix }
       note: "Runtime base package, no Debian fix available."
-    - package: libstdc++6 14.2.0-19+deb13u0+dhi6
-      also: [gcc-14-base 14.2.0-19+deb13u0+dhi6, libgcc-s1 14.2.0-19+deb13u0+dhi6, libstdc++-14-dev 14.2.0-19+deb13u0+dhi6]
+    - package: libstdc++6 14.2.0-19+deb13u0+dhi7
+      also: [gcc-14-base 14.2.0-19+deb13u0+dhi7, libgcc-s1 14.2.0-19+deb13u0+dhi7, libstdc++-14-dev 14.2.0-19+deb13u0+dhi7]
       advisories:
         - { id: CVE-2026-95619, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-102010, severity: High, fix_state: wont-fix }
         - { id: CVE-2026-114690, severity: Medium, fix_state: wont-fix }
         - { id: CVE-2026-114691, severity: Medium, fix_state: wont-fix }
-        - { id: CVE-2026-115455, severity: Medium, fix_state: wont-fix }
-      note: "GCC 14 runtime packages from the hardened runtime base (gcc-14-base, libgcc-s1, libstdc++6) plus the libstdc++ headers (libstdc++-14-dev) copied in from the build stage. The advisories concern libstdc++: an integer overflow in the aligned operator new that can lead to an undersized allocation, a use-after-free in erase_if on a binary heap priority queue, and, new in the 2026-11-06 scans, the parallel search implementation, std::vector<bool> sizing and bitset extraction from wide-character streams."
+        - { id: CVE-2026-115456, severity: Low, fix_state: wont-fix }
+        - { id: CVE-2026-115455, severity: Negligible, fix_state: wont-fix }
+      note: "GCC 14 runtime packages from the hardened runtime base (gcc-14-base, libgcc-s1, libstdc++6) plus the libstdc++ headers (libstdc++-14-dev) copied in from the build stage. The advisories concern libstdc++: an integer overflow in the aligned operator new that can lead to an undersized allocation, a use-after-free in erase_if on a binary heap priority queue, the parallel search implementation, std::vector<bool> sizing, bitset extraction from wide-character streams (the 2026-11-16 database rates CVE-2026-115455 Negligible, it was Medium on 2026-11-06) and, new in the 2026-11-16 scans, std::from_chars reading past a string that is not null-terminated (CVE-2026-115456). Only libLLVM-18, libclang-18 and libz3 depend on libstdc++, and none of them imports a from_chars symbol (dynamic symbol imports read on both architectures, 2026-11-16)."
 
     - package: libxml2 2.12.7+dfsg+really2.9.14-2.1+deb13u3
       advisories:
@@ -152,22 +162,39 @@ watchlist:
 
   engine_go_modules:
     # Go modules in the bundled CRA Evidence Grype engine that the scan above reports.
+    # fix_state fixed means a fixed version exists; adopting it needs a new engine
+    # release. All are below the gate's High threshold, so the gate passes.
     - package: github.com/blakesmith/ar v0.0.0-20190502131153-809d4375e1fb
       advisories:
         - { id: GO-2026-6905, severity: Unknown, fix_state: "" }
       note: "A negative member size in an ar archive makes Reader.Read panic. The advisory lists no fixed version. A crafted .deb reaches this reader while an SBOM is generated; the engine recovers the panic and generation reports failure instead of crashing the process (checked 2026-11-06). Generating an SBOM for an untrusted directory containing such a file therefore fails rather than completing. Advisory: https://pkg.go.dev/vuln/GO-2026-6905."
+    - package: github.com/hashicorp/go-getter v1.8.9
+      advisories:
+        - { id: CVE-2026-19585, severity: Medium, fix_state: fixed }
+      note: "Path traversal in S3 and GCS directory downloads that can write files outside the requested destination; fixed in go-getter 1.8.10 (and 2.2.5 for v2), first seen by the database on 2026-11-07. The engine registers the s3 and gcs getters and the S3Getter and GCSGetter Get functions are in its binary's function table. The Dockerfile sets no download source, and the engine's built-in vulnerability database URL is https://grype.anchore.io/databases. Checked 2026-11-16 on both architectures. Advisory: https://discuss.hashicorp.com/t/hcsec-2026-44-go-getter-vulnerable-to-a-path-traversal-in-s3-gcs-directory-download-handling/77819."
+    - package: go.opentelemetry.io/otel/sdk v1.46.0
+      also: [go.opentelemetry.io/otel/trace v1.46.0]
+      advisories:
+        - { id: GHSA-q7gw-24fr-5p69, severity: Medium, fix_state: fixed }
+      note: "The attribute value length limit (AttributeValueLengthLimit) does not count valid U+FFFD replacement characters, so values made of them can exceed the configured limit (CVE-2026-128085); fixed in 1.47.0, first seen by the database on 2026-11-14. The sdk/internal/attrnorm and trace auto-instrumentation functions are in the engine binary's function table, but the sdk/trace and sdk/log provider packages are not, and no source file of the engine imports an OpenTelemetry SDK package. Whether a dependency sets such a limit was not determined. Checked 2026-11-16 on both architectures. Advisory: https://github.com/advisories/GHSA-q7gw-24fr-5p69."
+    - package: stdlib go1.26.10
+      advisories:
+        - { id: GO-2026-6859, severity: Unknown, fix_state: fixed }
+      note: "net/http: an HTTP/1 server using MaxBytesReader or MaxBytesHandler can crash on a data race when its handler reads the request body while writing the response header (CVE-2026-97054); fixed in Go 1.26.11 and 1.27.4, released 2026-11-10. The engine binary's function table has no net/http (*Server).Serve or (*conn).serve, and no MaxBytesReader, MaxBytesHandler or maxBytesReader.Read. Checked 2026-11-16 on both architectures. Advisory: https://pkg.go.dev/vuln/GO-2026-6859."
 
   # Entries below come from the binaries' embedded Go build information, not
   # from the scanner output above. They record embedded dependencies the
   # scanner does not report; absence does not establish reachability or safety.
   build_info_audit:
     - package: golang.org/x/crypto v0.58.0
-      source: go build info of CRA Evidence Grype engine craevidence-v0.120.1-p5 (Go 1.26.10, reviewed 2026-11-06)
+      source: go build info of CRA Evidence Grype engine craevidence-v0.120.1-p5 (Go 1.26.10, reviewed 2026-11-16)
       advisories:
         - { id: GO-2026-5932, severity: Unknown, fix_state: not-fixed }
-      note: "The advisory covers the unmaintained openpgp package. No tagged x/crypto release carries its fix; it lists a pseudo-version. Grype 0.116.1, which controls the image gate, does not report it against either 2026-11-06 image; the pinned 0.111.0 comparison inventory in scripts/check-image-gate.sh does. No openpgp functions are present in the engine binary's function table. Advisory: https://pkg.go.dev/vuln/GO-2026-5932."
+      note: "The advisory covers the unmaintained openpgp package. No tagged x/crypto release carries its fix; it lists a pseudo-version. Grype 0.116.1, which controls the image gate, does not report it against either 2026-11-16 image; the pinned 0.111.0 comparison inventory in scripts/check-image-gate.sh does. No golang.org/x/crypto/openpgp functions are present in the engine binary's function table on either architecture. Advisory: https://pkg.go.dev/vuln/GO-2026-5932."
 
   resolved_since_last_review:
+    - ids: [CVE-2026-27171, CVE-2026-76844, CVE-2026-85091]
+      note: "Previously listed against zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u0+dhi4. The refreshed 1:1.3.dfsg+really1.3.1-1+deb13u1+dhi0 package is still scanned, but neither 2026-11-16 architecture scan reports these advisories against it. This records scanner results, not a blanket remediation claim."
     - ids: [GO-2026-6888, GO-2026-6865, GO-2026-6860, GO-2026-6866]
       note: "Previously present in the p4 engine: andybalholm/brotli v1.2.0, klauspost/compress v1.20.1 and golang.org/x/net v0.60.0. The p5 engine embeds v1.2.8, v1.20.3 and v0.62.0, and neither 2026-11-06 architecture scan reports them."
     - id: GHSA-mgcc-cww5-fp2q

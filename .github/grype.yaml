@@ -12,13 +12,16 @@
 # gets reviewed here instead of staying suppressed.
 #
 # Gate scanner: Grype 0.116.1, pinned in scripts/check-image-gate.sh.
-# Reviewed 2026-11-06 against DB schema v6.1.10 built 2026-11-06T06:21:59Z,
-# for the 4.11.1 release images on AMD64 and ARM64. Exact image IDs, base
+# Reviewed 2026-11-16 against DB schema v6.1.10 built 2026-11-15T06:19:39Z,
+# for the 4.12.0 release images on AMD64 and ARM64. Exact image IDs, base
 # digests and scan hashes are recorded in grype-watchlist.yaml alongside the
 # unfixed findings. The engine is craevidence-v0.120.1-p5 (Go 1.26.10).
-# The gate reports no fixed finding. The pinned Grype 0.111.0 comparison reports
-# GO-2026-5932 in the engine's golang.org/x/crypto; grype-watchlist.yaml records
-# it under build_info_audit.
+# The gate reports three fixed advisories in the engine, none at High or
+# Critical: GHSA-q7gw-24fr-5p69 (OpenTelemetry sdk and trace, Medium),
+# CVE-2026-19585 (go-getter, Medium) and GO-2026-6859 (Go standard library,
+# Unknown). The pinned Grype 0.111.0 comparison reports the same three and also
+# GO-2026-5932 in the engine's golang.org/x/crypto. grype-watchlist.yaml records
+# the first three under engine_go_modules and the last under build_info_audit.
 # This does not mean the images contain no vulnerabilities. No waiver is added.
 # Re-evaluate at every release.
 
